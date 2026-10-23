@@ -8,6 +8,7 @@ Setup: get a token from @BotFather, then:
 import os, json, time, threading
 from pathlib import Path
 import telebot
+import httpx
 from telebot import types
 import ff_bd_api
 
@@ -57,7 +58,8 @@ def cmd_start(m):
         "BD সার্ভারের জন্য স্ট্যাটস আর লাইক বট।\n\n"
         "<b>/stats</b> <code>UID</code> — প্লেয়ার প্রোফাইল (নাম, লাইক)\n"
         "<b>/like</b> <code>UID [count]</code> — লাইক পাঠান\n"
-        "<b>/pool</b> — বটের লাইক পুল স্ট্যাটাস\n\n"
+        "<b>/pool</b> — বটের লাইক পুল স্ট্যাটাস\n"
+        "<b>/guests</b> — কতগুলো গেস্ট অ্যাকাউন্ট বানানো হয়েছে\n\n"
         "UID = গেমের প্রোফাইলে যে নম্বর দেখায়।")
 
 
