@@ -6,7 +6,7 @@ Endpoints verified 2026-10-23:
   JWT pool: external minting service (uid+pass -> fresh JWT per request)
 Target uid = BD player's account_id (11-digit, as shown in profile).
 """
-import httpx, json, time, warnings, binascii, base64
+import httpx, json, time, re, warnings, binascii, base64
 from pathlib import Path
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
@@ -74,8 +74,91 @@ def load_creds() -> list:
     return creds
 
 
+# ── Self-minted JWT (MajorLogin, verified 2026-10-23) ──────────────
+GRANT_URL = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
+MAJOR_LOGIN_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
+CLIENT_SECRET = "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
+LOGIN_UA = "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)"
+
+
+def _evb(v: int) -> bytes:
+    out = bytearray()
+    while True:
+        c = v & 0x7F
+        v >>= 7
+        if v:
+            c |= 0x80
+        out.append(c)
+        if not v:
+            return bytes(out)
+
+
+def _pf_str(field: int, s: str) -> bytes:
+    b = s.encode()
+    return _evb((field << 3) | 2) + _evb(len(b)) + b
+
+
+def guest_grant(uid: str, pw: str):
+    """OAuth guest token grant -> (access_token, open_id) or None."""
+    try:
+        r = httpx.post(GRANT_URL, json={
+            "client_id": 100067, "client_secret": CLIENT_SECRET, "client_type": 2,
+            "password": pw, "response_type": "token", "uid": int(uid)},
+            headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
+            timeout=15, verify=False)
+        if r.status_code != 200:
+            return None
+        d = r.json().get("data", r.json())
+        at, oid = d.get("access_token"), d.get("open_id")
+        return (at, oid) if at and oid else None
+    except Exception:
+        return None
+
+
+def major_login(access_token: str, open_id: str) -> str | None:
+    """MajorLogin (OB55, dummy X-GA-SV) -> JWT or None."""
+    try:
+        wire = (_pf_str(22, open_id) + _pf_str(23, "4")
+                + _pf_str(29, access_token) + _pf_str(99, "4"))
+        body = _enc(wire)
+        h = {"User-Agent": LOGIN_UA, "Connection": "Keep-Alive", "Accept-Encoding": "gzip",
+             "X-GA-SV": "1789638359", "Content-Type": "application/x-www-form-urlencoded",
+             "Expect": "100-continue", "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1",
+             "ReleaseVersion": "OB55"}
+        r = httpx.post(MAJOR_LOGIN_URL, headers=h, data=body, timeout=20, verify=False)
+        if r.status_code != 200:
+            return None
+        m = re.search(rb"(eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]{43})", r.content)
+        if not m:
+            return None
+        return m.group(1).decode()
+    except Exception:
+        return None
+
+
+def mint_jwt_self(uid: str, pw: str) -> dict | None:
+    """Mint a JWT for a known game account without any external service."""
+    tok_pair = guest_grant(uid, pw)
+    if not tok_pair:
+        return None
+    tok = major_login(*tok_pair)
+    if not tok:
+        return None
+    pl = tok.split(".")[1]
+    pl += "=" * (-len(pl) % 4)
+    claims = json.loads(base64.urlsafe_b64decode(pl))
+    return {"uid": uid, "pass": pw, "token": tok,
+            "account_id": claims.get("account_id"),
+            "region": claims.get("lock_region", "BD"),
+            "exp": claims.get("exp")}
+
 def mint_jwt(uid: str, pw: str) -> dict | None:
-    """Fetch a fresh JWT for a known account from the minting service."""
+    """Fresh JWT: self-mint via MajorLogin first, external service as fallback."""
+    self_tok = mint_jwt_self(uid, pw)
+    if self_tok:
+        self_tok["level"] = None
+        self_tok["name"] = None
+        return self_tok
     try:
         r = httpx.get(JWT_SERVICE, params={"uid": uid, "pass": pw}, timeout=20, verify=False)
         j = r.json()
