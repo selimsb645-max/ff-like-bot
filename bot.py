@@ -146,6 +146,32 @@ def cmd_like(m):
     bot.edit_message_text(text, msg.chat.id, msg.message_id)
 
 
+@bot.message_handler(commands=["guests"])
+def cmd_guests(m):
+    msg = bot.reply_to(m, "🔄 গেস্ট অ্যাকাউন্ট গুনছি...")
+    try:
+        import base64
+        r = httpx.get(
+            "https://api.github.com/repos/selimsb645-max/ff-like-bot/contents/guests_manager/guests.json",
+            headers={"Accept": "application/vnd.github+json"}, timeout=20)
+        r.raise_for_status()
+        data = json.loads(base64.b64decode(r.json()["content"]))
+    except Exception as e:
+        bot.edit_message_text(f"❌ এরর: {e}", msg.chat.id, msg.message_id)
+        return
+    n = len(data)
+    last_uid = data[-1].get("uid", "?") if data else "?"
+    bar_len = min(n * 10 // 200, 10)
+    bar = "▰" * bar_len + "▱" * (10 - bar_len)
+    bot.edit_message_text(
+        f"👥 গেস্ট অ্যাকাউন্ট বানানো হয়েছে: <b>{n}/200</b>\n"
+        f"{bar} <b>{min(n * 100 // 200, 100)}%</b>\n"
+        f"🔔 সর্বশেষ UID: <code>{last_uid}</code>\n"
+        f"⚡ জেনারেশন চলমান — কাউন্ট বাড়তেই থাকবে।",
+        msg.chat.id, msg.message_id)
+
+
+@bot.message_handler(commands=["pool"])
 def cmd_pool(m):
     pool = ff_bd_api.get_pool()
     fresh = sum(1 for t in pool if t.get("exp", 0) > time.time())
