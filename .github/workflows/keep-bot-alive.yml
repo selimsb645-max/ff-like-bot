@@ -20,6 +20,7 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           BD_CREDS_B64: ${{ secrets.BD_CREDS_B64 }}
+          GITHUB_USAGE_TOKEN: ${{ secrets.USAGE_PAT }}
         run: |
           chmod +x run.sh
           ./run.sh

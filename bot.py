@@ -19,6 +19,24 @@ MAX_LIKES_PER_REQUEST = 10
 ADMIN_IDS = set(int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip())
 
 
+def persist_usage_github():
+    """Commit usage.json back to the repo so dedup history survives runner restarts."""
+    tok = os.environ.get("GITHUB_USAGE_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if not tok or not repo:
+        return
+    try:
+        import base64
+        api = f"https://api.github.com/repos/{repo}/contents/usage.json"
+        r = httpx.get(api, headers={"Authorization": f"Bearer {tok}"}, timeout=15)
+        sha = r.json().get("sha") if r.status_code == 200 else None
+        content = base64.b64encode(open(USAGE_FILE, "rb").read()).decode()
+        httpx.put(api, headers={"Authorization": f"Bearer {tok}"}, timeout=15,
+                  json={"message": "update like usage", "content": content, "sha": sha})
+    except Exception as e:
+        print("usage persist failed:", e)
+
+
 def load_usage() -> dict:
     if USAGE_FILE.exists():
         try:
@@ -79,6 +97,12 @@ def cmd_like(m):
     usage = load_usage()
     with USAGE_LOCK:
         used = set(tuple(k) for k in usage.get("used_pairs", []))
+    # আগের লাইক কাউন্ট
+    try:
+        s0 = ff_bd_api.get_stats(target)
+        likes_before = s0.get("likes") if s0 else None
+    except Exception:
+        likes_before = None
     try:
         sent = ff_bd_api.send_like(target, count=count, used=used)
     except Exception as e:
@@ -87,19 +111,39 @@ def cmd_like(m):
     with USAGE_LOCK:
         usage["used_pairs"] = [list(k) for k in used]
         save_usage(usage)
-    s = ff_bd_api.get_stats(target)
-    likes_now = s.get("likes", "?") if s else "?"
+    threading.Thread(target=persist_usage_github, daemon=True).start()
+    # পরের লাইক কাউন্ট
+    time.sleep(3)
+    try:
+        s1 = ff_bd_api.get_stats(target)
+        likes_after = s1.get("likes") if s1 else None
+    except Exception:
+        likes_after = None
+
     if sent == 0:
         bot.edit_message_text("⚠️ পুলের সব অ্যাকাউন্ট এই টার্গেটে লাইক দিয়ে দিয়েছে। পরে আবার চেষ্টা করুন।",
                               msg.chat.id, msg.message_id)
+        return
+    delta = None
+    if isinstance(likes_before, int) and isinstance(likes_after, int):
+        delta = likes_after - likes_before
+    if delta == 0:
+        text = ("❌ লাইক যায়নি — সার্ভারে কাউন্ট বাড়েনি "
+                f"(আগে {likes_before}, এখনো {likes_after})।\n"
+                "সাধারণ কারণ: পুলের অ্যাকাউন্টগুলো আগেই এই প্রোফাইলে লাইক দিয়েছে, "
+                "আর এক অ্যাকাউন্ট এক প্রোফাইলে একবারই লাইক দিতে পারে।")
+    elif delta is not None and delta < sent:
+        text = (f"⚠️ {sent}টা পাঠানোর চেষ্টা হয়েছে, আসলে গেছে {delta}টা।\n"
+                f"❤️ এখন মোট Likes: <b>{likes_after}</b>")
+    elif delta is not None:
+        text = (f"✅ {delta}টা লাইক যোগ হয়েছে!\n"
+                f"❤️ এখন মোট Likes: <b>{likes_after}</b>")
     else:
-        bot.edit_message_text(
-            f"✅ {sent}টা লাইক পাঠানো হয়েছে!\n"
-            f"❤️ এখন মোট Likes: <b>{likes_now}</b>",
-            msg.chat.id, msg.message_id)
+        text = (f"✅ {sent}টা রিকোয়েস্ট সফল হয়েছে, তবে ভেরিফাই করা গেল না।\n"
+                f"/stats {target} দিয়ে নিজে চেক করুন।")
+    bot.edit_message_text(text, msg.chat.id, msg.message_id)
 
 
-@bot.message_handler(commands=["pool"])
 def cmd_pool(m):
     pool = ff_bd_api.get_pool()
     fresh = sum(1 for t in pool if t.get("exp", 0) > time.time())
