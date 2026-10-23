@@ -1,3 +1,4 @@
 pyTelegramBotAPI>=4.14
 httpx>=0.25
 pycryptodome>=3.19
+protobuf
