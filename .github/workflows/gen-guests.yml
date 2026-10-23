@@ -1,0 +1,46 @@
+name: Guest Generator
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+concurrency:
+  group: ff-gen
+  cancel-in-progress: false
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.USAGE_PAT }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install httpx
+      - name: Generate guests
+        env:
+          GITHUB_TOKEN: ${{ secrets.USAGE_PAT }}
+        run: |
+          git config user.name "guest-gen-bot"
+          git config user.email "actions@github.com"
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+          while true; do
+            N=$(python3 -c "import json;print(len(json.load(open('guests_manager/guests.json'))))")
+            if [ "$N" -ge 200 ]; then echo "target reached: $N"; break; fi
+            LEFT=$((200 - N))
+            RUN=$LEFT; [ $RUN -gt 5 ] && RUN=5
+            python3 guests_manager/gen_batch.py $RUN
+            git add guests_manager/guests.json
+            git commit -qm "guests +$RUN" || true
+            git pull -q --rebase origin main || true
+            git push -q origin main || true
+          done
+      - name: Redispatch if incomplete
+        if: always()
+        run: |
+          N=$(python3 -c "import json;print(len(json.load(open('guests_manager/guests.json'))))")
+          if [ "$N" -lt 200 ]; then
+            sleep 60
+            curl -s -X POST -H "Authorization: Bearer ${{ secrets.USAGE_PAT }}" -H "Accept: application/vnd.github+json" https://api.github.com/repos/${{ github.repository }}/actions/workflows/gen-guests.yml/dispatches -d '{"ref":"main"}'
+          fi
