@@ -20,22 +20,29 @@ MAX_LIKES_PER_REQUEST = 500
 ADMIN_IDS = set(int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip())
 
 
-def persist_usage_github():
-    """Commit usage.json back to the repo so dedup history survives runner restarts."""
+def _github_commit_file(fname: str, message: str):
+    """Commit a local bot-state file to the repo (survives runner restarts)."""
     tok = os.environ.get("GITHUB_USAGE_TOKEN")
     repo = os.environ.get("GITHUB_REPOSITORY")
     if not tok or not repo:
         return
     try:
         import base64
-        api = f"https://api.github.com/repos/{repo}/contents/usage.json"
+        path = Path(__file__).parent / fname
+        api = f"https://api.github.com/repos/{repo}/contents/{fname}"
         r = httpx.get(api, headers={"Authorization": f"Bearer {tok}"}, timeout=15)
         sha = r.json().get("sha") if r.status_code == 200 else None
-        content = base64.b64encode(open(USAGE_FILE, "rb").read()).decode()
+        content = base64.b64encode(path.read_bytes()).decode()
         httpx.put(api, headers={"Authorization": f"Bearer {tok}"}, timeout=15,
-                  json={"message": "update like usage", "content": content, "sha": sha})
+                  json={"message": message, "content": content, "sha": sha})
     except Exception as e:
-        print("usage persist failed:", e)
+        print(f"persist {fname} failed:", e)
+
+
+def persist_usage_github():
+    _github_commit_file(USAGE_FILE.name, "update like usage")
+    _github_commit_file(HISTORY_FILE.name, "update like history")
+    _github_commit_file(REMINDERS_FILE.name, "update reminders")
 
 
 def load_usage() -> dict:
@@ -51,6 +58,75 @@ def save_usage(u: dict):
     USAGE_FILE.write_text(json.dumps(u, indent=1))
 
 
+HISTORY_FILE = Path(__file__).parent / "history.json"
+REMINDERS_FILE = Path(__file__).parent / "reminders.json"
+
+
+def _load_json(p: Path) -> dict:
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_json(p: Path, d: dict):
+    p.write_text(json.dumps(d, indent=1))
+
+
+def record_history(user_id, username, target, requested, landed):
+    hist = _load_json(HISTORY_FILE)
+    users = hist.setdefault("users", {})
+    entry = {"uid": str(target), "requested": requested, "landed": landed,
+             "ts": int(time.time()), "name": username or ""}
+    users.setdefault(str(user_id), []).append(entry)
+    _save_json(HISTORY_FILE, hist)
+
+
+def set_reminder(user_id, username, target, seconds_later):
+    rem = _load_json(REMINDERS_FILE)
+    rem[str(user_id)] = {"uid": str(target), "username": username or "",
+                         "remind_at": int(time.time() + seconds_later)}
+    _save_json(REMINDERS_FILE, rem)
+
+
+def cancel_reminder(user_id):
+    rem = _load_json(REMINDERS_FILE)
+    if str(user_id) in rem:
+        del rem[str(user_id)]
+        _save_json(REMINDERS_FILE, rem)
+        return True
+    return False
+
+
+def reminder_loop():
+    """Send daily like reminders when due."""
+    while True:
+        try:
+            rem = _load_json(REMINDERS_FILE)
+            now = int(time.time())
+            changed = False
+            for uid, info in list(rem.items()):
+                if info.get("remind_at", 0) <= now:
+                    try:
+                        kb = types.InlineKeyboardMarkup()
+                        kb.add(types.InlineKeyboardButton(
+                            "🔥 লাইক নিন", callback_data=f"like:{info['uid']}"))
+                        bot.send_message(int(uid),
+                            f"🔔 <b>আজকের ফ্রি লাইক দাবি করতে ক্লিক করুন!</b>\n"
+                            f"UID: <code>{info['uid']}</code>", reply_markup=kb)
+                        info["remind_at"] = now + 24 * 3600
+                        changed = True
+                    except Exception as e:
+                        print("reminder send failed:", e)
+            if changed:
+                _save_json(REMINDERS_FILE, rem)
+        except Exception as e:
+            print("reminder loop error:", e)
+        time.sleep(30)
+
+
 @bot.message_handler(commands=["start", "help"])
 def cmd_start(m):
     bot.reply_to(m,
@@ -59,6 +135,9 @@ def cmd_start(m):
         "<b>/stats</b> <code>UID</code> — প্লেয়ার প্রোফাইল (নাম, লাইক)\n"
         "<b>/like</b> <code>UID [count]</code> — লাইক পাঠান\n"
         "<b>/profile</b> <code>UID</code> — ফুল প্লেয়ার কার্ড (লেভেল, র‍্যাঙ্ক, গিল্ড)\n"
+        "<b>/setuid</b> <code>UID</code> — প্রতিদিন অটো লাইক রিমাইন্ডার\n"
+        "<b>/stopremind</b> — রিমাইন্ডার বন্ধ\n"
+        "<b>/history</b> — আপনার লাইক হিস্ট্রি\n"
         "<b>/pool</b> — বটের লাইক পুল স্ট্যাটাস\n"
         "<b>/guests</b> — কতগুলো গেস্ট অ্যাকাউন্ট বানানো হয়েছে\n\n"
         "UID = গেমের প্রোফাইলে যে নম্বর দেখায়।")
@@ -150,6 +229,14 @@ def cmd_like(m):
         text = (f"✅ {sent}টা রিকোয়েস্ট সফল হয়েছে, তবে ভেরিফাই করা গেল না।\n"
                 f"/stats {target} দিয়ে নিজে চেক করুন।")
     bot.edit_message_text(text, msg.chat.id, msg.message_id)
+    # হিস্ট্রি + অটো রিমাইন্ডার
+    try:
+        record_history(m.from_user.id, m.from_user.first_name or "",
+                       target, count, delta if isinstance(delta, int) and delta > 0 else sent)
+        if delta is None or delta > 0:
+            set_reminder(m.from_user.id, m.from_user.first_name or "", target, 24 * 3600)
+    except Exception as e:
+        print("history/reminder record failed:", e)
 
 
 
@@ -210,6 +297,107 @@ def cmd_profile(m):
         card += f"📅 অ্যাকাউন্ট বয়স{age}\n"
     bot.edit_message_text(card, msg.chat.id, msg.message_id)
 
+@bot.message_handler(commands=["setuid"])
+def cmd_setuid(m):
+    parts = m.text.split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/setuid 18328637549</code>")
+        return
+    target = parts[1]
+    set_reminder(m.from_user.id, m.from_user.first_name or "", target, 24 * 3600)
+    threading.Thread(target=persist_usage_github, daemon=True).start()
+    bot.reply_to(m, "✅ আপনার UID সেট হয়েছে: <code>" + target + "</code>\n"
+                     "⏰ প্রতিদিন ২৪ ঘণ্টা পর আমি নিজে থেকেই রিমাইন্ডার পাঠাবো — "
+                     "\"আজকের ফ্রি লাইক দাবি করতে ক্লিক করুন!\"\n"
+                     "বন্ধ করতে: /stopremind")
+
+
+@bot.message_handler(commands=["stopremind"])
+def cmd_stopremind(m):
+    if cancel_reminder(m.from_user.id):
+        bot.reply_to(m, "✅ অটো রিমাইন্ডার বন্ধ করা হয়েছে। আবার চালু করতে /setuid দিন।")
+    else:
+        bot.reply_to(m, "ℹ️ আপনার কোনো রিমাইন্ডার সেট করা নেই।")
+
+
+@bot.message_handler(commands=["history"])
+def cmd_history(m):
+    hist = _load_json(HISTORY_FILE)
+    entries = (hist.get("users") or {}).get(str(m.from_user.id), [])
+    if not entries:
+        bot.reply_to(m, "📜 আপনার এখনো কোনো লাইক হিস্ট্রি নেই।\n"
+                        "/like দিয়ে লাইক নিলে এখানে জমা হবে।")
+        return
+    total_req = sum(e.get("requested", 0) for e in entries)
+    total_land = sum(e.get("landed", 0) for e in entries)
+    per_uid = {}
+    for e in entries:
+        u = per_uid.setdefault(e["uid"], {"landed": 0, "times": 0, "last": 0})
+        u["landed"] += e.get("landed", 0)
+        u["times"] += 1
+        u["last"] = max(u["last"], e.get("ts", 0))
+    lines = [f"📜 <b>আপনার লাইক হিস্ট্রি</b>",
+             f"📦 মোট রিকোয়েস্ট: <b>{len(entries)}</b> বার",
+             f"❤️ মোট ডেলিভারি: <b>{total_land}</b>টা লাইক",
+             "", "🎯 <b>UID অনুযায়ী:</b>"]
+    from datetime import datetime, timezone, timedelta
+    tz = timezone(timedelta(hours=6))
+    for uid, d in sorted(per_uid.items(), key=lambda x: -x[1]["landed"])[:12]:
+        dt = datetime.fromtimestamp(d["last"], tz).strftime("%d-%m %H:%M")
+        lines.append(f"• <code>{uid}</code> — {d['landed']} লাইক ({d['times']} বার, শেষ: {dt})")
+    bot.reply_to(m, "\n".join(lines))
+
+
+@bot.callback_query_handler(func=lambda c: c.data and c.data.startswith("like:"))
+def cb_like(c):
+    target = c.data.split(":", 1)[1]
+    if not target.isdigit():
+        bot.answer_callback_query(c.id, "⚠️ অবৈধ UID")
+        return
+    bot.answer_callback_query(c.id, "⏳ লাইক পাঠানো হচ্ছে...")
+    try:
+        pool_size = len(ff_bd_api.get_pool())
+    except Exception:
+        pool_size = MAX_LIKES_PER_REQUEST
+    usage = load_usage()
+    with USAGE_LOCK:
+        used = set(tuple(k) for k in usage.get("used_pairs", []))
+    try:
+        s0 = ff_bd_api.get_stats(int(target))
+        likes_before = s0.get("likes") if s0 else None
+        sent = ff_bd_api.send_like(int(target), count=pool_size, used=used)
+    except Exception as e:
+        bot.send_message(c.message.chat.id, f"❌ এরর: {e}")
+        return
+    with USAGE_LOCK:
+        usage["used_pairs"] = [list(k) for k in used]
+        save_usage(usage)
+    threading.Thread(target=persist_usage_github, daemon=True).start()
+    time.sleep(3)
+    try:
+        s1 = ff_bd_api.get_stats(int(target))
+        likes_after = s1.get("likes") if s1 else None
+    except Exception:
+        likes_after = None
+    delta = (likes_after - likes_before) if isinstance(likes_before, int) and isinstance(likes_after, int) else None
+    try:
+        record_history(c.from_user.id, c.from_user.first_name or "", int(target),
+                       pool_size, delta if isinstance(delta, int) and delta > 0 else sent)
+        if delta is None or delta > 0:
+            set_reminder(c.from_user.id, c.from_user.first_name or "", int(target), 24 * 3600)
+    except Exception:
+        pass
+    if delta and delta > 0:
+        bot.send_message(c.message.chat.id,
+            f"✅ {delta}টা লাইক যোগ হয়েছে!\n❤️ এখন মোট Likes: <b>{likes_after}</b>")
+    elif delta == 0:
+        bot.send_message(c.message.chat.id,
+            "⚠️ আজ এই UID-তে ইতিমধ্যে লাইক দেওয়া হয়েছে — কাল আবার চেষ্টা করুন।")
+    else:
+        bot.send_message(c.message.chat.id,
+            f"✅ {sent}টা রিকোয়েস্ট গেছে। /stats {target} দিয়ে চেক করুন।")
+
+
 @bot.message_handler(commands=["guests"])
 def cmd_guests(m):
     msg = bot.reply_to(m, "🔄 গেস্ট অ্যাকাউন্ট গুনছি...")
@@ -248,4 +436,5 @@ if __name__ == "__main__":
         print("  export BOT_TOKEN=123:ABC... && python3 bot.py")
         raise SystemExit(1)
     print("bot running...")
+    threading.Thread(target=reminder_loop, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
