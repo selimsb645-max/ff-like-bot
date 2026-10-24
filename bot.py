@@ -124,7 +124,10 @@ def build_menu():
         types.InlineKeyboardButton("📜 History", callback_data="menu:history"),
     )
     kb.add(
+        types.InlineKeyboardButton("🏰 My Guild", callback_data="menu:guild"),
         types.InlineKeyboardButton("⚙️ My UID", callback_data="menu:myuid"),
+    )
+    kb.add(
         types.InlineKeyboardButton("🔗 Share & Refer", callback_data="menu:share"),
     )
     return kb
@@ -558,7 +561,9 @@ def cmd_start(m):
         "<b>/stopremind</b> — রিমাইন্ডার বন্ধ\n"
         "<b>/history</b> — আপনার লাইক হিস্ট্রি\n"
         "<b>/referrals</b> — আপনার রেফার কাউন্ট\n"
-        "<b>/myid</b> — আপনার ID ও কুলডাউন স্ট্যাটাস"
+        "<b>/myid</b> — আপনার ID ও কুলডাউন স্ট্যাটাস\n"
+        "<b>/guildlike</b> <code>GUILD_ID [count]</code> — গিল্ড মেম্বারদের লাইক\n"
+        "<b>/setguild</b> <code>GUILD_ID</code> — আপনার গিল্ড সেভ করুন"
         + ("\n\n👑 <b>অ্যাডমিন কমান্ড</b>\n"
            "<b>/pool</b> — লাইক পুল স্ট্যাটাস\n"
            "<b>/guests</b> — গেস্ট অ্যাকাউন্ট স্ট্যাটাস"
@@ -889,6 +894,19 @@ def cmd_plain_uid(m):
             run_stats_flow(m.chat.id, int(uid), m.from_user)
         elif action[0] == "profile":
             run_profile_flow(m.chat.id, int(uid), m.from_user)
+        elif action[0] == "setguild":
+            rem = _load_json(REMINDERS_FILE)
+            e = rem.get(str(user_id)) or {}
+            e.update({"uid": e.get("uid", uid), "guild_id": uid,
+                      "username": m.from_user.first_name or e.get("username", ""),
+                      "saved_at": int(time.time())})
+            if "remind_at" not in e:
+                e["remind_at"] = int(time.time() + 24 * 3600)
+            rem[str(user_id)] = e
+            _save_json(REMINDERS_FILE, rem)
+            threading.Thread(target=persist_usage_github, daemon=True).start()
+            bot.reply_to(m, f"✅ Guild ID (<code>{uid}</code>) সেভ হয়েছে!\n"
+                            "এখন [🏰 My Guild] বাটনে টিপলেই গিল্ড লাইক যাবে।")
         elif action[0] == "setuid":
             set_reminder(user_id, m.from_user.first_name or "", uid, 24 * 3600)
             threading.Thread(target=persist_usage_github, daemon=True).start()
@@ -937,6 +955,19 @@ def cb_menu(c):
         else:
             PENDING[user_id] = ("profile", time.time())
             bot.send_message(c.message.chat.id, "👤 কার প্রোফাইল দেখবো? UID নম্বর পাঠান")
+    elif act == "guild":
+        bot.answer_callback_query(c.id)
+        clan = get_saved_guild(user_id)
+        if clan and str(clan).isdigit():
+            if _like_slot_free(user_id)[0]:
+                bot.send_message(c.message.chat.id, f"🛡️ Guild {clan} এর মেম্বারদের লাইক পাঠানো হচ্ছে...")
+                threading.Thread(target=run_guildlike_flow,
+                                 args=(c.message.chat.id, int(clan), c.from_user, 20), daemon=True).start()
+            else:
+                bot.send_message(c.message.chat.id, "⏳ লাইক সিস্টেম ব্যস্ত, একটু পরে আবার চেষ্টা করুন।")
+        else:
+            PENDING[user_id] = ("setguild", time.time())
+            bot.send_message(c.message.chat.id, "🏰 আপনার Guild ID (Clan ID) নম্বর পাঠান")
     elif act == "myuid":
         bot.answer_callback_query(c.id)
         txt, kb = build_uid_card(user_id)
@@ -973,6 +1004,116 @@ def cmd_referrals(m):
     bot.reply_to(m,
         f"🔗 আপনার রেফার লিংক:\n<code>{link}</code>\n\n"
         f"👥 মোট রেফার: <b>{referral_count(m.from_user.id)}</b> জন")
+
+
+# ── Guild Bulk Like ─────────────────────────────────────────
+def get_saved_guild(user_id) -> str | None:
+    rem = _load_json(REMINDERS_FILE)
+    e = rem.get(str(user_id)) or {}
+    return e.get("guild_id")
+
+
+def run_guildlike_flow(chat_id, clan_id, user, count=20):
+    """Guild bulk like in background thread with live progress updates."""
+    try:
+        g = ff_bd_api.get_guild(clan_id)
+    except Exception:
+        g = None
+    if not g or not g.get("uids"):
+        bot.send_message(chat_id, f"❌ গিল্ড {clan_id} খুঁজে পাওয়া যায়নি। Guild ID ঠিক আছে? BD সার্ভারের গিল্ড তো?")
+        return
+    uids = [u for u in g["uids"] if isinstance(u, int) and u > 0]
+    total = len(uids)
+    prog = bot.send_message(chat_id,
+        f"🛡️ <b>Guild Bulk Like</b>\n"
+        f"🏰 Guild: <b>{g.get('name', clan_id)}</b>\n"
+        f"👥 Active members: <b>{total}</b> (মোট {g.get('members_total', '?')} জন)\n"
+        f"⏳ শুরু হচ্ছে...")
+    msg_id, chat = prog.message_id, prog.chat.id
+    sent_total, ok_members = 0, 0
+    used = set(tuple(k) for k in load_usage().get("used_pairs", []))
+    for i, uid in enumerate(uids, 1):
+        try:
+            sent = ff_bd_api.send_like(uid, count=count, used=used)
+        except Exception:
+            sent = 0
+        sent_total += sent
+        if sent:
+            ok_members += 1
+        blocks = "▰" * i + "▱" * (total - i)
+        pct = int(i * 100 / total)
+        try:
+            if i == total or i % 2 == 1:
+                bot.edit_message_text(
+                    f"🛡️ <b>Guild Bulk Like</b>\n"
+                    f"🏰 Guild: <b>{g.get('name', clan_id)}</b>\n"
+                    f"⏳ প্রোগ্রেস: [{blocks}] {pct}% ({i}/{total})\n"
+                    f"✅ লাইক পাঠানো হয়েছে: {sent_total} | 👤 মেম্বার কভার: {ok_members}",
+                    chat, msg_id)
+        except Exception:
+            pass
+        time.sleep(1.5)
+    # persist usage
+    try:
+        usage = load_usage()
+        with USAGE_LOCK:
+            usage["used_pairs"] = [list(k) for k in used]
+            save_usage(usage)
+        threading.Thread(target=persist_usage_github, daemon=True).start()
+    except Exception:
+        pass
+    bot.edit_message_text(
+        f"🛡️ <b>Guild Bulk Like — ফাইনাল রিপোর্ট</b>\n"
+        f"🏰 Guild: <b>{g.get('name', clan_id)}</b> (Lv {g.get('level', '?')})\n"
+        f"👥 Active members: {total} (মোট {g.get('members_total', '?')} জন)\n"
+        f"✅ সফলভাবে পাঠানো হয়েছে: <b>{sent_total}</b> লাইক\n"
+        f"👤 যেসব মেম্বার লাইক পেয়েছে: <b>{ok_members}</b>\n"
+        f"⚠️ স্কিপ (আগেই লাইক দেওয়া/ডেড): {total - ok_members}",
+        chat, msg_id)
+    # history: প্রতি মেম্বার হিসাব
+    for uid in uids:
+        record_history(user.id, user.first_name or "", uid, count, 0)
+    persist_usage_github()
+
+
+@bot.message_handler(commands=["guildlike"])
+def cmd_guildlike(m):
+    if not _like_slot_free(m.from_user.id)[0]:
+        _spamsafe_reply(m, "⏳ লাইক সিস্টেম ব্যস্ত / কুলডাউনে। একটু পরে আবার চেষ্টা করুন।")
+        return
+    parts = m.text.split()
+    clan = parts[1] if len(parts) > 1 and parts[1].isdigit() else get_saved_guild(m.from_user.id) or get_saved_uid(m.from_user.id)
+    if not clan or not str(clan).isdigit():
+        bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/guildlike 3071565979</code>\n"
+                        "অথবা আগে /setguild <GUILD_ID> দিয়ে সেভ করুন।")
+        return
+    try:
+        count = min(int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 20, 100)
+    except Exception:
+        count = 20
+    threading.Thread(target=run_guildlike_flow,
+                     args=(m.chat.id, int(clan), m.from_user, count), daemon=True).start()
+
+
+@bot.message_handler(commands=["setguild"])
+def cmd_setguild(m):
+    parts = m.text.split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/setguild 3071565979</code>")
+        return
+    clan = parts[1]
+    rem = _load_json(REMINDERS_FILE)
+    e = rem.get(str(m.from_user.id)) or {}
+    e.update({"uid": e.get("uid", clan), "guild_id": clan,
+              "username": m.from_user.first_name or e.get("username", ""),
+              "saved_at": int(time.time())})
+    if "remind_at" not in e:
+        e["remind_at"] = int(time.time() + 24 * 3600)
+    rem[str(m.from_user.id)] = e
+    _save_json(REMINDERS_FILE, rem)
+    threading.Thread(target=persist_usage_github, daemon=True).start()
+    bot.reply_to(m, f"✅ আপনার Guild ID (<code>{clan}</code>) সেভ হয়েছে!\n"
+                    "এখন থেকে [🏰 My Guild] বাটনে টিপলেই পুরো গিল্ডের অ্যাক্টিভ মেম্বারদের লাইক যাবে।")
 
 
 @bot.message_handler(commands=["guests"])
