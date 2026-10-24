@@ -741,7 +741,7 @@ def cmd_myid(m):
     bot.reply_to(m, "\n".join(lines))
 
 
-@bot.message_handler(commands=["start", "help", "menu"])
+@bot.message_handler(commands=["start", "help", "menu", "হেল্প"])
 def build_welcome_kb():
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
@@ -1406,4 +1406,4 @@ if __name__ == "__main__":
     print("bot running... [spam shield + like cooldown + token health active]")
     threading.Thread(target=reminder_loop, daemon=True).start()
     threading.Thread(target=health_loop, daemon=True).start()
-    bot.infinity_polling(skip_pending=True)
+    bot.infinity_polling(skip_pending=False, timeout=30)
