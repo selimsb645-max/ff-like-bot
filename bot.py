@@ -88,7 +88,8 @@ def record_history(user_id, username, target, requested, landed):
 def set_reminder(user_id, username, target, seconds_later):
     rem = _load_json(REMINDERS_FILE)
     rem[str(user_id)] = {"uid": str(target), "username": username or "",
-                         "remind_at": int(time.time() + seconds_later)}
+                         "remind_at": int(time.time() + seconds_later),
+                         "saved_at": int(time.time())}
     _save_json(REMINDERS_FILE, rem)
 
 
@@ -115,13 +116,37 @@ def get_saved_uid(user_id) -> str | None:
 def build_menu():
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        types.InlineKeyboardButton("💖 গেট ফ্রি লাইক", callback_data="menu:like"),
-        types.InlineKeyboardButton("📊 চেক স্ট্যাটাস", callback_data="menu:stats"),
-        types.InlineKeyboardButton("👤 প্রোফাইল", callback_data="menu:profile"),
-        types.InlineKeyboardButton("📜 হিস্ট্রি", callback_data="menu:history"),
-        types.InlineKeyboardButton("🔗 শেয়ার ও রেফার", callback_data="menu:share"),
+        types.InlineKeyboardButton("💖 Fast Like", callback_data="menu:like"),
+        types.InlineKeyboardButton("📊 My Stats", callback_data="menu:stats"),
+    )
+    kb.add(
+        types.InlineKeyboardButton("👤 Profile", callback_data="menu:profile"),
+        types.InlineKeyboardButton("📜 History", callback_data="menu:history"),
+    )
+    kb.add(
+        types.InlineKeyboardButton("⚙️ My UID", callback_data="menu:myuid"),
+        types.InlineKeyboardButton("🔗 Share & Refer", callback_data="menu:share"),
     )
     return kb
+
+
+def build_uid_card(user_id):
+    saved = get_saved_uid(user_id)
+    rem = _load_json(REMINDERS_FILE).get(str(user_id), {})
+    saved_at = rem.get("saved_at")
+    if saved and str(saved).isdigit():
+        txt = (f"⚙️ <b>আমার UID</b>\n\n"
+               f"🆔 সেভ করা UID: <code>{saved}</code>\n")
+        if saved_at:
+            import datetime
+            txt += f"📅 সেভ করা হয়েছে: {datetime.datetime.fromtimestamp(saved_at).strftime('%d %b %Y, %H:%M')}\n"
+        txt += "\nএখন <code>/like</code> বা <code>/stats</code> লিখলেই এই UID-তে কাজ হবে।"
+        kb = types.InlineKeyboardMarkup(row_width=2)
+        kb.add(types.InlineKeyboardButton("✏️ UID পরিবর্তন করুন", callback_data="uid:change"),
+               types.InlineKeyboardButton("🗑️ UID মুছে ফেলুন", callback_data="uid:clear"))
+        return txt, kb
+    return ("⚠️ আপনার কোনো UID সেভ করা নেই।\n"
+            "✏️ UID পরিবর্তন করুন বাটনে চাপ দিয়ে নতুন UID সেভ করুন।", None)
 
 
 def run_like_flow(chat_id, target, user, skip_slot=False):
@@ -528,7 +553,8 @@ def cmd_start(m):
         "<b>/stats</b> <code>UID</code> — প্লেয়ার প্রোফাইল (নাম, লাইক)\n"
         "<b>/like</b> <code>UID [count]</code> — লাইক পাঠান\n"
         "<b>/profile</b> <code>UID</code> — ফুল প্লেয়ার কার্ড (লেভেল, র‍্যাঙ্ক, গিল্ড)\n"
-        "<b>/setuid</b> <code>UID</code> — প্রতিদিন অটো লাইক রিমাইন্ডার\n"
+        "<b>/setuid</b> <code>UID</code> — আপনার UID সেভ করুন (সব কমান্ডে অটো ব্যবহৃত)\n"
+        "<b>/myuid</b> — সেভ করা UID দেখুন / বদলান\n"
         "<b>/stopremind</b> — রিমাইন্ডার বন্ধ\n"
         "<b>/history</b> — আপনার লাইক হিস্ট্রি\n"
         "<b>/referrals</b> — আপনার রেফার কাউন্ট\n"
@@ -541,13 +567,38 @@ def cmd_start(m):
         reply_markup=build_menu())
 
 
+@bot.callback_query_handler(func=lambda c: c.data and c.data.startswith("uid:"))
+def cb_uid_actions(c):
+    user_id = c.from_user.id
+    act = c.data.split(":", 1)[1]
+    if act == "change":
+        PENDING[user_id] = ("setuid", time.time())
+        bot.answer_callback_query(c.id)
+        bot.send_message(c.message.chat.id, "✏️ নতুন UID নম্বর পাঠান (শুধু নম্বর):")
+    elif act == "clear":
+        cancel_reminder(user_id)
+        bot.answer_callback_query(c.id, "🗑️ UID মুছে ফেলা হয়েছে")
+        try:
+            bot.edit_message_text("🗑️ আপনার সেভ করা UID মুছে ফেলা হয়েছে।\n"
+                                  "আবার সেট করতে: /setuid <UID>", c.message.chat.id, c.message.message_id)
+        except Exception:
+            bot.send_message(c.message.chat.id, "🗑️ সেভ করা UID মুছে ফেলা হয়েছে।")
+
+
 @bot.message_handler(commands=["stats"])
 def cmd_stats(m):
     parts = m.text.split()
-    if len(parts) < 2 or not parts[1].isdigit():
-        bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/stats 18328637549</code>")
-        return
-    uid = int(parts[1])
+    if len(parts) > 1 and parts[1].isdigit():
+        uid = int(parts[1])
+    else:
+        saved = get_saved_uid(m.from_user.id)
+        if saved:
+            uid = int(saved)
+        else:
+            bot.reply_to(m, "⚠️ আপনার কোনো UID সেভ করা নেই!\n"
+                             "<code>/setuid &lt;UID&gt;</code> লিখে আগে সেভ করুন\n"
+                             "অথবা <code>/stats &lt;UID&gt;</code> ব্যবহার করুন।")
+            return
     msg = bot.reply_to(m, "🔄 খোঁজা হচ্ছে...")
     try:
         s = ff_bd_api.get_stats(uid)
@@ -572,10 +623,17 @@ def cmd_like(m):
         _spamsafe_reply(m, f"⏳ লাইক সিস্টেম এখন ব্যস্ত / কুলডাউনে আছে। *{wait} সেকেন্ড* পরে আবার চেষ্টা করুন।")
         return
     parts = m.text.split()
-    if len(parts) < 2 or not parts[1].isdigit():
-        bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/like 18328637549 5</code>")
-        return
-    target = int(parts[1])
+    if len(parts) > 1 and parts[1].isdigit():
+        target = int(parts[1])
+    else:
+        saved = get_saved_uid(m.from_user.id)
+        if saved:
+            target = int(saved)
+        else:
+            bot.reply_to(m, "⚠️ আপনার কোনো UID সেভ করা নেই!\n"
+                             "<code>/setuid &lt;UID&gt;</code> লিখে আগে সেভ করুন\n"
+                             "অথবা <code>/like &lt;UID&gt;</code> ব্যবহার করুন।")
+            return
     try:
         pool_size = len(ff_bd_api.get_pool())
     except Exception:
@@ -645,10 +703,17 @@ def cmd_like(m):
 @bot.message_handler(commands=["profile"])
 def cmd_profile(m):
     parts = m.text.split()
-    if len(parts) < 2 or not parts[1].isdigit():
-        bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/profile 18328637549</code>")
-        return
-    target = int(parts[1])
+    if len(parts) > 1 and parts[1].isdigit():
+        target = int(parts[1])
+    else:
+        saved = get_saved_uid(m.from_user.id)
+        if saved:
+            target = int(saved)
+        else:
+            bot.reply_to(m, "⚠️ আপনার কোনো UID সেভ করা নেই!\n"
+                             "<code>/setuid &lt;UID&gt;</code> লিখে আগে সেভ করুন\n"
+                             "অথবা <code>/profile &lt;UID&gt;</code> ব্যবহার করুন।")
+            return
     msg = bot.reply_to(m, "🔍 প্রোফাইল আনা হচ্ছে...")
     try:
         pool = ff_bd_api.get_pool()
@@ -699,6 +764,12 @@ def cmd_profile(m):
         card += f"📅 অ্যাকাউন্ট বয়স{age}\n"
     bot.edit_message_text(card, msg.chat.id, msg.message_id)
 
+@bot.message_handler(commands=["myuid"])
+def cmd_myuid(m):
+    txt, kb = build_uid_card(m.from_user.id)
+    bot.reply_to(m, txt, reply_markup=kb)
+
+
 @bot.message_handler(commands=["setuid"])
 def cmd_setuid(m):
     parts = m.text.split()
@@ -708,7 +779,8 @@ def cmd_setuid(m):
     target = parts[1]
     set_reminder(m.from_user.id, m.from_user.first_name or "", target, 24 * 3600)
     threading.Thread(target=persist_usage_github, daemon=True).start()
-    bot.reply_to(m, "✅ আপনার UID সেট হয়েছে: <code>" + target + "</code>\n"
+    bot.reply_to(m, "✅ আপনার UID (<code>" + target + "</code>) সফলভাবে সেভ করা হয়েছে!\n"
+                     "এখন থেকে যেকোনো কমান্ড দিলে এই UID-তেই কাজ করবে।\n\n"
                      "⏰ প্রতিদিন ২৪ ঘণ্টা পর আমি নিজে থেকেই রিমাইন্ডার পাঠাবো — "
                      "\"আজকের ফ্রি লাইক দাবি করতে ক্লিক করুন!\"\n"
                      "বন্ধ করতে: /stopremind")
@@ -817,6 +889,12 @@ def cmd_plain_uid(m):
             run_stats_flow(m.chat.id, int(uid), m.from_user)
         elif action[0] == "profile":
             run_profile_flow(m.chat.id, int(uid), m.from_user)
+        elif action[0] == "setuid":
+            set_reminder(user_id, m.from_user.first_name or "", uid, 24 * 3600)
+            threading.Thread(target=persist_usage_github, daemon=True).start()
+            bot.reply_to(m, f"✅ আপনার UID (<code>{uid}</code>) সফলভাবে সেভ করা হয়েছে!\n"
+                            "এখন থেকে যেকোনো কমান্ড দিলে এই UID-তেই কাজ করবে।",
+                        reply_markup=build_menu())
         return
     if saved:
         bot.reply_to(m, f"🔄 আপনার সেভ করা UID ({saved}) কে লাইক পাঠানো হচ্ছে...\n"
@@ -859,6 +937,10 @@ def cb_menu(c):
         else:
             PENDING[user_id] = ("profile", time.time())
             bot.send_message(c.message.chat.id, "👤 কার প্রোফাইল দেখবো? UID নম্বর পাঠান")
+    elif act == "myuid":
+        bot.answer_callback_query(c.id)
+        txt, kb = build_uid_card(user_id)
+        bot.send_message(c.message.chat.id, txt, reply_markup=kb)
     elif act == "history":
         bot.answer_callback_query(c.id)
         bot.send_message(c.message.chat.id, build_history_text(user_id))
