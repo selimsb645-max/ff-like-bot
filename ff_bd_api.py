@@ -17,6 +17,11 @@ AES_IV = b"6oyZDr22E3ychjM%"
 PROFILE_URL = "https://clientbp.ggpolarbear.com/GetPlayerPersonalShow"
 LIKE_URL = "https://clientbp.ggpolarbear.com/LikeProfile"
 JWT_SERVICE = "https://sheihk-jwt-ob55.up.railway.app/token"
+
+# Live public token pools (community like-bots that auto-refresh their JWTs to GitHub)
+EXTERNAL_TOKEN_URLS = [
+    "https://raw.githubusercontent.com/riyadcoderservice-droid/autolike-api-frexy/main/token_bd.json",
+]
 POOL_FILE = Path(__file__).parent / "bd_pool.json"
 CREDS_FILE = Path(__file__).parent / "bd_creds.txt"
 
@@ -178,6 +183,47 @@ def mint_jwt(uid: str, pw: str) -> dict | None:
         return None
 
 
+
+def fetch_external_tokens() -> list:
+    """Pull fresh JWTs from public token pools (live community bots)."""
+    now = time.time()
+    out = []
+    for url in EXTERNAL_TOKEN_URLS:
+        try:
+            r = httpx.get(url, timeout=20, verify=False)
+            if r.status_code != 200:
+                continue
+            d = r.json()
+            items = d if isinstance(d, list) else [d]
+            for it in items:
+                tok = it.get("token") if isinstance(it, dict) else it
+                if not isinstance(tok, str) or not tok.startswith("eyJ"):
+                    continue
+                try:
+                    pl = tok.split(".")[1]
+                    pl += "=" * (-len(pl) % 4)
+                    c = json.loads(base64.urlsafe_b64decode(pl))
+                except Exception:
+                    continue
+                if c.get("exp", 0) < now + 300:
+                    continue
+                if c.get("lock_region") == "IND":
+                    continue
+                out.append({"uid": str(c.get("external_uid") or c.get("account_id")),
+                            "pass": "", "token": tok,
+                            "account_id": c.get("account_id"),
+                            "region": c.get("lock_region", "BD"),
+                            "exp": c.get("exp"), "external": True})
+        except Exception:
+            continue
+    seen, uniq = set(), []
+    for t in out:
+        if t["account_id"] and t["account_id"] not in seen:
+            seen.add(t["account_id"])
+            uniq.append(t)
+    return uniq
+
+
 def refresh_pool() -> list:
     """Mint fresh JWTs for all pool accounts."""
     pool = []
@@ -191,12 +237,21 @@ def refresh_pool() -> list:
 
 def get_pool(force: bool = False) -> list:
     if force or not POOL_FILE.exists():
-        return refresh_pool()
-    pool = json.loads(POOL_FILE.read_text())
-    now = time.time()
-    if not pool or all(t.get("exp", 0) < now + 60 for t in pool):
-        return refresh_pool()
-    return pool
+        base = refresh_pool()
+    else:
+        pool = json.loads(POOL_FILE.read_text())
+        now = time.time()
+        if not pool or all(t.get("exp", 0) < now + 60 for t in pool):
+            base = refresh_pool()
+        else:
+            base = [t for t in pool if t.get("exp", 0) > now + 60]
+    try:
+        ext = fetch_external_tokens()
+    except Exception:
+        ext = []
+    seen = {t.get("account_id") for t in base}
+    merged = base + [t for t in ext if t["account_id"] not in seen]
+    return merged
 
 
 def _decode_profile(data: bytes) -> dict:
