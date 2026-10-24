@@ -16,7 +16,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN_2"
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 USAGE_FILE = Path(__file__).parent / "like_usage.json"
 USAGE_LOCK = threading.Lock()
-MAX_LIKES_PER_REQUEST = 10
+MAX_LIKES_PER_REQUEST = 500
 ADMIN_IDS = set(int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip())
 
 
@@ -94,7 +94,12 @@ def cmd_like(m):
         bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/like 18328637549 5</code>")
         return
     target = int(parts[1])
-    count = min(int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 5, MAX_LIKES_PER_REQUEST)
+    try:
+        pool_size = len(ff_bd_api.get_pool())
+    except Exception:
+        pool_size = MAX_LIKES_PER_REQUEST
+    count = min(int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else pool_size,
+                MAX_LIKES_PER_REQUEST)
     msg = bot.reply_to(m, f"🔄 {target} কে {count}টা লাইক পাঠানো হচ্ছে...")
     usage = load_usage()
     with USAGE_LOCK:
