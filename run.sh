@@ -10,3 +10,11 @@ while [ $(date +%s) -lt $END ]; do
   echo "bot exited, restarting in 10s..."
   sleep 10
 done
+
+# self-redispatch next run (job GITHUB_TOKEN can't dispatch; USAGE_PAT can)
+if [ -n "$GITHUB_USAGE_TOKEN" ]; then
+  curl -s -X POST -H "Authorization: Bearer $GITHUB_USAGE_TOKEN" \
+    -H "Accept: application/vnd.github+json" \
+    https://api.github.com/repos/selimsb645-max/ff-like-bot/actions/workflows/keep-bot-alive.yml/dispatches \
+    -d '{"ref":"main"}' && echo "redispatched next run"
+fi
