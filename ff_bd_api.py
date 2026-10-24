@@ -403,6 +403,129 @@ def drop_from_pool(dead_ids) -> int:
     return len(pool) - len(kept)
 
 
+
+
+# ── Guild (clan) API ─────────────────────────────────────────
+CLAN_INFO_URL = "https://clientbp.ggpolarbear.com/GetClanInfoByClanID"
+CLAN_MAIN_URL = "https://clientbp.ggpolarbear.com/GetClanMainPageInfo"
+
+
+def _pb_varint(n: int) -> bytes:
+    out = b""
+    while True:
+        b = n & 0x7F
+        n >>= 7
+        out += bytes([b | (0x80 if n else 0)])
+        if not n:
+            return out
+
+
+def _walk_pb(buf: bytes):
+    """Generic single-pass protobuf walk: returns list of (field, kind, value)."""
+    res = []
+    p = 0
+    n = len(buf)
+
+    def rv(p):
+        v = s = 0
+        while p < n:
+            b = buf[p]
+            p += 1
+            v |= (b & 0x7F) << s
+            if not b & 0x80:
+                return v, p
+            s += 7
+        return 0, p
+
+    while p < n:
+        tag, p = rv(p)
+        f, wt = tag >> 3, tag & 7
+        if wt == 0:
+            v, p = rv(p)
+            res.append((f, "int", v))
+        elif wt == 2:
+            ln, p = rv(p)
+            res.append((f, "bytes", buf[p:p + ln]))
+            p += ln
+        elif wt == 5:
+            res.append((f, "f32", buf[p:p + 4]))
+            p += 4
+        elif wt == 1:
+            res.append((f, "f64", buf[p:p + 8]))
+            p += 8
+        else:
+            break
+    return res
+
+
+def get_guild(clan_id: int, jwt: str = None) -> dict | None:
+    """Guild basic info + active member UIDs (captain, officers, recent actives)."""
+    import base64 as _b64
+    if not jwt:
+        pool = get_pool()
+        if not pool:
+            return None
+        jwt = pool[0]["token"]
+    body = _enc(b"\x08" + _pb_varint(int(clan_id)) + b"\x10\x01")
+
+    # 1) basic info (plaintext protobuf response)
+    try:
+        r = httpx.post(CLAN_INFO_URL, headers=_headers(jwt, "OB55"), data=body, timeout=20, verify=False)
+        if r.status_code != 200 or not r.content:
+            return None
+        pt = r.content
+    except Exception:
+        return None
+
+    out = {"clan_id": int(clan_id), "uids": [], "officers": []}
+    basic = None
+    for f, t, v in _walk_pb(pt):
+        if f == 1 and basic is None:
+            out["clan_id"] = v
+        elif f == 2 and t == "bytes":
+            try:
+                inner = [sv for sf, st, sv in _walk_pb(v) if sf == 2 and st == "bytes"]
+                if inner:
+                    out["name"] = inner[0].decode("utf-8", "replace")
+                else:
+                    out["name"] = v.decode("utf-8", "replace")
+            except Exception:
+                out["name"] = v.decode("utf-8", "replace")
+        elif f == 4:
+            out["captain"] = v
+        elif f == 5:
+            out["level"] = v
+        elif f == 7:
+            out["members_total"] = v
+        elif f == 6:
+            out["capacity"] = v
+        elif f == 13 and t == "bytes":
+            out["region"] = v.decode("utf-8", "replace")
+        elif f == 15 and t == "bytes":
+            import json as _json
+            try:
+                out["officers"] = _json.loads(v.decode("utf-8"))
+            except Exception:
+                pass
+
+    # 2) main page activity (plaintext protobuf) -> active member UIDs
+    uids = set()
+    if out.get("captain"):
+        uids.add(out["captain"])
+    uids.update(out.get("officers") or [])
+    try:
+        r2 = httpx.post(CLAN_MAIN_URL, headers=_headers(jwt, "OB55"), data=body, timeout=20, verify=False)
+        if r2.status_code == 200 and r2.content:
+            for f, t, v in _walk_pb(r2.content):
+                if f == 3 and t == "bytes":
+                    for sf, st, sv in _walk_pb(v):
+                        if sf == 1 and st == "int":
+                            uids.add(sv)
+    except Exception:
+        pass
+    out["uids"] = sorted(uids)
+    return out
+
 def fetch_external_tokens() -> list:
     """Pull fresh JWTs from public token pools (live community bots)."""
     now = time.time()
