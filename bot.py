@@ -43,6 +43,7 @@ def persist_usage_github():
     _github_commit_file(USAGE_FILE.name, "update like usage")
     _github_commit_file(HISTORY_FILE.name, "update like history")
     _github_commit_file(REMINDERS_FILE.name, "update reminders")
+    _github_commit_file("dead_tokens.json", "update dead token blacklist")
 
 
 def load_usage() -> dict:
@@ -280,6 +281,45 @@ def reminder_loop():
         except Exception as e:
             print("reminder loop error:", e)
         time.sleep(30)
+
+
+def health_loop():
+    """🩺 Auto Token Health Manager: rotate-check tokens, blacklist dead ones,
+    auto-re-mint the pool when healthy capacity drops."""
+    idx = 0
+    while True:
+        try:
+            pool = ff_bd_api.get_pool()
+            if not pool:
+                time.sleep(300)
+                continue
+            n = min(15, len(pool))
+            chunk = pool[idx:idx + n]
+            idx = (idx + n) % max(1, len(pool))
+            dead_ids = []
+            for t in chunk:
+                tok = t.get("token")
+                if not tok or t.get("exp", 0) < time.time():
+                    dead_ids.append(t.get("account_id"))
+                    continue
+                if not ff_bd_api.check_token(tok):
+                    dead_ids.append(t.get("account_id"))
+            if dead_ids:
+                dropped = ff_bd_api.drop_from_pool(dead_ids)
+                total_dead = ff_bd_api.add_dead(dead_ids)
+                print(f"[health] dropped {dropped} cached, {len(dead_ids)} dead this cycle, blacklist={total_dead}")
+                threading.Thread(target=persist_usage_github, daemon=True).start()
+            # অটো-রিকভারি: হেলদি পুল কমে গেলে নিজের অ্যাকাউন্ট রি-মিন্ট
+            pool = ff_bd_api.get_pool()
+            if len(pool) < 30:
+                print("[health] pool low, forcing re-mint")
+                try:
+                    ff_bd_api.refresh_pool()
+                except Exception as e:
+                    print("[health] re-mint failed:", e)
+        except Exception as e:
+            print("[health] loop error:", e)
+        time.sleep(1200)  # প্রতি ২০ মিনিটে এক সাইকেল
 
 
 @bot.message_handler(commands=["start", "help", "menu"])
@@ -685,7 +725,9 @@ def cmd_guests(m):
 def cmd_pool(m):
     pool = ff_bd_api.get_pool()
     fresh = sum(1 for t in pool if t.get("exp", 0) > time.time())
-    bot.reply_to(m, f"🔋 লাইক পুল: <b>{len(pool)}</b> অ্যাকাউন্ট ({fresh} টোকেন এখনো ভ্যালিড)")
+    dead = ff_bd_api.dead_count() if hasattr(ff_bd_api, "dead_count") else 0
+    bot.reply_to(m, f"🔋 লাইক পুল: <b>{len(pool)}</b> অ্যাকাউন্ট ({fresh} টোকেন এখনো ভ্যালিড)\n"
+                    f"🩺 অটো-হেলথ: চলছে | 🖤 ব্ল্যাকলিস্টেড: {dead}টা ডেড টোকেন")
 
 
 if __name__ == "__main__":
@@ -695,4 +737,5 @@ if __name__ == "__main__":
         raise SystemExit(1)
     print("bot running...")
     threading.Thread(target=reminder_loop, daemon=True).start()
+    threading.Thread(target=health_loop, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
