@@ -124,8 +124,16 @@ def build_menu():
     return kb
 
 
-def run_like_flow(chat_id, target, user):
+def run_like_flow(chat_id, target, user, skip_slot=False):
     """Execute a full-pool like for target; report honestly; record history+reminder."""
+    if not skip_slot:
+        ok, wait = _like_slot_free(user.id)
+        if not ok:
+            try:
+                bot.send_message(chat_id, f"⏳ লাইক সিস্টেম ব্যস্ত / কুলডাউনে। *{wait} সেকেন্ড* পরে আবার চেষ্টা করুন।")
+            except Exception:
+                pass
+            return
     try:
         pool = ff_bd_api.get_pool()
         pool_size = len(pool)
@@ -322,6 +330,117 @@ def health_loop():
         time.sleep(1200)  # প্রতি ২০ মিনিটে এক সাইকেল
 
 
+# ── Smart Spam Shield ────────────────────────────────────────
+SPAM = {}        # user_id -> recent command timestamps
+MUTES = {}       # user_id -> mute_until ts
+VIOLATIONS = {}  # user_id -> (count, last_violation_ts)
+LAST_WARN = {}   # user_id -> last mute-warning ts
+LIKE_BUSY = {"until": 0, "user": None}   # global like operation window
+USER_LIKE_CD = {} # user_id -> next-allowed like ts
+SPAM_WINDOW = 30      # seconds
+SPAM_MAX = 8          # commands per window before mute
+MUTE_STEPS = (60, 300, 1800)   # escalating mute seconds
+LIKE_USER_COOLDOWN = 60        # per-user seconds between /like
+LIKE_GLOBAL_WINDOW = 45        # global busy window per like operation
+
+
+def _spam_guard(user_id: int) -> int:
+    """Returns seconds remaining if muted, else 0 (and records activity)."""
+    now = time.time()
+    if user_id in ADMIN_IDS:
+        return 0
+    mu = MUTES.get(user_id, 0)
+    if now < mu:
+        return int(mu - now)
+    ts = SPAM.setdefault(user_id, [])
+    ts.append(now)
+    ts[:] = [t for t in ts if t > now - SPAM_WINDOW]
+    if len(ts) > SPAM_MAX:
+        cnt, last_v = VIOLATIONS.get(user_id, (0, 0))
+        cnt = 1 if now - last_v > 3600 else cnt + 1
+        VIOLATIONS[user_id] = (cnt, now)
+        mute_s = MUTE_STEPS[min(cnt - 1, len(MUTE_STEPS) - 1)]
+        MUTES[user_id] = now + mute_s
+        SPAM[user_id] = []
+        return mute_s
+    return 0
+
+
+def _spamsafe_reply(m, text: str):
+    """Send a mute-warning at most once per 20s per user (no warning loops)."""
+    now = time.time()
+    if now - LAST_WARN.get(m.from_user.id, 0) < 20:
+        return
+    LAST_WARN[m.from_user.id] = now
+    try:
+        bot.reply_to(m, text)
+    except Exception:
+        pass
+
+
+def _like_slot_free(user_id: int):
+    """Global + per-user like cooldown. Returns (ok, seconds_to_wait)."""
+    now = time.time()
+    if user_id in ADMIN_IDS:
+        return True, 0
+    if now < LIKE_BUSY["until"]:
+        return False, int(LIKE_BUSY["until"] - now)
+    cd = USER_LIKE_CD.get(user_id, 0)
+    if now < cd:
+        return False, int(cd - now)
+    LIKE_BUSY["until"] = now + LIKE_GLOBAL_WINDOW
+    LIKE_BUSY["user"] = user_id
+    USER_LIKE_CD[user_id] = now + LIKE_USER_COOLDOWN
+    return True, 0
+
+
+def wrap_with_guard(fn):
+    def guarded(m, *a, **kw):
+        left = _spam_guard(m.from_user.id)
+        if left:
+            _spamsafe_reply(m, f"⏳ অনেক দ্রুত কমান্ড দিচ্ছেন! অনুগ্রহ করে *{left} সেকেন্ড* অপেক্ষা করুন।")
+            return None
+        return fn(m, *a, **kw)
+    return guarded
+
+
+def wrap_callback_with_guard(fn):
+    def guarded(c, *a, **kw):
+        left = _spam_guard(c.from_user.id)
+        if left:
+            try:
+                bot.answer_callback_query(c.id, f"⏳ {left} সেকেন্ড অপেক্ষা করুন!")
+            except Exception:
+                pass
+            return None
+        return fn(c, *a, **kw)
+    return guarded
+
+
+def install_guard():
+    for h in bot.message_handlers:
+        h["function"] = wrap_with_guard(h["function"])
+    for h in bot.callback_query_handlers:
+        h["function"] = wrap_callback_with_guard(h["function"])
+
+
+@bot.message_handler(commands=["myid"])
+def cmd_myid(m):
+    left = MUTES.get(m.from_user.id, 0) - time.time()
+    lines = [
+        "🆔 *আপনার তথ্য*",
+        f"Telegram ID: `{m.from_user.id}`",
+        f"নাম: {m.from_user.first_name or '-'}",
+    ]
+    if m.from_user.id in ADMIN_IDS:
+        lines.append("👑 স্ট্যাটাস: অ্যাডমিন (সব লিমিট মুক্ত)")
+    else:
+        lines.append(f"🔒 মিউট: {'হ্যাঁ, ' + str(int(left)) + ' সেকেন্ড বাকি' if left > 0 else 'নেই'}")
+        cd = USER_LIKE_CD.get(m.from_user.id, 0) - time.time()
+        lines.append(f"❤️ লাইক কুলডাউন: {str(int(cd)) + ' সেকেন্ড' if cd > 0 else 'প্রস্তুত'}")
+    bot.reply_to(m, "\n".join(lines))
+
+
 @bot.message_handler(commands=["start", "help", "menu"])
 def cmd_start(m):
     # রেফার পেলোড হ্যান্ডেল: /start ref<referrer_id>
@@ -343,7 +462,7 @@ def cmd_start(m):
         "<b>/stopremind</b> — রিমাইন্ডার বন্ধ\n"
         "<b>/history</b> — আপনার লাইক হিস্ট্রি\n"
         "<b>/referrals</b> — আপনার রেফার কাউন্ট\n"
-        "<b>/pool</b> — বটের লাইক পুল স্ট্যাটাস\n"
+        "<b>/pool</b> — বটের লাইক পুল স্ট্যাটাস\n"        "<b>/myid</b> — আপনার ID ও কুলডাউন স্ট্যাটাস\n"
         "<b>/guests</b> — কতগুলো গেস্ট অ্যাকাউন্ট বানানো হয়েছে" + ref_greet,
         reply_markup=build_menu())
 
@@ -374,6 +493,10 @@ def cmd_stats(m):
 
 @bot.message_handler(commands=["like"])
 def cmd_like(m):
+    ok, wait = _like_slot_free(m.from_user.id)
+    if not ok:
+        _spamsafe_reply(m, f"⏳ লাইক সিস্টেম এখন ব্যস্ত / কুলডাউনে আছে। *{wait} সেকেন্ড* পরে আবার চেষ্টা করুন।")
+        return
     parts = m.text.split()
     if len(parts) < 2 or not parts[1].isdigit():
         bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/like 18328637549 5</code>")
@@ -735,7 +858,8 @@ if __name__ == "__main__":
         print("BOT_TOKEN env var নেই! @BotFather থেকে টোকেন নিন আর চালান:")
         print("  export BOT_TOKEN=123:ABC... && python3 bot.py")
         raise SystemExit(1)
-    print("bot running...")
+    install_guard()
+    print("bot running... [spam shield + like cooldown + token health active]")
     threading.Thread(target=reminder_loop, daemon=True).start()
     threading.Thread(target=health_loop, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
