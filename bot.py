@@ -357,6 +357,180 @@ def cmd_claim(m):
     bot.reply_to(m, "👑 অ্যাডমিন হিসেবে যুক্ত হলেন! এখন /pool, /guests দেখতে পাবেন।")
 
 
+# ── Admin Dashboard / User Analytics ──────────────────────────
+USERS_FILE = Path(__file__).parent / "users.json"
+USERS_LOCK = threading.Lock()
+BD_TZ_OFFSET = 6 * 3600  # Asia/Dhaka UTC+6
+
+
+def get_all_admin_ids() -> set:
+    ids = set(ADMIN_IDS)
+    d = _load_json(ADMINS_FILE)
+    ids.update(int(x) for x in d.get("admins", []) if str(x).isdigit())
+    return ids
+
+
+def notify_admins(text: str):
+    for aid in get_all_admin_ids():
+        try:
+            bot.send_message(aid, text)
+        except Exception:
+            pass
+
+
+def register_user(m) -> bool:
+    """Record/update user in the users DB. Returns True if BRAND NEW user."""
+    try:
+        u = m.from_user
+        uid = str(u.id)
+        with USERS_LOCK:
+            users = _load_json(USERS_FILE)
+            now = int(time.time())
+            if uid in users:
+                users[uid]["last_seen"] = now
+                users[uid]["name"] = u.first_name or users[uid].get("name", "")
+                users[uid]["active"] = True
+                _save_json(USERS_FILE, users)
+                return False
+            users[uid] = {
+                "name": u.first_name or "",
+                "username": u.username or "",
+                "joined_at": now,
+                "last_seen": now,
+                "active": True,
+            }
+            _save_json(USERS_FILE, users)
+            threading.Thread(
+                target=_github_commit_file,
+                args=("users.json", "update users db"),
+                daemon=True,
+            ).start()
+            return True
+    except Exception:
+        return False
+
+
+def _bd_date(ts: int) -> str:
+    import datetime
+    return datetime.datetime.fromtimestamp(ts + BD_TZ_OFFSET, datetime.timezone.utc).strftime("%d-%m-%Y")
+
+
+@bot.message_handler(commands=["admin"])
+def cmd_admin(m):
+    if not is_admin(m.from_user.id if m.from_user else 0):
+        bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
+        return
+    users = _load_json(USERS_FILE)
+    if not users:
+        bot.reply_to(m, "ℹ️ এখনো কোনো ইউজার রেকর্ড হয়নি।")
+        return
+    now = int(time.time())
+    today0 = now - ((now + BD_TZ_OFFSET) % 86400)
+    week_ago = now - 7 * 86400
+    total = len(users)
+    today_joined = sum(1 for u in users.values() if u.get("joined_at", 0) >= today0)
+    active = sum(1 for u in users.values() if u.get("last_seen", 0) >= week_ago)
+    inactive = total - active
+
+    # like stats from history
+    hist = _load_json(HISTORY_FILE)
+    tot_land = tot_req = 0
+    per_user = {}
+    for uid, entries in hist.get("users", {}).items():
+        landed = sum(e.get("landed", 0) for e in entries)
+        tot_land += landed
+        tot_req += len(entries)
+        nm = users.get(uid, {}).get("name") or hist["users"][uid] and entries[-1].get("username") or uid
+        per_user[uid] = (landed, nm)
+    top = sorted(per_user.items(), key=lambda kv: -kv[1][0])[:3]
+
+    lines = [
+        "📊 *BOT USER ANALYTICS* (ADMIN PANEL)",
+        "━━━━━━━━━━━━━━━━━━",
+        f"👥 মোট মেম্বার: *{total}* জন",
+        f"⚡ আজ যুক্ত হয়েছে: *{today_joined}* জন",
+        f"🟢 অ্যাক্টিভ ইউজার (৭ দিন): *{active}* জন",
+        f"🔴 ইনঅ্যাক্টিভ: *{inactive}* জন",
+        "━━━━━━━━━━━━━━━━━━",
+        f"❤️ মোট লাইক ডেলিভারি: *{tot_land}*",
+        f"🔄 মোট লাইক রিকোয়েস্ট: *{tot_req}*",
+    ]
+    if top:
+        lines.append("🏆 *টপ ইউজার*:")
+        for i, (uid, (landed, nm)) in enumerate(top, 1):
+            lines.append(f"  {i}. {nm} — {landed} লাইক")
+    import datetime
+    lines.append("━━━━━━━━━━━━━━━━━━")
+    lines.append("📅 সর্বশেষ আপডেট: " +
+                 datetime.datetime.fromtimestamp(now + BD_TZ_OFFSET, datetime.timezone.utc).strftime("%d-%m-%Y %I:%M %p"))
+    bot.reply_to(m, "\n".join(lines))
+
+
+@bot.message_handler(commands=["broadcast"])
+def cmd_broadcast(m):
+    if not is_admin(m.from_user.id if m.from_user else 0):
+        bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
+        return
+    parts = m.text.split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        bot.reply_to(m, "⚠️ লিখুন: <code>/broadcast আপনার মেসেজ</code>")
+        return
+    text = parts[1].strip()
+    users = _load_json(USERS_FILE)
+    if not users:
+        bot.reply_to(m, "ℹ️ ইউজার ডেটাবেস খালি।")
+        return
+    msg = bot.reply_to(m, f"📢 ব্রডকাস্ট শুরু... (মোট {len(users)} জন)")
+
+    def do_bc():
+        ok = fail = 0
+        for uid, u in users.items():
+            try:
+                bot.send_message(int(uid), text)
+                ok += 1
+                u["last_seen"] = max(u.get("last_seen", 0), 0)
+            except Exception as e:
+                fail += 1
+                try:
+                    if "Forbidden" in str(e) or "blocked" in str(e).lower():
+                        u["active"] = False
+                except Exception:
+                    pass
+            time.sleep(0.08)
+        try:
+            _save_json(USERS_FILE, users)
+            _github_commit_file("users.json", "update users db (broadcast)")
+        except Exception:
+            pass
+        try:
+            bot.edit_message_text(f"✅ ব্রডকাস্ট শেষ!\n📬 সফল: {ok}\n❌ ফেইল: {fail}",
+                                  msg.chat.id, msg.message_id)
+        except Exception:
+            pass
+
+    threading.Thread(target=do_bc, daemon=True).start()
+
+
+@bot.message_handler(commands=["export_users"])
+def cmd_export_users(m):
+    if not is_admin(m.from_user.id if m.from_user else 0):
+        bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
+        return
+    users = _load_json(USERS_FILE)
+    if not users:
+        bot.reply_to(m, "ℹ️ ইউজার ডেটাবেস খালি।")
+        return
+    lines = ["user_id | name | username | joined | last_seen | active"]
+    for uid, u in sorted(users.items(), key=lambda kv: kv[1].get("joined_at", 0)):
+        lines.append(f"{uid} | {u.get('name','')} | @{u.get('username','')} | "
+                     f"{_bd_date(u.get('joined_at',0))} | {_bd_date(u.get('last_seen',0))} | "
+                     f"{'active' if u.get('active', True) else 'inactive'}")
+    import io
+    bio = io.BytesIO(("\n".join(lines)).encode("utf-8"))
+    bio.name = "users.txt"
+    bot.send_document(m.chat.id, bio, caption=f"📋 মোট {len(users)} ইউজার")
+
+
 def reminder_loop():
     """Send daily like reminders when due."""
     while True:
@@ -494,6 +668,17 @@ def wrap_with_guard(fn):
             print(f"[userlog] id={u.id} user=@{u.username or ''} name={u.first_name or ''} cmd={m.text[:40]}")
         except Exception:
             pass
+        try:
+            if register_user(m):
+                uu = m.from_user
+                nm = uu.first_name or str(uu.id)
+                threading.Thread(
+                    target=notify_admins,
+                    args=(f"🎉 নতুন ইউজার জয়েন করেছে!\n👤 {nm}\n🆔 {uu.id}",),
+                    daemon=True,
+                ).start()
+        except Exception:
+            pass
         left = _spam_guard(m.from_user.id)
         if left:
             _spamsafe_reply(m, f"⏳ অনেক দ্রুত কমান্ড দিচ্ছেন! অনুগ্রহ করে *{left} সেকেন্ড* অপেক্ষা করুন।")
@@ -566,7 +751,10 @@ def cmd_start(m):
         "<b>/setguild</b> <code>GUILD_ID</code> — আপনার গিল্ড সেভ করুন"
         + ("\n\n👑 <b>অ্যাডমিন কমান্ড</b>\n"
            "<b>/pool</b> — লাইক পুল স্ট্যাটাস\n"
-           "<b>/guests</b> — গেস্ট অ্যাকাউন্ট স্ট্যাটাস"
+           "<b>/guests</b> — গেস্ট অ্যাকাউন্ট স্ট্যাটাস\n"
+           "<b>/admin</b> — 📊 ইউজার অ্যানালিটিক্স ড্যাশবোর্ড\n"
+           "<b>/broadcast</b> <code>msg</code> — সবাইকে মেসেজ পাঠান\n"
+           "<b>/export_users</b> — ইউজার লিস্ট ফাইল"
            if is_admin(m.from_user.id if m.from_user else 0) else "")
         + ref_greet,
         reply_markup=build_menu())
