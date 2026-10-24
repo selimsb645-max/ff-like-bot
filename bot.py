@@ -264,6 +264,71 @@ def referral_count(user_id) -> int:
     return (_load_json(REFS_FILE).get("counts") or {}).get(str(user_id), 0)
 
 
+# ── Admin system ──────────────────────────────────────────────
+ADMINS_FILE = Path(__file__).parent / "admins.json"
+_admins_cache = {"mtime": 0, "data": None}
+
+
+def _load_admins() -> dict:
+    try:
+        mt = ADMINS_FILE.stat().st_mtime
+        if _admins_cache["data"] is None or mt != _admins_cache["mtime"]:
+            _admins_cache["data"] = _load_json(ADMINS_FILE)
+            _admins_cache["mtime"] = mt
+        return _admins_cache["data"] or {}
+    except Exception:
+        return {}
+
+
+def _save_admins(d: dict):
+    with open(ADMINS_FILE, "w") as f:
+        json.dump(d, f, ensure_ascii=False, indent=1)
+    _admins_cache["data"] = d
+    _admins_cache["mtime"] = ADMINS_FILE.stat().st_mtime if ADMINS_FILE.exists() else 0
+
+
+def is_admin(user_id) -> bool:
+    try:
+        uid = int(user_id)
+    except Exception:
+        return False
+    if uid in ADMIN_IDS:
+        return True
+    return str(uid) in [str(a) for a in _load_admins().get("admins", [])]
+
+
+def _persist_admins():
+    try:
+        _github_commit_file("admins.json", "update admins")
+    except Exception:
+        pass
+
+
+@bot.message_handler(commands=["claim"])
+def cmd_claim(m):
+    """অ্যাডমিন দাবি: /claim <কোড>"""
+    if not m.from_user:
+        return
+    if is_admin(m.from_user.id):
+        bot.reply_to(m, "👑 আপনি এরকমই অ্যাডমিন!")
+        return
+    d = _load_admins()
+    code = d.get("claim_code", "")
+    parts = m.text.split()
+    if len(parts) < 2 or parts[1] != code or not code:
+        bot.reply_to(m, "⛔ ভুল কোড। কোড জানলে লিখুন: /claim <কোড>")
+        return
+    uid = str(m.from_user.id)
+    admins = d.get("admins", [])
+    if uid not in admins:
+        admins.append(uid)
+    d["admins"] = admins
+    d["claim_code"] = ""  # একবার ব্যবহারের পর কোড নষ্ট
+    _save_admins(d)
+    threading.Thread(target=_persist_admins, daemon=True).start()
+    bot.reply_to(m, "👑 অ্যাডমিন হিসেবে যুক্ত হলেন! এখন /pool, /guests দেখতে পাবেন।")
+
+
 def reminder_loop():
     """Send daily like reminders when due."""
     while True:
@@ -396,6 +461,11 @@ def _like_slot_free(user_id: int):
 
 def wrap_with_guard(fn):
     def guarded(m, *a, **kw):
+        try:
+            u = m.from_user
+            print(f"[userlog] id={u.id} user=@{u.username or ''} name={u.first_name or ''} cmd={m.text[:40]}")
+        except Exception:
+            pass
         left = _spam_guard(m.from_user.id)
         if left:
             _spamsafe_reply(m, f"⏳ অনেক দ্রুত কমান্ড দিচ্ছেন! অনুগ্রহ করে *{left} সেকেন্ড* অপেক্ষা করুন।")
@@ -462,8 +532,12 @@ def cmd_start(m):
         "<b>/stopremind</b> — রিমাইন্ডার বন্ধ\n"
         "<b>/history</b> — আপনার লাইক হিস্ট্রি\n"
         "<b>/referrals</b> — আপনার রেফার কাউন্ট\n"
-        "<b>/pool</b> — বটের লাইক পুল স্ট্যাটাস\n"        "<b>/myid</b> — আপনার ID ও কুলডাউন স্ট্যাটাস\n"
-        "<b>/guests</b> — কতগুলো গেস্ট অ্যাকাউন্ট বানানো হয়েছে" + ref_greet,
+        "<b>/myid</b> — আপনার ID ও কুলডাউন স্ট্যাটাস"
+        + ("\n\n👑 <b>অ্যাডমিন কমান্ড</b>\n"
+           "<b>/pool</b> — লাইক পুল স্ট্যাটাস\n"
+           "<b>/guests</b> — গেস্ট অ্যাকাউন্ট স্ট্যাটাস"
+           if is_admin(m.from_user.id if m.from_user else 0) else "")
+        + ref_greet,
         reply_markup=build_menu())
 
 
@@ -821,6 +895,10 @@ def cmd_referrals(m):
 
 @bot.message_handler(commands=["guests"])
 def cmd_guests(m):
+    if not is_admin(m.from_user.id if m.from_user else 0):
+        bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
+        return
+
     msg = bot.reply_to(m, "🔄 গেস্ট অ্যাকাউন্ট গুনছি...")
     try:
         import base64
@@ -846,6 +924,9 @@ def cmd_guests(m):
 
 @bot.message_handler(commands=["pool"])
 def cmd_pool(m):
+    if not is_admin(m.from_user.id if m.from_user else 0):
+        bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
+        return
     pool = ff_bd_api.get_pool()
     fresh = sum(1 for t in pool if t.get("exp", 0) > time.time())
     dead = ff_bd_api.dead_count() if hasattr(ff_bd_api, "dead_count") else 0
