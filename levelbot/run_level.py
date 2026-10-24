@@ -221,16 +221,31 @@ async def main():
     ap.add_argument("--cycles", type=int, default=60)
     args = ap.parse_args()
 
+    cfg = {}
+    try:
+        cfg = json.loads(Path("level_config.json").read_text())
+    except Exception:
+        pass
+    prefer = cfg.get("prefer") or []
+    want = cfg.get("accounts") or args.all or 4
+    cycles = cfg.get("cycles") or args.cycles
+
     if args.uid:
         accounts = [(args.uid, os.environ.get("GUEST_PW", ""))]
+        want, cycles = 1, args.cycles
     else:
-        accounts = load_accounts(args.all or 4)
-    print(f"accounts: {[a[0] for a in accounts]}, cycles={args.cycles}", flush=True)
+        accounts = load_accounts(max(want * 3, 8), prefer=prefer)
+    print(f"candidates: {[a[0] for a in accounts]}, want={want}, cycles={cycles}", flush=True)
 
+    done = 0
     for uid, pw in accounts:
-        res = await run_account(uid, pw, args.cycles, save_progress)
+        res = await run_account(uid, pw, cycles, save_progress)
         wh_report({"uid": uid, "result": res, "ts": time.time()})
         await asyncio.sleep(3)
+        if res and res.get("status") == "done":
+            done += 1
+        if done >= want:
+            break
 
     d = load_progress()
     print("PROGRESS:", json.dumps(d)[-1500:], flush=True)
