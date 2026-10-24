@@ -58,6 +58,7 @@ def cmd_start(m):
         "BD সার্ভারের জন্য স্ট্যাটস আর লাইক বট।\n\n"
         "<b>/stats</b> <code>UID</code> — প্লেয়ার প্রোফাইল (নাম, লাইক)\n"
         "<b>/like</b> <code>UID [count]</code> — লাইক পাঠান\n"
+        "<b>/profile</b> <code>UID</code> — ফুল প্লেয়ার কার্ড (লেভেল, র‍্যাঙ্ক, গিল্ড)\n"
         "<b>/pool</b> — বটের লাইক পুল স্ট্যাটাস\n"
         "<b>/guests</b> — কতগুলো গেস্ট অ্যাকাউন্ট বানানো হয়েছে\n\n"
         "UID = গেমের প্রোফাইলে যে নম্বর দেখায়।")
@@ -150,6 +151,64 @@ def cmd_like(m):
                 f"/stats {target} দিয়ে নিজে চেক করুন।")
     bot.edit_message_text(text, msg.chat.id, msg.message_id)
 
+
+
+@bot.message_handler(commands=["profile"])
+def cmd_profile(m):
+    parts = m.text.split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/profile 18328637549</code>")
+        return
+    target = int(parts[1])
+    msg = bot.reply_to(m, "🔍 প্রোফাইল আনা হচ্ছে...")
+    try:
+        pool = ff_bd_api.get_pool()
+        jwt = pool[0]["token"] if pool else None
+        p = ff_bd_api.get_profile(target, jwt)
+    except Exception as e:
+        bot.edit_message_text(f"❌ এরর: {e}", msg.chat.id, msg.message_id)
+        return
+    if not p or p.get("error"):
+        err = (p or {}).get("error", "প্লেয়ার পাওয়া যায়নি")
+        bot.edit_message_text(f"❌ প্রোফাইল আনা যায়নি: {err}", msg.chat.id, msg.message_id)
+        return
+    import time as _t
+    age = ""
+    if p.get("create_at"):
+        days = int((_t.time() - p["create_at"]) / 86400)
+        age = f" ({days} দিন আগে)"
+    region = p.get("region") or "-"
+    card = (
+        "👤 <b>প্লেয়ার প্রোফাইল</b>\n"
+        "━━━━━━━━━━━━━━━\n"
+        f"🎯 নাম: <b>{p.get('name') or '-'}</b>\n"
+        f"🆔 UID: <code>{p.get('uid')}</code>\n"
+        f"🌍 রিজিওন: <b>{region}</b>  |  🎮 {p.get('release_version') or '-'}\n"
+        "━━━━━━━━━━━━━━━\n"
+        f"⭐ লেভেল: <b>{p.get('level')}</b>  (EXP: {p.get('exp')})\n"
+        f"❤️ লাইক: <b>{p.get('likes')}</b>\n"
+        f"🛡️ BR র‍্যাঙ্ক: <b>{p.get('br_rank') or 'Unranked'}</b>"
+        + (f" ({p.get('br_points')} RP)" if p.get("br_points") else "") + "\n"
+        f"⚔️ CS র‍্যাঙ্ক: <b>{p.get('cs_rank') or 'Unranked'}</b>"
+        + (f" ({p.get('cs_points')}★)" if p.get("cs_points") is not None else "") + "\n"
+    )
+    g = p.get("guild")
+    if g:
+        card += "━━━━━━━━━━━━━━━\n"
+        card += f"🏛️ গিল্ড: <b>{g.get('name')}</b>\n"
+        card += f"   Lv {g.get('level')} | 👥 {g.get('members')}/{g.get('capacity')} মেম্বার\n"
+    else:
+        card += "🏛️ গিল্ড: নেই\n"
+    extras = []
+    if p.get("pet"):
+        extras.append(f"🐾 পেট: {p['pet']['name']} (Lv {p['pet']['level']})")
+    if p.get("credit_score") is not None:
+        extras.append(f"💯 ক্রেডিট স্কোর: {p['credit_score']}")
+    if extras:
+        card += "━━━━━━━━━━━━━━━\n" + "\n".join(extras) + "\n"
+    if age:
+        card += f"📅 অ্যাকাউন্ট বয়স{age}\n"
+    bot.edit_message_text(card, msg.chat.id, msg.message_id)
 
 @bot.message_handler(commands=["guests"])
 def cmd_guests(m):
