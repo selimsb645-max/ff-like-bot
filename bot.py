@@ -741,7 +741,6 @@ def cmd_myid(m):
     bot.reply_to(m, "\n".join(lines))
 
 
-@bot.message_handler(commands=["start", "help", "menu", "হেল্প"])
 def build_welcome_kb():
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
@@ -752,6 +751,7 @@ def build_welcome_kb():
     return kb
 
 
+@bot.message_handler(commands=["start", "help", "menu", "হেল্প"])
 def cmd_start(m):
     # নতুন ইউজার হলে অ্যাকাউন্ট-ক্রিয়েট ওয়েলকাম, পুরোনো হলে welcome-back
     is_new = getattr(m, "_ff_new_user", False)
