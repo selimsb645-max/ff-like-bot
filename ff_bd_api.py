@@ -353,6 +353,56 @@ def get_profile(account_id, jwt: str = None) -> dict | None:
     return out
 
 
+DEAD_FILE = Path(__file__).parent / "dead_tokens.json"
+HEALTH_TARGET = 9563969432  # known-valid popular UID for auth checks
+
+
+def load_dead() -> set:
+    try:
+        return set(json.loads(DEAD_FILE.read_text()))
+    except Exception:
+        return set()
+
+
+def add_dead(account_ids) -> int:
+    dead = load_dead()
+    for a in account_ids:
+        if a:
+            dead.add(a)
+    DEAD_FILE.write_text(json.dumps(sorted(str(d) for d in dead)))
+    return len(dead)
+
+
+def dead_count() -> int:
+    return len(load_dead())
+
+
+def check_token(jwt: str) -> bool:
+    """Lightweight liveness probe: a stats call returning HTTP 200 = token alive."""
+    try:
+        wire = _pb(1, HEALTH_TARGET) + _pb(2, 1)
+        h = dict(_headers(jwt))
+        h["ReleaseVersion"] = "OB53"
+        h["X-GA-SV"] = "1789556611"
+        r = httpx.post(PROFILE_URL, headers=h, data=_enc(wire), timeout=15, verify=False)
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
+def drop_from_pool(dead_ids) -> int:
+    """Remove dead account_ids from the cached pool file (minted part)."""
+    try:
+        pool = json.loads(POOL_FILE.read_text())
+    except Exception:
+        return 0
+    dead = set(dead_ids)
+    kept = [t for t in pool if t.get("account_id") not in dead]
+    if len(kept) != len(pool):
+        POOL_FILE.write_text(json.dumps(kept, indent=1))
+    return len(pool) - len(kept)
+
+
 def fetch_external_tokens() -> list:
     """Pull fresh JWTs from public token pools (live community bots)."""
     now = time.time()
@@ -420,6 +470,9 @@ def get_pool(force: bool = False) -> list:
         ext = []
     seen = {t.get("account_id") for t in base}
     merged = base + [t for t in ext if t["account_id"] not in seen]
+    dead = load_dead()
+    if dead:
+        merged = [t for t in merged if str(t.get("account_id")) not in dead]
     return merged
 
 
