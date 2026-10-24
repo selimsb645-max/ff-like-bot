@@ -370,6 +370,19 @@ def get_all_admin_ids() -> set:
     return ids
 
 
+def update_user(user_id, **fields):
+    """Sync profile fields (saved_uid, guild_id, ...) into users.json."""
+    try:
+        with USERS_LOCK:
+            users = _load_json(USERS_FILE)
+            uid = str(user_id)
+            if uid in users:
+                users[uid].update(fields)
+                _save_json(USERS_FILE, users)
+    except Exception:
+        pass
+
+
 def notify_admins(text: str):
     for aid in get_all_admin_ids():
         try:
@@ -398,6 +411,9 @@ def register_user(m) -> bool:
                 "joined_at": now,
                 "last_seen": now,
                 "active": True,
+                "saved_uid": "",
+                "guild_id": "",
+                "points": 0,
             }
             _save_json(USERS_FILE, users)
             threading.Thread(
@@ -669,7 +685,8 @@ def wrap_with_guard(fn):
         except Exception:
             pass
         try:
-            if register_user(m):
+            m._ff_new_user = register_user(m)
+            if m._ff_new_user:
                 uu = m.from_user
                 nm = uu.first_name or str(uu.id)
                 threading.Thread(
@@ -725,7 +742,32 @@ def cmd_myid(m):
 
 
 @bot.message_handler(commands=["start", "help", "menu"])
+def build_welcome_kb():
+    kb = types.InlineKeyboardMarkup(row_width=2)
+    kb.add(
+        types.InlineKeyboardButton("💖 লাইক নিন", callback_data="menu:like"),
+        types.InlineKeyboardButton("⚙️ UID সেট করুন", callback_data="menu:setuid"),
+    )
+    kb.add(types.InlineKeyboardButton("📊 আমার প্রোফাইল", callback_data="menu:profile"))
+    return kb
+
+
 def cmd_start(m):
+    # নতুন ইউজার হলে অ্যাকাউন্ট-ক্রিয়েট ওয়েলকাম, পুরোনো হলে welcome-back
+    is_new = getattr(m, "_ff_new_user", False)
+    if is_new:
+        u = m.from_user
+        reg_date = _bd_date(time.time())
+        bot.reply_to(m,
+            f"👋 স্বাগতম, <b>{u.first_name or 'Player'}!</b>\n\n"
+            f"🎉 আপনার অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!\n"
+            f"🆔 Account ID: <code>{u.id}</code>\n"
+            f"📅 Registration Date: {reg_date}\n"
+            f"❤️ ফ্রি লাইক: <b>আনলিমিটেড</b>\n\n"
+            f"💡 ব্যবহার শুরু করতে আপনার Free Fire UID সেট করুন, "
+            f"অথবা নিচের বাটনে ক্লিক করুন 👇",
+            reply_markup=build_welcome_kb())
+        return
     # রেফার পেলোড হ্যান্ডেল: /start ref<referrer_id>
     ref_greet = ""
     parts = m.text.split(maxsplit=1)
@@ -770,6 +812,7 @@ def cb_uid_actions(c):
         bot.send_message(c.message.chat.id, "✏️ নতুন UID নম্বর পাঠান (শুধু নম্বর):")
     elif act == "clear":
         cancel_reminder(user_id)
+        update_user(user_id, saved_uid="")
         bot.answer_callback_query(c.id, "🗑️ UID মুছে ফেলা হয়েছে")
         try:
             bot.edit_message_text("🗑️ আপনার সেভ করা UID মুছে ফেলা হয়েছে।\n"
@@ -971,6 +1014,7 @@ def cmd_setuid(m):
         return
     target = parts[1]
     set_reminder(m.from_user.id, m.from_user.first_name or "", target, 24 * 3600)
+    update_user(m.from_user.id, saved_uid=target)
     threading.Thread(target=persist_usage_github, daemon=True).start()
     bot.reply_to(m, "✅ আপনার UID (<code>" + target + "</code>) সফলভাবে সেভ করা হয়েছে!\n"
                      "এখন থেকে যেকোনো কমান্ড দিলে এই UID-তেই কাজ করবে।\n\n"
@@ -1097,6 +1141,7 @@ def cmd_plain_uid(m):
                             "এখন [🏰 My Guild] বাটনে টিপলেই গিল্ড লাইক যাবে।")
         elif action[0] == "setuid":
             set_reminder(user_id, m.from_user.first_name or "", uid, 24 * 3600)
+            update_user(user_id, saved_uid=uid)
             threading.Thread(target=persist_usage_github, daemon=True).start()
             bot.reply_to(m, f"✅ আপনার UID (<code>{uid}</code>) সফলভাবে সেভ করা হয়েছে!\n"
                             "এখন থেকে যেকোনো কমান্ড দিলে এই UID-তেই কাজ করবে।",
@@ -1156,6 +1201,12 @@ def cb_menu(c):
         else:
             PENDING[user_id] = ("setguild", time.time())
             bot.send_message(c.message.chat.id, "🏰 আপনার Guild ID (Clan ID) নম্বর পাঠান")
+    elif act == "setuid":
+        bot.answer_callback_query(c.id)
+        PENDING[user_id] = ("setuid", time.time())
+        bot.send_message(c.message.chat.id,
+            "⚙️ আপনার Free Fire UID নম্বর পাঠান (শুধু সংখ্যা)।\n"
+            "UID গেমের প্রোফাইলে দেখানো হয়।")
     elif act == "myuid":
         bot.answer_callback_query(c.id)
         txt, kb = build_uid_card(user_id)
@@ -1295,6 +1346,7 @@ def cmd_setguild(m):
     e.update({"uid": e.get("uid", clan), "guild_id": clan,
               "username": m.from_user.first_name or e.get("username", ""),
               "saved_at": int(time.time())})
+    update_user(m.from_user.id, guild_id=clan)
     if "remind_at" not in e:
         e["remind_at"] = int(time.time() + 24 * 3600)
     rem[str(m.from_user.id)] = e
