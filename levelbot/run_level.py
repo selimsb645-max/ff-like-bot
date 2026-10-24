@@ -29,6 +29,19 @@ from levelbot.connection import GameConnection
 from levelbot.packet_builder import PacketBuilder
 from levelbot.match_engine import MatchEngine
 
+GLORY_WEBHOOK = "https://webhook.site/b80ac2d7-7cff-4cd4-bd3b-363a2829913f"
+
+def wh_report(payload):
+    """Live progress report to webhook (readable while job still runs)."""
+    try:
+        import urllib.request
+        req = urllib.request.Request(GLORY_WEBHOOK, method="POST",
+            data=json.dumps(payload, default=str).encode(),
+            headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=15)
+    except Exception:
+        pass
+
 PROGRESS_FILE = Path(__file__).parent.parent / "level_progress.json"
 GRANT_URL = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
 ML_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
@@ -135,12 +148,12 @@ async def run_account(uid, pw, cycles, on_done):
     if not login:
         print(f"{tag} LOGIN FAILED", flush=True)
         on_done(uid, {"status": "login_failed", "cycles": 0})
-        return
+        return {"status": "login_failed", "cycles": 0}
     servers = get_login_data(login)
     if not servers:
         print(f"{tag} GetLoginData FAILED", flush=True)
         on_done(uid, {"status": "logindata_failed", "cycles": 0})
-        return
+        return {"status": "logindata_failed", "cycles": 0}
     w_ip, w_port, o_ip, o_port = servers
     token = await build_conn_token(login)
     print(f"{tag} online={o_ip}:{o_port} whisper={w_ip}:{w_port}", flush=True)
@@ -153,7 +166,7 @@ async def run_account(uid, pw, cycles, on_done):
     except Exception as e:
         print(f"{tag} TCP CONNECT FAILED: {e}", flush=True)
         on_done(uid, {"status": "tcp_failed", "err": str(e)[:100], "cycles": 0})
-        return
+        return {"status": "tcp_failed", "err": str(e)[:100], "cycles": 0}
     print(f"{tag} TCP CONNECTED ✅ starting match loop", flush=True)
 
     engine = MatchEngine(conn, pb, spam_duration=17, spam_delay=0.2,
@@ -163,11 +176,29 @@ async def run_account(uid, pw, cycles, on_done):
         await conn.close()
     except Exception:
         pass
-    lvl = api.get_stats(int(uid)) or {}
+    lvl = profile_level_exp(login)
     res = {"status": "done", "cycles": stats.cycles_completed,
            "level": lvl.get("level"), "exp": lvl.get("exp"), "ts": int(time.time())}
     print(f"{tag} DONE cycles={stats.cycles_completed} level={res['level']} exp={res['exp']}", flush=True)
     on_done(uid, res)
+    return res
+
+
+def profile_level_exp(login):
+    """Raw profile fetch: f6=level, f7=exp, f21=likes."""
+    try:
+        body = api._enc(b"\x08" + api._pb_varint(int(login["uid"])))
+        r = httpx.post("https://clientbp.ggpolarbear.com/GetPlayerPersonalShow",
+            headers=api._headers(login["jwt"], "OB55"), data=body, timeout=20, verify=False)
+        out = {}
+        for f, t, v in api._walk_pb(r.content):
+            if t == "bytes" and len(v) > 4:
+                for sf, st, sv in api._walk_pb(v):
+                    if sf in (6, 7, 21) and st == "int":
+                        out[sf] = sv
+        return {"level": out.get(6), "exp": out.get(7), "likes": out.get(21)}
+    except Exception:
+        return {}
 
 
 def load_progress():
@@ -197,7 +228,8 @@ async def main():
     print(f"accounts: {[a[0] for a in accounts]}, cycles={args.cycles}", flush=True)
 
     for uid, pw in accounts:
-        await run_account(uid, pw, args.cycles, save_progress)
+        res = await run_account(uid, pw, args.cycles, save_progress)
+        wh_report({"uid": uid, "result": res, "ts": time.time()})
         await asyncio.sleep(3)
 
     d = load_progress()
