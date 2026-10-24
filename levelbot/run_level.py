@@ -47,7 +47,7 @@ GRANT_URL = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
 ML_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
 
 
-def load_accounts(limit):
+def load_accounts(limit, prefer=None):
     """BD_CREDS_B64 env or repo bd_creds.txt -> list of (uid, pw)."""
     b64 = os.environ.get("BD_CREDS_B64", "")
     if b64:
@@ -61,6 +61,10 @@ def load_accounts(limit):
             u, pw = ln.split(":", 1)
             if pw.isupper() and len(pw) == 64:  # self-minted guests only
                 out.append((u, pw))
+    if prefer:
+        pref = [(u, pw) for u, pw in out if u in prefer]
+        rest = [(u, pw) for u, pw in out if u not in prefer]
+        out = pref + rest
     return out[:limit]
 
 
