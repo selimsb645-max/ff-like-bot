@@ -184,6 +184,175 @@ def mint_jwt(uid: str, pw: str) -> dict | None:
 
 
 
+
+# ── Rank tier tables (from FF rank_data, OB55) ─────────────────────
+BR_TIERS = [
+    (700, 800, "Bronze I"), (801, 900, "Bronze II"), (901, 1000, "Bronze III"),
+    (1001, 1100, "Silver I"), (1101, 1200, "Silver II"), (1201, 1300, "Silver III"),
+    (1301, 1400, "Gold I"), (1401, 1500, "Gold II"), (1501, 1600, "Gold III"),
+    (1601, 1800, "Gold IV"),
+    (1801, 1900, "Platinum I"), (1901, 2000, "Platinum II"), (2001, 2100, "Platinum III"),
+    (2101, 2300, "Platinum IV"),
+    (2301, 2400, "Diamond I"), (2401, 2500, "Diamond II"), (2501, 2600, "Diamond III"),
+    (2601, 3200, "Diamond IV"),
+    (3201, 6000, "Heroic"), (6001, 999999, "Master"),
+]
+CS_TIERS = [
+    (0, 2, "Bronze I"), (3, 5, "Bronze II"), (6, 8, "Bronze III"),
+    (9, 12, "Silver I"), (13, 16, "Silver II"), (17, 20, "Silver III"),
+    (21, 25, "Gold I"), (26, 30, "Gold II"), (31, 35, "Gold III"), (36, 40, "Gold IV"),
+    (41, 45, "Platinum I"), (46, 50, "Platinum II"), (51, 55, "Platinum III"),
+    (56, 60, "Platinum IV"),
+    (61, 65, "Diamond I"), (66, 70, "Diamond II"), (71, 75, "Diamond III"),
+    (76, 80, "Diamond IV"), (81, 85, "Diamond V"),
+    (86, 110, "Heroic"), (111, 135, "Elite Heroic"), (136, 156, "Master"),
+    (157, 99999, "Grandmaster"),
+]
+
+
+def _tier_name(points, table):
+    for lo, hi, name in table:
+        if lo <= points <= hi:
+            return name
+    return "-"
+
+
+def _pb_walk(buf):
+    """Full protobuf walk preserving repeated fields. Returns {fnum: [(wt, value)]}."""
+    out = {}
+    p, n = 0, len(buf)
+
+    def rv(p):
+        v = s = 0
+        while p < n:
+            b = buf[p]; p += 1
+            v |= (b & 0x7F) << s
+            if not b & 0x80:
+                return v, p
+            s += 7
+        return 0, p
+
+    while p < n:
+        try:
+            tag, p = rv(p)
+            fnum, wt = tag >> 3, tag & 7
+            if wt == 0:
+                v, p = rv(p)
+                out.setdefault(fnum, []).append(("i", v))
+            elif wt == 2:
+                ln, p = rv(p)
+                out.setdefault(fnum, []).append(("b", buf[p:p + ln]))
+                p += ln
+            else:
+                break
+        except Exception:
+            break
+    return out
+
+
+def _first(d, fnum):
+    v = d.get(fnum, [])
+    return v[0][1] if v else None
+
+
+def get_profile(account_id, jwt: str = None) -> dict | None:
+    """Full player card: nickname, level, region, BR/CS rank, guild, pet, credit score."""
+    t = jwt or (get_pool() or [{}])[0].get("token")
+    if not t:
+        return None
+    wire = _pb(1, int(account_id)) + _pb(2, 1)
+    h = dict(_headers(t))
+    h["ReleaseVersion"] = "OB53"
+    h["X-GA-SV"] = "1789556611"
+    try:
+        r = httpx.post(PROFILE_URL, headers=h, data=_enc(wire), timeout=20, verify=False)
+    except Exception:
+        return None
+    if r.status_code != 200:
+        return {"error": f"HTTP {r.status_code}"}
+    try:
+        top = _pb_walk(r.content)
+    except Exception:
+        return None
+    basic = _pb_walk(_first(top, 1)) if _first(top, 1) else {}
+    out = {}
+    out["uid"] = _first(basic, 1)
+    nick = _first(basic, 3)
+    if isinstance(nick, bytes):
+        # nickname may be a nested msg (styled) — try direct utf-8 then nested field
+        try:
+            out["name"] = nick.decode("utf-8")
+        except Exception:
+            inner = _pb_walk(nick)
+            nb = _first(inner, 1)
+            if nb is None:
+                for k in inner:
+                    if isinstance(inner[k][0][1], bytes):
+                        nb = inner[k][0][1]
+                        break
+            out["name"] = nb.decode("utf-8", "replace") if isinstance(nb, bytes) else str(nb or "?")
+    else:
+        out["name"] = nick
+    out["region"] = (_first(basic, 5) or b"").decode() if isinstance(_first(basic, 5), bytes) else _first(basic, 5)
+    out["level"] = _first(basic, 6)
+    out["exp"] = _first(basic, 7)
+    out["likes"] = _first(basic, 21)
+    out["last_login"] = _first(basic, 24)
+    out["create_at"] = _first(basic, 44)
+    rv = _first(basic, 50)
+    out["release_version"] = rv.decode() if isinstance(rv, bytes) else rv
+    br_rp = _first(basic, 15)
+    out["br_points"] = br_rp
+    out["br_rank"] = _tier_name(br_rp, BR_TIERS) if br_rp is not None else None
+    cs_pts = _first(basic, 31)
+    out["cs_points"] = cs_pts
+    out["cs_rank"] = _tier_name(cs_pts, CS_TIERS) if cs_pts is not None else None
+    # guild = top-level field 6 (ClanInfoBasic)
+    guild = _first(top, 6)
+    out["guild"] = None
+    if isinstance(guild, bytes) and guild:
+        g = _pb_walk(guild)
+        gname = _first(g, 2)
+        if isinstance(gname, bytes):
+            try:
+                gname = gname.decode("utf-8")
+            except Exception:
+                gname = "?"
+        out["guild"] = {
+            "id": _first(g, 1), "name": gname, "level": _first(g, 4),
+            "capacity": _first(g, 5), "members": _first(g, 6),
+        } if _first(g, 1) else None
+    # pet = top-level field 8
+    pet = _first(top, 8)
+    out["pet"] = None
+    if isinstance(pet, bytes) and pet:
+        pt = _pb_walk(pet)
+        pname = _first(pt, 2)
+        if isinstance(pname, bytes):
+            try:
+                pname = pname.decode("utf-8")
+            except Exception:
+                pname = None
+        if pname:
+            out["pet"] = {"name": pname, "level": _first(pt, 3)}
+    # credit score = top-level field 11
+    cs = _first(top, 11)
+    if isinstance(cs, bytes) and cs:
+        c = _pb_walk(cs)
+        out["credit_score"] = _first(c, 1)
+    # signature = top-level field 9 -> field 9
+    soc = _first(top, 9)
+    if isinstance(soc, bytes) and soc:
+        s = _pb_walk(soc)
+        sig = _first(s, 9)
+        if isinstance(sig, bytes) and sig:
+            try:
+                out["signature"] = sig.decode("utf-8")[:80]
+            except Exception:
+                pass
+    return out
+
+
 def fetch_external_tokens() -> list:
     """Pull fresh JWTs from public token pools (live community bots)."""
     now = time.time()
