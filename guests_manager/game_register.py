@@ -372,6 +372,7 @@ def main():
     args = ap.parse_args()
     allow_any = os.environ.get("ALLOW_ANY_REGION", "") == "1"
     end_at = time.time() + args.max_hours * 3600
+    hook(f"pipeline starting (max_hours={args.max_hours})")
 
     px = pick_proxy()
     if not px:
