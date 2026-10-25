@@ -8,12 +8,6 @@ Setup: get a token from @BotFather, then:
 import os, json, time, threading
 from pathlib import Path
 import telebot
-import html
-
-
-def esc(x):
-    return html.escape(str(x if x is not None else '-'), quote=False)
-
 import httpx
 from telebot import types
 import ff_bd_api
@@ -136,9 +130,6 @@ def build_menu():
     kb.add(
         types.InlineKeyboardButton("🔗 Share & Refer", callback_data="menu:share"),
     )
-    kb.add(
-        types.InlineKeyboardButton("🛡️ Guild Glory", callback_data="menu:glory"),
-    )
     return kb
 
 
@@ -233,7 +224,7 @@ def run_stats_flow(chat_id, target, user):
         bot.send_message(chat_id, f"❌ {s['error']}")
     else:
         bot.send_message(chat_id,
-            f"👤 <b>{esc(s.get('name') or '-')}</b>\n🆔 UID: <code>{s.get('uid')}</code>\n"
+            f"👤 <b>{s.get('name') or '-'}</b>\n🆔 UID: <code>{s.get('uid')}</code>\n"
             f"⭐ লেভেল: <b>{s.get('level') or '-'}</b>\n❤️ Likes: <b>{s.get('likes')}</b>")
 
 
@@ -250,7 +241,7 @@ def run_profile_flow(chat_id, target, user):
         return
     g = p.get("guild")
     card = ("👤 <b>প্লেয়ার প্রোফাইল</b>\n━━━━━━━━━━━━━━━\n"
-            f"🎯 নাম: <b>{esc(p.get('name') or '-')}</b>\n"
+            f"🎯 নাম: <b>{p.get('name') or '-'}</b>\n"
             f"🆔 UID: <code>{p.get('uid')}</code>\n"
             f"🌍 রিজিওন: <b>{p.get('region') or '-'}</b>\n"
             f"⭐ লেভেল: <b>{p.get('level')}</b>\n"
@@ -260,7 +251,7 @@ def run_profile_flow(chat_id, target, user):
             f"⚔️ CS র‍্যাঙ্ক: <b>{p.get('cs_rank') or 'Unranked'}</b>"
             + (f" ({p.get('cs_points')}★)" if p.get("cs_points") is not None else "") + "\n")
     if g:
-        card += f"🏛️ গিল্ড: <b>{esc(g.get('name'))}</b> ({g.get('members')}/{g.get('capacity')})\n"
+        card += f"🏛️ গিল্ড: <b>{g.get('name')}</b> ({g.get('members')}/{g.get('capacity')})\n"
     if p.get("pet"):
         card += f"🐾 পেট: {p['pet']['name']} (Lv {p['pet']['level']})\n"
     bot.send_message(chat_id, card)
@@ -556,149 +547,6 @@ def cmd_export_users(m):
     bot.send_document(m.chat.id, bio, caption=f"📋 মোট {len(users)} ইউজার")
 
 
-GLORY_SESSIONS_FILE = Path(__file__).parent / "glory_sessions.json"
-GLORY_LOCK = threading.Lock()
-GLORY_DAILY_FILE = Path(__file__).parent / "glory_daily.json"
-
-
-def _glory_load():
-    return _load_json(GLORY_SESSIONS_FILE)
-
-
-def _glory_save(d):
-    _save_json(GLORY_SESSIONS_FILE, d)
-
-
-def glory_active_sessions():
-    return [s for s in _glory_load().get("sessions", []) if s.get("status") == "running"]
-
-
-def glory_user_used_today(user_id) -> bool:
-    """Free limit: 1 glory session per user per day."""
-    d = _load_json(GLORY_DAILY_FILE)
-    import time as _t
-    today = _t.strftime("%Y-%m-%d")
-    return d.get(str(user_id)) == today
-
-
-def glory_mark_used(user_id):
-    import time as _t
-    d = _load_json(GLORY_DAILY_FILE)
-    d[str(user_id)] = _t.strftime("%Y-%m-%d")
-    _save_json(GLORY_DAILY_FILE, d)
-
-
-def glory_status_line(s) -> str:
-    from datetime import datetime, timezone, timedelta
-    tz = timezone(timedelta(hours=6))
-    started = datetime.fromtimestamp(s["started"], tz)
-    elapsed = int(time.time() - s["started"])
-    mins, secs = divmod(elapsed, 60)
-    return ("🛡️ *FF GUILD GLORY SESSION*" + "\n" + "━━━━━━━━━━━━━━━" + "\n"
-            f"🏰 Guild ID: `{s['clan_id']}`" + "\n"
-            f"🌍 Region: {s['region']}" + "\n"
-            f"⏱️ চলছে: {mins}m {secs}s" + "\n"
-            f"👥 মেম্বার: {s.get('members_start', '?')} → {s.get('members_now', '?')} ({s.get('joined', 0)} জয়েন)" + "\n"
-            f"📈 Guild Points: {s.get('points_start', '?')} → {s.get('points_now', '?')}" + "\n"
-            f"🟢 স্ট্যাটাস: {s.get('status', 'running')}" + "\n"
-            f"⚠️ {s.get('note', '')}")
-
-
-def glory_worker(s_key: int):
-    """Background: try join requests from BD tokens, track real member/point deltas."""
-    import time as _t
-    while True:
-        _t.sleep(20)
-        with GLORY_LOCK:
-            data = _glory_load()
-            s = next((x for x in data.get("sessions", []) if x.get("key") == s_key), None)
-        if not s or s.get("status") != "running":
-            return
-        clan_id = s["clan_id"]
-        # measure current state
-        try:
-            st = ff_bd_api.get_clan_stats(clan_id)
-        except Exception:
-            st = None
-        if st:
-            s["members_now"] = st.get("members")
-            s["points_now"] = st.get("p39", 0) + st.get("p20", 0)
-            with GLORY_LOCK:
-                data = _glory_load()
-                for i, x in enumerate(data.get("sessions", [])):
-                    if x.get("key") == s_key:
-                        data["sessions"][i] = s
-                        _glory_save(data)
-            # progress chat
-            try:
-                cid = s.get("chat_id")
-                if cid:
-                    bot.edit_message_text(glory_status_line(s), chat_id=cid,
-                                           message_id=s.get("status_msg"), parse_mode="Markdown")
-            except Exception:
-                pass
-        # join attempts until we have enough accounts in
-        joined = s.get("joined", 0)
-        attempts = s.get("attempts", 0)
-        if attempts < 40 and s.get("members_now", 0) == s.get("members_start"):
-            try:
-                pool = [p for p in ff_bd_api.get_pool() if p.get("region") == "BD"]
-                tok = pool[attempts % len(pool)]
-                ok, msg = ff_bd_api.request_join_clan(clan_id, tok["token"])
-                s["attempts"] = attempts + 1
-                if ok:
-                    s["note"] = f"জয়েন রিকোয়েস্ট পাঠানো হয়েছে ({attempts + 1})"
-                elif "LEVEL_NOT_ENOUGH" in msg:
-                    s["note"] = "গিল্ডের মিনিমাম লেভেল রিকোয়ারমেন্ট ব্লক করছে — গেমে গিল্ড সেটিং লো করুন"
-                    s["status"] = "failed"
-                    s["result"] = "min_level_blocked"
-                elif "FULL" in msg.upper():
-                    s["status"] = "completed"
-                    s["note"] = "গিল্ড ফুল!"
-                with GLORY_LOCK:
-                    data = _glory_load()
-                    for i, x in enumerate(data.get("sessions", [])):
-                        if x.get("key") == s_key:
-                            data["sessions"][i] = s
-                            _glory_save(data)
-            except Exception:
-                pass
-        # failsafe: 30+ min with no member change -> auto-cancel
-        if time.time() - s["started"] > 1800 and s.get("members_now") == s.get("members_start"):
-            s["status"] = "failed"
-            s["result"] = "no_progress"
-            s["note"] = "30 মিনিটে কোনো প্রগ্রেস নেই — অটো-ক্যান্সেল (ফেইলসেফ)"
-            with GLORY_LOCK:
-                data = _glory_load()
-                for i, x in enumerate(data.get("sessions", [])):
-                    if x.get("key") == s_key:
-                        data["sessions"][i] = s
-                        _glory_save(data)
-            try:
-                bot.send_message(s["chat_id"],
-                    "⚠️ গিল্ড গ্লোরি সেশন অটো-ক্যান্সেল হয়েছে — কোনো প্রগ্রেস পাওয়া যায়নি।\n"
-                    "💡 গিল্ড সেটিং চেক করুন: মিনিমাম লেভেল লো করুন / জয়েন রিকোয়েস্ট অ্যাপ্রুভ করুন।")
-            except Exception:
-                pass
-            return
-        # complete: members grew
-        if s.get("members_now", 0) and s.get("members_now", 0) > s.get("members_start", 0):
-            s["status"] = "completed"
-            s["note"] = "নতুন মেম্বার জয়েন করেছে! ইন-গেমে গ্লোরি কাউন্ট রিফ্রেশ করুন"
-            with GLORY_LOCK:
-                data = _glory_load()
-                for i, x in enumerate(data.get("sessions", [])):
-                    if x.get("key") == s_key:
-                        data["sessions"][i] = s
-                        _glory_save(data)
-            try:
-                bot.send_message(s["chat_id"], "✅ গিল্ড গ্লোরি সেশন সফল — মেম্বার বেড়েছে!\n" + glory_status_line(s),
-                                 parse_mode="Markdown")
-            except Exception:
-                pass
-            return
-
-
 def reminder_loop():
     """Send daily like reminders when due."""
     while True:
@@ -893,6 +741,7 @@ def cmd_myid(m):
     bot.reply_to(m, "\n".join(lines))
 
 
+@bot.message_handler(commands=["start", "help", "menu"])
 def build_welcome_kb():
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
@@ -903,7 +752,6 @@ def build_welcome_kb():
     return kb
 
 
-@bot.message_handler(commands=["start", "help", "menu", "হেল্প"])
 def cmd_start(m):
     # নতুন ইউজার হলে অ্যাকাউন্ট-ক্রিয়েট ওয়েলকাম, পুরোনো হলে welcome-back
     is_new = getattr(m, "_ff_new_user", False)
@@ -911,7 +759,7 @@ def cmd_start(m):
         u = m.from_user
         reg_date = _bd_date(time.time())
         bot.reply_to(m,
-            f"👋 স্বাগতম, <b>{esc(u.first_name or 'Player')}!</b>\n\n"
+            f"👋 স্বাগতম, <b>{u.first_name or 'Player'}!</b>\n\n"
             f"🎉 আপনার অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!\n"
             f"🆔 Account ID: <code>{u.id}</code>\n"
             f"📅 Registration Date: {reg_date}\n"
@@ -1123,7 +971,7 @@ def cmd_profile(m):
     card = (
         "👤 <b>প্লেয়ার প্রোফাইল</b>\n"
         "━━━━━━━━━━━━━━━\n"
-        f"🎯 নাম: <b>{esc(p.get('name') or '-')}</b>\n"
+        f"🎯 নাম: <b>{p.get('name') or '-'}</b>\n"
         f"🆔 UID: <code>{p.get('uid')}</code>\n"
         f"🌍 রিজিওন: <b>{region}</b>  |  🎮 {p.get('release_version') or '-'}\n"
         "━━━━━━━━━━━━━━━\n"
@@ -1366,14 +1214,6 @@ def cb_menu(c):
     elif act == "history":
         bot.answer_callback_query(c.id)
         bot.send_message(c.message.chat.id, build_history_text(user_id))
-    elif act == "glory":
-        bot.answer_callback_query(c.id)
-        bot.send_message(c.message.chat.id,
-            "🛡️ *GUILD GLORY*" + "\n\n" +
-            "ব্যবহার: `/glory <Guild_ID>`" + "\n" +
-            "উদাহরণ: `/glory 65432109`" + "\n\n" +
-            "🔒 100% সেফ — শুধু Guild ID লাগে, কোনো আইডি-পাসওয়ার্ড নয়।\n"
-            "📊 লাইভ ট্র্যাকিং: /glory_status", parse_mode="Markdown")
     elif act == "share":
         bot.answer_callback_query(c.id)
         try:
@@ -1475,102 +1315,6 @@ def run_guildlike_flow(chat_id, clan_id, user, count=20):
     persist_usage_github()
 
 
-GLORY_REGIONS = {"BD": "🇧🇩 BD Server", "SG": "🇸🇬 SG Server", "IN": "🇮🇳 IN Server"}
-
-
-@bot.message_handler(commands=["glory"])
-def cmd_glory(m):
-    parts = (m.text or "").split()
-    if len(parts) < 2 or not parts[1].isdigit():
-        bot.reply_to(m, "🛡️ *GUILD GLORY*" + "\n\n" +
-                     "ব্যবহার: `/glory 65432109`" + "\n" +
-                     "তোমার Guild ID দিয়ে গ্লোরি সেশন শুরু হবে।" + "\n\n" +
-                     "🔒 *100% সেফ:* শুধু পাবলিক Guild ID লাগে, আইডি-পাসওয়ার্ড লাগে না।")
-        return
-    clan_id = int(parts[1])
-    if glory_user_used_today(m.from_user.id):
-        bot.reply_to(m, "⚠️ আজ তোমার ফ্রি গ্লোরি সেশন শেষ! প্রতিদিন ১ বার ফ্রি। কাল আবার চেষ্টা করো।")
-        return
-    if glory_active_sessions():
-        bot.reply_to(m, "⏳ অন্য একটি গ্লোরি সেশন এখন চলছে — শেষ হলে তোমারটা শুরু হবে। স্ট্যাটাস: /glory_status")
-        return
-    kb = types.InlineKeyboardMarkup(row_width=3)
-    kb.add(*[types.InlineKeyboardButton(lbl, callback_data=f"glory:{reg}:{clan_id}")
-             for reg, lbl in GLORY_REGIONS.items()])
-    bot.reply_to(m, "🛡️ *GUILD GLORY সেশন*" + "\n\n" +
-                 f"🏰 Guild ID: `{clan_id}`" + "\n" +
-                 "🌍 তোমার সার্ভার রিজিওন সিলেক্ট করো:", reply_markup=kb)
-
-
-@bot.message_handler(commands=["glory_status"])
-def cmd_glory_status(m):
-    sessions = _glory_load().get("sessions", [])
-    running = [s for s in sessions if s.get("status") == "running"]
-    if not running:
-        last = sessions[-1] if sessions else None
-        txt = "💤 এখন কোনো গ্লোরি সেশন চলছে না।"
-        if last:
-            txt += "\n\n📌 *শেষ সেশন:*\n" + glory_status_line(last)
-        bot.reply_to(m, txt, parse_mode="Markdown")
-        return
-    txt = "🟢 *" + str(len(running)) + "টি সেশন চলছে:*\n\n"
-    for s in running:
-        txt += glory_status_line(s) + "\n\n"
-    try:
-        bot.reply_to(m, txt, parse_mode="Markdown")
-    except Exception:
-        bot.reply_to(m, txt.replace("*", ""))
-
-
-@bot.callback_query_handler(func=lambda c: c.data and c.data.startswith("glory:"))
-def cb_glory(c):
-    _, region, clan_id = c.data.split(":", 2)
-    clan_id = int(clan_id)
-    if region != "BD":
-        bot.answer_callback_query(c.id, "⚠️ এখন শুধু BD সার্ভার সাপোর্টেড — অন্য রিজিওন শীঘ্রই আসছে!")
-        return
-    if glory_user_used_today(c.from_user.id):
-        bot.answer_callback_query(c.id, "⚠️ আজকের ফ্রি সেশন শেষ!")
-        return
-    if glory_active_sessions():
-        bot.answer_callback_query(c.id, "⏳ অন্য সেশন চলছে!")
-        return
-    try:
-        st = ff_bd_api.get_clan_stats(clan_id)
-    except Exception:
-        st = None
-    if not st or not st.get("name"):
-        bot.answer_callback_query(c.id, "❌ গিল্ড পাওয়া যায়নি — Guild ID চেক করো!")
-        return
-    bot.answer_callback_query(c.id)
-    import random
-    s = {"key": int(time.time() * 1000) + random.randint(0, 999),
-         "chat_id": c.message.chat.id, "user_id": c.from_user.id,
-         "clan_id": clan_id, "region": region,
-         "guild_name": st.get("name", "?"),
-         "started": time.time(), "status": "running", "joined": 0, "attempts": 0,
-         "members_start": st.get("members"), "members_now": st.get("members"),
-         "points_start": st.get("p39", 0) + st.get("p20", 0),
-         "points_now": st.get("p39", 0) + st.get("p20", 0),
-         "note": "সেশন শুরু হয়েছে"}
-    with GLORY_LOCK:
-        data = _glory_load()
-        data.setdefault("sessions", []).append(s)
-        _glory_save(data)
-    glory_mark_used(c.from_user.id)
-    msg = bot.send_message(c.message.chat.id, glory_status_line(s) + "\n\n" +
-        "💡 জয়েন রিকোয়েস্ট গিল্ড ক্যাপ্টেনকে যাবে — ইন-গেমে Approve করলেই মেম্বার বাড়বে।",
-        parse_mode="Markdown")
-    s["status_msg"] = msg.message_id
-    with GLORY_LOCK:
-        data = _glory_load()
-        for i, x in enumerate(data.get("sessions", [])):
-            if x.get("key") == s["key"]:
-                data["sessions"][i] = s
-                _glory_save(data)
-    threading.Thread(target=glory_worker, args=(s["key"],), daemon=True).start()
-
-
 @bot.message_handler(commands=["guildlike"])
 def cmd_guildlike(m):
     if not _like_slot_free(m.from_user.id)[0]:
@@ -1649,8 +1393,21 @@ def cmd_pool(m):
     pool = ff_bd_api.get_pool()
     fresh = sum(1 for t in pool if t.get("exp", 0) > time.time())
     dead = ff_bd_api.dead_count() if hasattr(ff_bd_api, "dead_count") else 0
+    stock = reg_bd = reg_other = 0
+    try:
+        stock = len(json.loads(open("guests_manager/guests.json").read()))
+    except Exception:
+        pass
+    try:
+        regs = json.loads(open("guests_manager/registered_pool.json").read())
+        reg_bd = sum(1 for r in regs if str(r.get("region", "")).upper() == "BD")
+        reg_other = len(regs) - reg_bd
+    except Exception:
+        pass
     bot.reply_to(m, f"🔋 লাইক পুল: <b>{len(pool)}</b> অ্যাকাউন্ট ({fresh} টোকেন এখনো ভ্যালিড)\n"
-                    f"🩺 অটো-হেলথ: চলছে | 🖤 ব্ল্যাকলিস্টেড: {dead}টা ডেড টোকেন")
+                    f"🩺 অটো-হেলথ: চলছে | 🖤 ব্ল্যাকলিস্টেড: {dead}টা ডেড টোকেন\n"
+                    f"✅ রেজিস্টার্ড BD: <b>{reg_bd}</b> | অন্য রেজিওন: {reg_other}\n"
+                    f"📦 গেস্ট স্টকপাইল: <b>{stock}</b> (রেজিস্টার-রেডি)")
 
 
 if __name__ == "__main__":
@@ -1662,4 +1419,4 @@ if __name__ == "__main__":
     print("bot running... [spam shield + like cooldown + token health active]")
     threading.Thread(target=reminder_loop, daemon=True).start()
     threading.Thread(target=health_loop, daemon=True).start()
-    bot.infinity_polling(skip_pending=False, timeout=30)
+    bot.infinity_polling(skip_pending=True)
