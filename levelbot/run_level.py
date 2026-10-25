@@ -313,8 +313,15 @@ async def run_account(uid, pw, cycles, on_done):
         return {"status": "tcp_failed", "err": str(e)[:100], "cycles": 0}
     print(f"{tag} TCP CONNECTED ✅ starting match loop", flush=True)
 
-    engine = MatchEngine(conn, pb, spam_duration=17, spam_delay=0.35,
-                         wait_after_match=35, uid=login["account_id"])
+    try:
+        _cfg = json.loads((ROOT / "level_config.json").read_text()) if (ROOT / "level_config.json").exists() else {}
+    except Exception:
+        _cfg = {}
+    engine = MatchEngine(conn, pb,
+                         spam_duration=_cfg.get("spam_duration", 17),
+                         spam_delay=_cfg.get("spam_delay", 0.35),
+                         wait_after_match=_cfg.get("wait_after_match", 35),
+                         uid=login["account_id"])
     try:
         tc = (json.loads((ROOT / "level_config.json").read_text()).get("team_code") or "0")
     except Exception:
