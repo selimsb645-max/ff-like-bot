@@ -457,12 +457,17 @@ async def main():
     # external pool fallback: farm BD JWTs from community token pools
     if done < want and cfg.get("external", True):
         try:
-            exts = [t for t in api.fetch_external_tokens() if t.get("region") == "BD"][:6]
+            all_ext = [t for t in api.fetch_external_tokens() if t.get("region") == "BD"]
         except Exception:
-            exts = []
+            all_ext = []
+        pref = cfg.get("prefer") or []
+        if pref:
+            exts = [t for t in all_ext if t.get("uid") in pref][:6] or all_ext[:6]
+        else:
+            exts = all_ext[:6]
         print(f"external fallback: {len(exts)} BD tokens", flush=True)
         for e in exts:
-            res = await run_external(e, min(cycles, 4), save_progress)
+            res = await run_external(e, cycles, save_progress)
             wh_report({"uid": "ext:" + str(e.get("uid", "?")), "result": res, "ts": time.time()})
             if res and res.get("status") == "done":
                 done += 1
