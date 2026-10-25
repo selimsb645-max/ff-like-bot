@@ -23,7 +23,7 @@ if [ -f guests_manager/register_config.json ]; then
     echo "BD register pipeline: enabled"
     pip install -q pysocks 2>/dev/null || true
     (
-      python3 -u guests_manager/game_register.py --max-hours 2.5 > register_log.txt 2>&1
+      python3 -u guests_manager/game_register.py --max-hours 2.5 2>&1 | tee register_log.txt
       echo "register pipeline finished"
       tail -5 register_log.txt
     ) &
