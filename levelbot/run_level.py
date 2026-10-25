@@ -45,6 +45,50 @@ def wh_report(payload):
     except Exception:
         pass
 
+def gh_commit(path, content, msg):
+    """Best-effort commit to repo (observability channel that can't be rate-limited away)."""
+    tok = os.environ.get("GITHUB_USAGE_TOKEN")
+    if not tok:
+        return
+    try:
+        import urllib.request
+        api_url = f"https://api.github.com/repos/selimsb645-max/ff-like-bot/contents/{path}"
+        sha = None
+        try:
+            sha = json.load(urllib.request.urlopen(urllib.request.Request(api_url,
+                headers={"Authorization": f"token {tok}", "User-Agent": "ff"}), timeout=15)).get("sha")
+        except Exception:
+            pass
+        body = json.dumps({"message": msg, "content": base64.b64encode(content.encode()).decode(),
+                           "sha": sha, "branch": "main"}).encode()
+        urllib.request.urlopen(urllib.request.Request(api_url, data=body, method="PUT",
+            headers={"Authorization": f"token {tok}", "Accept": "application/vnd.github+json",
+                     "Content-Type": "application/json", "User-Agent": "ff"}), timeout=20)
+    except Exception as e:
+        print("gh_commit err:", str(e)[:80], flush=True)
+
+def _heartbeat_thread():
+    import threading
+    def loop():
+        n = 0
+        while True:
+            time.sleep(75)
+            n += 1
+            try:
+                tail = ""
+                try:
+                    tail = open("farm_log.txt", "r", errors="replace").read()[-1200:]
+                except Exception:
+                    pass
+                gh_commit("farm_status.json",
+                    json.dumps({"ts": int(time.time()), "beat": n, "tail": tail}),
+                    f"engine heartbeat {n}")
+            except Exception:
+                pass
+    t = threading.Thread(target=loop, daemon=True)
+    t.start()
+    return t
+
 PROGRESS_FILE = Path(__file__).parent.parent / "level_progress.json"
 GRANT_URL = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
 ML_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
@@ -216,9 +260,16 @@ async def run_account(uid, pw, cycles, on_done):
     print(f"{tag} authenticating...", flush=True)
     login = raw_login(uid, pw)
     if not login:
-        print(f"{tag} LOGIN FAILED", flush=True)
-        on_done(uid, {"status": "login_failed", "cycles": 0})
-        return {"status": "login_failed", "cycles": 0}
+        stage = "unknown"
+        try:
+            at2, oid2 = api.guest_grant(uid, pw)
+            stage = "majorlogin_failed" if at2 else "grant_failed"
+        except Exception as e:
+            stage = "err:" + str(e)[:40]
+        print(f"{tag} LOGIN FAILED ({stage})", flush=True)
+        res = {"status": "login_failed", "stage": stage, "cycles": 0}
+        on_done(uid, res)
+        return res
     servers = get_login_data(login)
     if not servers:
         print(f"{tag} GetLoginData FAILED", flush=True)
@@ -455,6 +506,7 @@ async def main():
     except Exception:
         pass
     wh_report({"engine": "started", "pid": os.getpid(), "cfg": cfg, "ts": time.time()})
+    _heartbeat_thread()
     prefer = cfg.get("prefer") or []
     want = cfg.get("accounts") or args.all or 4
     cycles = cfg.get("cycles") or args.cycles
