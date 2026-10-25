@@ -151,19 +151,42 @@ def _pf_full(f, v):
     return _evb((f << 3) | 2) + _evb(len(v)) + v
 
 
-def _full_device_wire(oid, at, lang="bn"):
+_CPU_BY_DEVICE = {
+    "SM-A125F": "AArch64 Processor Cortex A55 | 1800 | 8",
+    "Redmi 9A": "AArch64 Processor Cortex A53 | 2000 | 8",
+    "POCO M4 Pro": "AArch64 Processor Cortex A76 | 2050 | 8",
+    "RMX3085": "AArch64 Processor Cortex A73 | 2100 | 8",
+}
+
+def _stable_profile(uid):
+    """Same uid -> same device fingerprint forever (stable identity, like a real phone)."""
     import uuid as _uuid
-    model, os_s, gpu = random.choice(DEVICES)
+    rnd = random.Random(int(uid))
+    model, os_s, gpu = rnd.choice(DEVICES)
+    return {
+        "model": model, "os_s": os_s, "gpu": gpu,
+        "cpu": _CPU_BY_DEVICE.get(model, "AArch64 Processor Cortex A53 | 2000 | 8"),
+        "device_id": f"Google|{_uuid.UUID(int=rnd.getrandbits(128))}",
+        "ip": rnd.choice(BD_IPS),
+        "mem": rnd.choice([5951, 6000, 6100, 5500]),
+        "gpu_v": rnd.choice(["OpenGL ES 3.1 v1.46", "OpenGL ES 3.2 v1.1", "OpenGL ES 3.2 v1.2"]),
+        "screen": rnd.choice([(1280, 720), (1600, 720), (720, 1600)]),
+    }
+
+def _full_device_wire(oid, at, uid, lang="bn"):
+    pr = _stable_profile(uid)
+    model, os_s, gpu = pr["model"], pr["os_s"], pr["gpu"]
+    w, h = pr["screen"]
     fields = {
         3: datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
         4: "free fire", 5: 4, 7: "1.132.1", 8: "2019116753",
-        9: os_s, 10: "Handheld", 11: model, 12: 1280, 13: 720, 14: "240",
-        15: "x86-64 SSE3 SSE4.1 SSE4.2 AVX AVX2 | 2400 | 4",
-        16: random.choice([5951, 6000, 6100, 5500]), 17: gpu,
-        18: "OpenGL ES 3.1 v1.46", 19: f"Google|{_uuid.uuid4()}",
-        20: random.choice(BD_IPS), 21: lang, 22: oid, 23: "4", 24: "Handheld",
+        9: os_s, 10: "Handheld", 11: model, 12: w, 13: h, 14: "240",
+        15: pr["cpu"],
+        16: pr["mem"], 17: gpu,
+        18: pr["gpu_v"], 19: pr["device_id"],
+        20: pr["ip"], 21: lang, 22: oid, 23: "4", 24: "Handheld",
         25: model, 26: "BD", 29: at, 30: 1, 41: "Grameenphone", 42: "WIFI",
-        92: random.choice([19788, 20000, 21000]), 93: "android_max",
+        92: pr["mem"], 93: "android_max",
         97: 1, 98: 1, 99: "4", 100: "4", 104: 77149, 105: 1,
     }
     return b"".join(_pf_full(k, v) for k, v in fields.items())
@@ -174,7 +197,7 @@ def raw_login(uid, pw):
     at, oid = api.guest_grant(uid, pw)
     if not at:
         return None
-    wire = _full_device_wire(oid, at)
+    wire = _full_device_wire(oid, at, uid)
     body = api._enc(wire)
     h = {"User-Agent": random.choice(FULL_UAS), "Accept-Encoding": "deflate, gzip",
          "X-GA-SV": "1789535859", "Authorization": f"Bearer {at}",
@@ -290,8 +313,8 @@ async def run_account(uid, pw, cycles, on_done):
         return {"status": "tcp_failed", "err": str(e)[:100], "cycles": 0}
     print(f"{tag} TCP CONNECTED ✅ starting match loop", flush=True)
 
-    engine = MatchEngine(conn, pb, spam_duration=17, spam_delay=0.2,
-                         wait_after_match=20, uid=login["account_id"])
+    engine = MatchEngine(conn, pb, spam_duration=17, spam_delay=0.35,
+                         wait_after_match=35, uid=login["account_id"])
     try:
         tc = (json.loads((ROOT / "level_config.json").read_text()).get("team_code") or "0")
     except Exception:
