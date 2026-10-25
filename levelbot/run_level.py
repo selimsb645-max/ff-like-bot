@@ -349,7 +349,7 @@ async def run_external(entry, cycles, on_done):
         print(f"{tag} GetLoginData failed", flush=True)
         return {"status": "ext_logindata_failed", "cycles": 0}
     w_ip, w_port, o_ip, o_port, f34 = servers
-    print(f"{tag} online={o_ip}:{o_port} whisper={w_ip}:{w_port} f34={f34.hex()[:20]}", flush=True)
+    print(f"{tag} online={o_ip}:{o_port} whisper={w_ip}:{w_port} f34len={len(f34)} f34={f34.hex()}", flush=True)
 
     cands = [("default", api.AES_KEY, api.AES_IV)]
     if len(f34) >= 32:
@@ -367,6 +367,21 @@ async def run_external(entry, cycles, on_done):
             print(f"{tag} TCP {tagk} failed: {str(e)[:70]}", flush=True)
             continue
         print(f"{tag} TCP CONNECTED with key={tagk}", flush=True)
+
+        # handshake check: listen 10s for any server response
+        rx_count = 0
+        for _ in range(5):
+            d1 = await conn.recv_online(1.5)
+            if d1:
+                rx_count += 1
+                print(f"{tag} online RX: {d1.hex()[:120]}", flush=True)
+            d2 = await conn.recv_whisper(0.5)
+            if d2:
+                rx_count += 1
+                print(f"{tag} chat RX: {d2.hex()[:120]}", flush=True)
+        alive = (conn.online_writer and not conn.online_writer.is_closing()
+                 and not conn.online_reader.at_eof())
+        print(f"{tag} handshake: rx={rx_count} online_alive={alive} connected={conn.connected}", flush=True)
         engine = MatchEngine(conn, pb, spam_duration=17, spam_delay=0.2,
                              wait_after_match=20, uid=account_id)
         stats = await engine.start("0", max_cycles=cycles)
@@ -375,7 +390,9 @@ async def run_external(entry, cycles, on_done):
         except Exception:
             pass
         prof = profile_level_exp(jwt, uid) if jwt else {}
-        res = {"status": "done", "mode": "external", "key": tagk,
+        dead = not (conn.online_writer and not conn.online_writer.is_closing())
+        res = {"status": "done" if not dead and stats.cycles_completed > 0 else "tcp_dead",
+               "mode": "external", "key": tagk,
                "cycles": stats.cycles_completed, "level": prof.get("level"),
                "exp": prof.get("exp"), "ts": int(time.time())}
         print(f"{tag} DONE cycles={res['cycles']} level={res['level']} exp={res['exp']} key={tagk}", flush=True)
