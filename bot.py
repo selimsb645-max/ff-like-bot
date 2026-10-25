@@ -8,6 +8,12 @@ Setup: get a token from @BotFather, then:
 import os, json, time, threading
 from pathlib import Path
 import telebot
+import html
+
+
+def esc(x):
+    return html.escape(str(x if x is not None else '-'), quote=False)
+
 import httpx
 from telebot import types
 import ff_bd_api
@@ -227,7 +233,7 @@ def run_stats_flow(chat_id, target, user):
         bot.send_message(chat_id, f"❌ {s['error']}")
     else:
         bot.send_message(chat_id,
-            f"👤 <b>{s.get('name') or '-'}</b>\n🆔 UID: <code>{s.get('uid')}</code>\n"
+            f"👤 <b>{esc(s.get('name') or '-')}</b>\n🆔 UID: <code>{s.get('uid')}</code>\n"
             f"⭐ লেভেল: <b>{s.get('level') or '-'}</b>\n❤️ Likes: <b>{s.get('likes')}</b>")
 
 
@@ -244,7 +250,7 @@ def run_profile_flow(chat_id, target, user):
         return
     g = p.get("guild")
     card = ("👤 <b>প্লেয়ার প্রোফাইল</b>\n━━━━━━━━━━━━━━━\n"
-            f"🎯 নাম: <b>{p.get('name') or '-'}</b>\n"
+            f"🎯 নাম: <b>{esc(p.get('name') or '-')}</b>\n"
             f"🆔 UID: <code>{p.get('uid')}</code>\n"
             f"🌍 রিজিওন: <b>{p.get('region') or '-'}</b>\n"
             f"⭐ লেভেল: <b>{p.get('level')}</b>\n"
@@ -254,7 +260,7 @@ def run_profile_flow(chat_id, target, user):
             f"⚔️ CS র‍্যাঙ্ক: <b>{p.get('cs_rank') or 'Unranked'}</b>"
             + (f" ({p.get('cs_points')}★)" if p.get("cs_points") is not None else "") + "\n")
     if g:
-        card += f"🏛️ গিল্ড: <b>{g.get('name')}</b> ({g.get('members')}/{g.get('capacity')})\n"
+        card += f"🏛️ গিল্ড: <b>{esc(g.get('name'))}</b> ({g.get('members')}/{g.get('capacity')})\n"
     if p.get("pet"):
         card += f"🐾 পেট: {p['pet']['name']} (Lv {p['pet']['level']})\n"
     bot.send_message(chat_id, card)
@@ -905,7 +911,7 @@ def cmd_start(m):
         u = m.from_user
         reg_date = _bd_date(time.time())
         bot.reply_to(m,
-            f"👋 স্বাগতম, <b>{u.first_name or 'Player'}!</b>\n\n"
+            f"👋 স্বাগতম, <b>{esc(u.first_name or 'Player')}!</b>\n\n"
             f"🎉 আপনার অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!\n"
             f"🆔 Account ID: <code>{u.id}</code>\n"
             f"📅 Registration Date: {reg_date}\n"
@@ -1117,7 +1123,7 @@ def cmd_profile(m):
     card = (
         "👤 <b>প্লেয়ার প্রোফাইল</b>\n"
         "━━━━━━━━━━━━━━━\n"
-        f"🎯 নাম: <b>{p.get('name') or '-'}</b>\n"
+        f"🎯 নাম: <b>{esc(p.get('name') or '-')}</b>\n"
         f"🆔 UID: <code>{p.get('uid')}</code>\n"
         f"🌍 রিজিওন: <b>{region}</b>  |  🎮 {p.get('release_version') or '-'}\n"
         "━━━━━━━━━━━━━━━\n"
