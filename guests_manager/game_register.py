@@ -195,10 +195,33 @@ ACTIVE_PROXY = {"url": None}
 
 
 def proxy_candidates():
+    out = []
     try:
-        return [x.strip() for x in PROXIES_FILE.read_text().split("\n") if x.strip()]
+        out += [x.strip() for x in PROXIES_FILE.read_text().split("\n") if x.strip()]
     except Exception:
-        return []
+        pass
+    # live lists (fresh proxies die fast; static lists go stale in hours)
+    try:
+        r = requests.get("https://api.proxyscrape.com/v2/", params={
+            "request": "getproxies", "protocol": "http,socks4,socks5",
+            "timeout": 5000, "country": "BD", "ssl": "all", "anonymity": "all"}, timeout=15)
+        out += [x.strip() for x in r.text.split("\n") if x.strip()]
+    except Exception:
+        pass
+    try:
+        r = requests.get("https://proxylist.geonode.com/api/proxy-list",
+            params={"country": "BD", "limit": "100",
+                    "sort_by": "lastChecked", "sort_type": "desc"}, timeout=15)
+        for pp in r.json().get("data", []):
+            out.append(f"{pp['ip']}:{pp['port']}")
+    except Exception:
+        pass
+    seen, uniq = set(), []
+    for x in out:
+        if x not in seen:
+            seen.add(x)
+            uniq.append(x)
+    return uniq
 
 
 def check_proxy(url):
@@ -213,13 +236,22 @@ def check_proxy(url):
 
 
 def pick_proxy():
-    for px in proxy_candidates():
-        url = "http://" + px
-        ok, ip, country = check_proxy(url)
-        print(f"proxy {px}: exit={ip} country={country} {'OK' if ok else 'reject'}", flush=True)
-        if ok:
-            ACTIVE_PROXY["url"] = url
-            return url
+    cands = proxy_candidates()
+    print(f"testing {len(cands)} BD proxy candidates...", flush=True)
+    for px in cands:
+        for scheme in ("http", "socks5", "socks4"):
+            url = f"{scheme}://{px}"
+            try:
+                ok, ip, country = check_proxy(url)
+            except Exception:
+                ok, ip, country = False, None, None
+            if ok:
+                print(f"proxy {url}: exit={ip} country={country} OK", flush=True)
+                ACTIVE_PROXY["url"] = url
+                return url
+        if "/10:" in f"/{px}":
+            continue
+    print("all candidates rejected (dead or non-BD exit)", flush=True)
     return None
 
 
@@ -237,6 +269,19 @@ def load_json(path, default):
         return default
 
 
+def write_status(status, count):
+    try:
+        Path(__file__).parent.joinpath("register_status.json").write_text(json.dumps({
+            "status": status, "registered": count,
+            "proxy": ACTIVE_PROXY["url"], "ts": int(time.time())}))
+        gh_commit("guests_manager/register_status.json",
+                  json.dumps({"status": status, "registered": count,
+                              "proxy": ACTIVE_PROXY["url"], "ts": int(time.time())}),
+                  f"register status: {status} ({count})")
+    except Exception:
+        pass
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-hours", type=float, default=4.6)
@@ -248,6 +293,7 @@ def main():
     if not px:
         print("NO WORKING BD PROXY — aborting (accounts would lock to the wrong region). "
               "Update guests_manager/proxies.txt", flush=True)
+        write_status("no_bd_proxy", len(load_json(REG_FILE, [])))
         return
     print("using BD proxy:", px, flush=True)
 
@@ -325,10 +371,12 @@ def main():
         if count % 15 == 0:
             gh_commit("guests_manager/registered_pool.json",
                       json.dumps(registered, indent=0), f"registered {len(registered)}/{TARGET}")
+            write_status("running", len(registered))
 
     save()
     gh_commit("guests_manager/registered_pool.json",
               json.dumps(registered, indent=0), f"registered {len(registered)}/{TARGET}")
+    write_status("done" if len(registered) >= TARGET else "partial", len(registered))
     print(f"DONE: {len(registered)}/{TARGET} registered", flush=True)
 
 
