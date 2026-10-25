@@ -10,6 +10,7 @@ the run ABORTS unless ALLOW_ANY_REGION=1 — registering from a non-BD IP
 permanently locks accounts as NA/EU (useless for BD likes/guild).
 """
 import argparse
+import socket
 import base64
 import hashlib
 import hmac
@@ -235,9 +236,22 @@ def check_proxy(url):
         return False, None, None
 
 
+def tcp_alive(hostport, timeout=4):
+    try:
+        ip, port = hostport.rsplit(":", 1)
+        s = socket.create_connection((ip, int(port)), timeout=timeout)
+        s.close()
+        return True
+    except Exception:
+        return False
+
+
 def pick_proxy():
+    import socket as _s
+    globals()["socket"] = _s
     cands = proxy_candidates()
-    print(f"testing {len(cands)} BD proxy candidates...", flush=True)
+    cands = [c for c in cands if tcp_alive(c)]
+    print(f"testing {len(cands)} alive BD proxy candidates...", flush=True)
     for px in cands:
         for scheme in ("http", "socks5", "socks4"):
             url = f"{scheme}://{px}"
@@ -269,6 +283,45 @@ def load_json(path, default):
         return default
 
 
+def guest_only_mode(end_at):
+    """No BD exit available: keep generating unlimited MSDK guests into guests.json.
+
+    Guests are region-free at auth level and become like-ready BD game accounts
+    automatically once a BD exit-IP registers them in a later run.
+    """
+    import socket as _s
+    globals()["socket"] = _s
+    made = 0
+    while time.time() < end_at:
+        s = requests.Session()
+        got, err = None, None
+        for _ in range(3):
+            got, err = msdk_register(s)
+            if got:
+                break
+            if err == "429":
+                print("MSDK 429, waiting 70s", flush=True)
+                time.sleep(70)
+        if got:
+            guests = load_json(GUESTS_FILE, [])
+            guests.append({"uid": str(got[0]), "password": got[1]})
+            Path(GUESTS_FILE).write_text(json.dumps(guests, indent=0))
+            made += 1
+            print(f"[guest {made}] uid={got[0]} (stockpile={len(guests)})", flush=True)
+            if made % 10 == 0:
+                gh_commit("guests_manager/guests.json", json.dumps(guests, indent=0),
+                          f"guests +{made} (guest-only mode)")
+        else:
+            print("msdk register failing, backoff 70s", flush=True)
+            time.sleep(70)
+        time.sleep(20)  # ~3/min: within MSDK rate limit, 429s self-backoff
+    guests = load_json(GUESTS_FILE, [])
+    gh_commit("guests_manager/guests.json", json.dumps(guests, indent=0),
+              f"guests +{made} (guest-only mode)")
+    write_status("no_bd_proxy", len(load_json(REG_FILE, [])))
+    print(f"guest-only run done: +{made} guests", flush=True)
+
+
 def write_status(status, count):
     try:
         Path(__file__).parent.joinpath("register_status.json").write_text(json.dumps({
@@ -291,9 +344,11 @@ def main():
 
     px = pick_proxy()
     if not px:
-        print("NO WORKING BD PROXY — aborting (accounts would lock to the wrong region). "
-              "Update guests_manager/proxies.txt", flush=True)
+        print("NO WORKING BD PROXY — switching to GUEST-ONLY MODE: unlimited MSDK guest "
+              "generation (region-free); they become BD like-ready the moment a BD "
+              "exit-IP registers them. Never stops.", flush=True)
         write_status("no_bd_proxy", len(load_json(REG_FILE, [])))
+        guest_only_mode(end_at)
         return
     print("using BD proxy:", px, flush=True)
 
