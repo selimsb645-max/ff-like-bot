@@ -375,12 +375,15 @@ def main():
     hook(f"pipeline starting (max_hours={args.max_hours})")
 
     px = pick_proxy()
-    if not px:
-        print("NO WORKING BD PROXY — switching to GUEST-ONLY MODE: unlimited MSDK guest "
-              "generation (region-free); they become BD like-ready the moment a BD "
-              "exit-IP registers them. Never stops.", flush=True)
+    while not px and time.time() < end_at:
+        print("NO BD PROXY yet — GUEST-ONLY gen for 30min (unlimited, never stops), then rescan", flush=True)
         write_status("no_bd_proxy", len(load_json(REG_FILE, [])))
-        guest_only_mode(end_at)
+        guest_only_mode(min(end_at, time.time() + 1800))
+        if time.time() >= end_at:
+            return
+        print("rescanning for BD proxy...", flush=True)
+        px = pick_proxy()
+    if not px:
         return
     print("using BD proxy:", px, flush=True)
 
