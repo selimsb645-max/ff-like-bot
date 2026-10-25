@@ -1362,26 +1362,36 @@ def cmd_guests(m):
         bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
         return
 
-    msg = bot.reply_to(m, "🔄 গেস্ট অ্যাকাউন্ট গুনছি...")
-    try:
-        import base64
-        r = httpx.get(
-            "https://api.github.com/repos/selimsb645-max/ff-like-bot/contents/guests_manager/guests.json",
-            headers={"Accept": "application/vnd.github+json"}, timeout=20)
-        r.raise_for_status()
-        data = json.loads(base64.b64decode(r.json()["content"]))
-    except Exception as e:
-        bot.edit_message_text(f"❌ এরর: {e}", msg.chat.id, msg.message_id)
-        return
+    msg = bot.reply_to(m, "🔄 অ্যাকাউন্ট স্ট্যাটাস আনছি...")
+    import base64
+    def gh_json(path):
+        try:
+            r = httpx.get(
+                f"https://api.github.com/repos/selimsb645-max/ff-like-bot/contents/{path}",
+                headers={"Accept": "application/vnd.github+json"}, timeout=20)
+            r.raise_for_status()
+            return json.loads(base64.b64decode(r.json()["content"]))
+        except Exception:
+            return []
+    data = gh_json("guests_manager/guests.json")
+    regs = gh_json("guests_manager/registered_pool.json")
     n = len(data)
-    last_uid = data[-1].get("uid", "?") if data else "?"
-    bar_len = min(n * 10 // 200, 10)
+    reg_bd = sum(1 for r in regs if str(r.get("region", "")).upper() == "BD")
+    reg_other = len(regs) - reg_bd
+    total = n + len(regs)
+    last_uid = regs[-1].get("uid", "?") if regs else (data[-1].get("uid", "?") if data else "?")
+    prog = reg_bd  # usable BD accounts = real progress toward the 1000 goal
+    bar_len = min(prog * 10 // 1000, 10)
     bar = "▰" * bar_len + "▱" * (10 - bar_len)
     bot.edit_message_text(
-        f"👥 গেস্ট অ্যাকাউন্ট বানানো হয়েছে: <b>{n}/200</b>\n"
-        f"{bar} <b>{min(n * 100 // 200, 100)}%</b>\n"
+        f"👥 অ্যাকাউন্ট স্ট্যাটাস (টার্গেট <b>1000</b>)\n"
+        f"✅ রেজিস্টার্ড BD (ব্যবহারযোগ্য): <b>{reg_bd}</b>\n"
+        f"{bar} <b>{min(prog * 100 // 1000, 100)}%</b>\n"
+        f"🌎 রেজিস্টার্ড অন্য রেজিওন: {reg_other}\n"
+        f"📦 গেস্ট স্টকপাইল (রেজিস্টার-রেডি): <b>{n}</b>\n"
+        f"🧾 মোট ইনভেন্টরি: {total}\n"
         f"🔔 সর্বশেষ UID: <code>{last_uid}</code>\n"
-        f"⚡ জেনারেশন চলমান — কাউন্ট বাড়তেই থাকবে।",
+        f"⚡ BD রেজিস্ট্রেশন BD-IP মেশিন চালু হলেই বাড়তে থাকবে।",
         msg.chat.id, msg.message_id)
 
 
