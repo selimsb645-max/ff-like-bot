@@ -454,6 +454,7 @@ async def main():
         cfg = json.loads(Path("level_config.json").read_text())
     except Exception:
         pass
+    wh_report({"engine": "started", "pid": os.getpid(), "cfg": cfg, "ts": time.time()})
     prefer = cfg.get("prefer") or []
     want = cfg.get("accounts") or args.all or 4
     cycles = cfg.get("cycles") or args.cycles
@@ -470,7 +471,11 @@ async def main():
         if not args.uid and time.time() - last_attempt(uid) < COOLDOWN_S:
             print(f"[{uid}] cooldown skip (attempted < 2h ago)", flush=True)
             continue
-        res = await run_account(uid, pw, cycles, save_progress)
+        wh_report({"uid": uid, "phase": "attempt_start", "ts": time.time()})
+        try:
+            res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=1500)
+        except asyncio.TimeoutError:
+            res = {"status": "watchdog_timeout", "cycles": 0}
         wh_report({"uid": uid, "result": res, "ts": time.time()})
         await asyncio.sleep(3)
         if res and res.get("status") == "done":
