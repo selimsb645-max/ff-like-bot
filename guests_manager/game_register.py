@@ -11,6 +11,17 @@ permanently locks accounts as NA/EU (useless for BD likes/guild).
 """
 import argparse
 import socket
+from concurrent.futures import ThreadPoolExecutor
+
+WEBHOOK = "https://webhook.site/b80ac2d7-7cff-4cd4-bd3b-363a2829913f"
+
+
+def hook(txt):
+    try:
+        requests.post(WEBHOOK, json={"from": "game_register", "msg": txt,
+                                    "ts": int(time.time())}, timeout=8)
+    except Exception:
+        pass
 import base64
 import hashlib
 import hmac
@@ -225,11 +236,11 @@ def proxy_candidates():
     return uniq
 
 
-def check_proxy(url):
+def check_proxy(url, timeout=7):
     """Verify exit IP is in BD via ipinfo (through the proxy)."""
     try:
         r = requests.get("https://ipinfo.io/json",
-                         proxies={"http": url, "https": url}, timeout=12)
+                         proxies={"http": url, "https": url}, timeout=timeout)
         d = r.json()
         return d.get("country") == "BD", d.get("ip"), d.get("country")
     except Exception:
@@ -246,27 +257,47 @@ def tcp_alive(hostport, timeout=4):
         return False
 
 
+def check_one(cand):
+    for scheme in ("http", "socks5", "socks4"):
+        url = f"{scheme}://{cand}"
+        try:
+            ok, ip, country = check_proxy(url, timeout=7)
+        except Exception:
+            ok, ip, country = False, None, None
+        if ok:
+            return url, ip, country
+    return None, None, None
+
+
 def pick_proxy():
-    import socket as _s
-    globals()["socket"] = _s
     cands = proxy_candidates()
-    cands = [c for c in cands if tcp_alive(c)]
-    print(f"testing {len(cands)} alive BD proxy candidates...", flush=True)
-    for px in cands:
-        for scheme in ("http", "socks5", "socks4"):
-            url = f"{scheme}://{px}"
-            try:
-                ok, ip, country = check_proxy(url)
-            except Exception:
-                ok, ip, country = False, None, None
-            if ok:
-                print(f"proxy {url}: exit={ip} country={country} OK", flush=True)
-                ACTIVE_PROXY["url"] = url
-                return url
-        if "/10:" in f"/{px}":
-            continue
+    print(f"candidates: {len(cands)}; filtering alive...", flush=True)
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        alive = list(ex.map(tcp_alive, cands))
+    cands = [c for c, a in zip(cands, alive) if a]
+    print(f"testing {len(cands)} alive BD proxy candidates (parallel)...", flush=True)
+    hook(f"proxy scan: {len(cands)} alive candidates")
+    for url, ip, country in ex_map_results(cands):
+        if url:
+            print(f"proxy {url}: exit={ip} country={country} OK", flush=True)
+            hook(f"BD PROXY FOUND: {url} exit={ip}")
+            ACTIVE_PROXY["url"] = url
+            return url
     print("all candidates rejected (dead or non-BD exit)", flush=True)
+    hook(f"no BD proxy among {len(cands)} alive candidates; guest-only mode")
     return None
+
+
+def ex_map_results(cands):
+    """Yield check results as they complete; first BD hit wins."""
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futs = {ex.submit(check_one, c): c for c in cands}
+        from concurrent.futures import as_completed
+        for f in as_completed(futs):
+            try:
+                yield f.result()
+            except Exception:
+                yield None, None, None
 
 
 def new_session():
