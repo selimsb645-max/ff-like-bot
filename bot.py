@@ -1383,6 +1383,14 @@ def cmd_guests(m):
     prog = reg_bd  # usable BD accounts = real progress toward the 1000 goal
     bar_len = min(prog * 10 // 1000, 10)
     bar = "▰" * bar_len + "▱" * (10 - bar_len)
+    st = gh_json("guests_manager/register_status.json")
+    smap = {"no_bd_proxy": "❌ BD প্রক্সি পাওয়া যায়নি — প্রতি রানে আবার খোঁজা হচ্ছে",
+            "running": "🔄 BD রেজিস্ট্রেশন চলছে",
+            "done": "✅ টার্গেট সম্পূর্ণ",
+            "partial": "⏸ রান শেষ — পরের রানে আবার চালু"}
+    st_line = ""
+    if isinstance(st, dict) and st.get("status"):
+        st_line = f"\n📌 স্ট্যাটাস: {smap.get(st['status'], st['status'])}"
     bot.edit_message_text(
         f"👥 অ্যাকাউন্ট স্ট্যাটাস (টার্গেট <b>1000</b>)\n"
         f"✅ রেজিস্টার্ড BD (ব্যবহারযোগ্য): <b>{reg_bd}</b>\n"
@@ -1390,8 +1398,7 @@ def cmd_guests(m):
         f"🌎 রেজিস্টার্ড অন্য রেজিওন: {reg_other}\n"
         f"📦 গেস্ট স্টকপাইল (রেজিস্টার-রেডি): <b>{n}</b>\n"
         f"🧾 মোট ইনভেন্টরি: {total}\n"
-        f"🔔 সর্বশেষ UID: <code>{last_uid}</code>\n"
-        f"⚡ BD রেজিস্ট্রেশন BD-IP মেশিন চালু হলেই বাড়তে থাকবে।",
+        f"🔔 সর্বশেষ UID: <code>{last_uid}</code>{st_line}",
         msg.chat.id, msg.message_id)
 
 
