@@ -382,6 +382,13 @@ async def run_external(entry, cycles, on_done):
         alive = (conn.online_writer and not conn.online_writer.is_closing()
                  and not conn.online_reader.at_eof())
         print(f"{tag} handshake: rx={rx_count} online_alive={alive} connected={conn.connected}", flush=True)
+        if rx_count == 0:
+            print(f"{tag} no server RX with key={tagk} — key likely wrong, trying next", flush=True)
+            try:
+                await conn.close()
+            except Exception:
+                pass
+            continue
         engine = MatchEngine(conn, pb, spam_duration=17, spam_delay=0.2,
                              wait_after_match=20, uid=account_id)
         stats = await engine.start("0", max_cycles=cycles)
