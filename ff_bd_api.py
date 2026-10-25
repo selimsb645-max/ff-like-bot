@@ -591,13 +591,18 @@ def get_clan_stats(clan_id: int, jwt: str = None) -> dict | None:
 
 
 def request_join_clan(clan_id: int, jwt: str) -> tuple[bool, str]:
-    """Send a guild join request with a pool token. Returns (ok, server_msg)."""
-    body = _enc(b"\x08" + _pb_varint(int(clan_id)) + b"\x10\x01")
+    """Send a guild join request. f1-only body + Bearer (VERIFIED WORKING 2026-10-25)."""
     try:
+        h = dict(_headers(jwt, "OB55"))
+        h["Authorization"] = f"Bearer {jwt}"
+        h["Content-Type"] = "application/octet-stream"
+        h["X-Unity-Version"] = "2018.4.11f1"
+        h.pop("X-GA-SV", None)
+        body = _enc(b"\x08" + _pb_varint(int(clan_id)))
         r = httpx.post("https://clientbp.ggpolarbear.com/RequestJoinClan",
-                       headers=_headers(jwt, "OB55"), data=body, timeout=15, verify=False)
+                       headers=h, data=body, timeout=15, verify=False)
         msg = r.content.decode("utf-8", "replace").strip()
-        return r.status_code == 200, msg
+        return r.status_code == 200, msg or "OK"
     except Exception as e:
         return False, f"ERR:{e}"
 
