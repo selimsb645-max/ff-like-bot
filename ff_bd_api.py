@@ -526,87 +526,6 @@ def get_guild(clan_id: int, jwt: str = None) -> dict | None:
     out["uids"] = sorted(uids)
     return out
 
-GLORY_POINTS_FIELDS = (20, 36, 37, 39, 41)  # points/exp-like counters in ClanInfo
-
-
-def get_clan_stats(clan_id: int, jwt: str = None) -> dict | None:
-    """Glory dashboard data: level, members, exp/points counters, active members."""
-    if not jwt:
-        pool = get_pool()
-        if not pool:
-            return None
-        jwt = pool[0]["token"]
-    body = _enc(b"\x08" + _pb_varint(int(clan_id)) + b"\x10\x01")
-    try:
-        r = httpx.post(CLAN_INFO_URL, headers=_headers(jwt, "OB55"), data=body, timeout=20, verify=False)
-        if r.status_code != 200 or not r.content:
-            return None
-    except Exception:
-        return None
-    out = {"clan_id": int(clan_id)}
-    for f, t, v in _walk_pb(r.content):
-        if f == 2 and t == "bytes":
-            try:
-                inner = [sv for sf, st, sv in _walk_pb(v) if sf == 2 and st == "bytes"]
-                out["name"] = (inner[0] if inner else v).decode("utf-8", "replace")
-            except Exception:
-                out["name"] = v.decode("utf-8", "replace")
-        elif f == 3:
-            out["created"] = v
-        elif f == 4:
-            out["captain"] = v
-        elif f == 5:
-            out["level"] = v
-        elif f == 6:
-            out["capacity"] = v
-        elif f == 7:
-            out["members"] = v
-        elif f == 12 and t == "bytes":
-            out["notice"] = v.decode("utf-8", "replace")
-        elif f == 13 and t == "bytes":
-            out["region"] = v.decode("utf-8", "replace")
-        elif f in GLORY_POINTS_FIELDS:
-            out[f"p{f}"] = v
-    # active members with levels + last seen
-    members = []
-    try:
-        r2 = httpx.post(CLAN_MAIN_URL, headers=_headers(jwt, "OB55"), data=body, timeout=20, verify=False)
-        if r2.status_code == 200 and r2.content:
-            for f, t, v in _walk_pb(r2.content):
-                if f == 3 and t == "bytes":
-                    m = {}
-                    for sf, st, sv in _walk_pb(v):
-                        if sf == 1: m["uid"] = sv
-                        elif sf == 2: m["level"] = sv
-                        elif sf == 3: m["state"] = sv
-                        elif sf == 4: m["last"] = sv
-                    if m.get("uid"):
-                        members.append(m)
-                elif f == 4:
-                    out["next_reset"] = v
-    except Exception:
-        pass
-    out["active"] = members
-    return out
-
-
-def request_join_clan(clan_id: int, jwt: str) -> tuple[bool, str]:
-    """Send a guild join request. f1-only body + Bearer (VERIFIED WORKING 2026-10-25)."""
-    try:
-        h = dict(_headers(jwt, "OB55"))
-        h["Authorization"] = f"Bearer {jwt}"
-        h["Content-Type"] = "application/octet-stream"
-        h["X-Unity-Version"] = "2018.4.11f1"
-        h.pop("X-GA-SV", None)
-        body = _enc(b"\x08" + _pb_varint(int(clan_id)))
-        r = httpx.post("https://clientbp.ggpolarbear.com/RequestJoinClan",
-                       headers=h, data=body, timeout=15, verify=False)
-        msg = r.content.decode("utf-8", "replace").strip()
-        return r.status_code == 200, msg or "OK"
-    except Exception as e:
-        return False, f"ERR:{e}"
-
-
 def fetch_external_tokens() -> list:
     """Pull fresh JWTs from public token pools (live community bots)."""
     now = time.time()
@@ -647,10 +566,23 @@ def fetch_external_tokens() -> list:
     return uniq
 
 
+def load_registered_bd():
+    """Game-registered BD accounts (game_register.py pipeline output)."""
+    out = []
+    try:
+        p = Path(__file__).parent / "guests_manager" / "registered_pool.json"
+        for r in json.loads(p.read_text()):
+            if str(r.get("region", "")).upper() == "BD" and r.get("uid") and r.get("pw"):
+                out.append((str(r["uid"]), r["pw"]))
+    except Exception:
+        pass
+    return out
+
+
 def refresh_pool() -> list:
     """Mint fresh JWTs for all pool accounts."""
     pool = []
-    for uid, pw in load_creds():
+    for uid, pw in load_creds() + load_registered_bd():
         t = mint_jwt(uid, pw)
         if t:
             pool.append(t)
