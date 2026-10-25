@@ -237,14 +237,23 @@ def proxy_candidates():
 
 
 def check_proxy(url, timeout=7):
-    """Verify exit IP is in BD via ipinfo (through the proxy)."""
+    """Verify exit IP is in BD via ipinfo AND garena endpoints reachable through it."""
     try:
         r = requests.get("https://ipinfo.io/json",
                          proxies={"http": url, "https": url}, timeout=timeout)
         d = r.json()
-        return d.get("country") == "BD", d.get("ip"), d.get("country")
+        if d.get("country") != "BD":
+            return False, d.get("ip"), d.get("country")
     except Exception:
         return False, None, None
+    # garena reachability: any HTTP status (even 4xx/5xx) proves the tunnel works
+    try:
+        requests.post("https://loginbp.ggpolarbear.com/MajorLogin",
+                      data=b"", headers={"User-Agent": "GarenaMSDK/4.0.19P10"},
+                      proxies={"http": url, "https": url}, timeout=8)
+        return True, d.get("ip"), "BD"
+    except Exception:
+        return False, d.get("ip"), "BD-no-garena"
 
 
 def tcp_alive(hostport, timeout=4):
