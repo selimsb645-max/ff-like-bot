@@ -16,6 +16,7 @@ import re
 import sys
 import time
 from pathlib import Path
+ROOT = Path(__file__).parent.parent
 
 import httpx
 import urllib3
@@ -184,6 +185,16 @@ async def run_account(uid, pw, cycles, on_done):
     res = {"status": "done", "cycles": stats.cycles_completed,
            "level": lvl.get("level"), "exp": lvl.get("exp"), "ts": int(time.time())}
     print(f"{tag} DONE cycles={stats.cycles_completed} level={res['level']} exp={res['exp']}", flush=True)
+    # auto-join guild once level >= 6 (guild min requirement)
+    try:
+        cfg2 = json.loads((ROOT / "level_config.json").read_text()) if (ROOT / "level_config.json").exists() else {}
+        clan = cfg2.get("clan_id")
+        if clan and (res.get("level") or 0) >= 6:
+            ok, msg = api.request_join_clan(int(clan), login["jwt"])
+            res["join"] = f"{'OK' if ok else msg}"
+            print(f"{tag} guild join ({clan}): {res['join']}", flush=True)
+    except Exception as e:
+        res["join"] = f"err:{e}"[:60]
     on_done(uid, res)
     return res
 
