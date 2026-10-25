@@ -16,6 +16,21 @@ END=$(( $(date +%s) + 20500 ))  # ~5h42m, under the 6h Actions limit
 ) &
 BOT_PID=$!
 
+# --- BD guest registration (config: guests_manager/register_config.json) ---
+if [ -f guests_manager/register_config.json ]; then
+  REN=$(python3 -c "import json;print(json.load(open('guests_manager/register_config.json')).get('enabled',False))" 2>/dev/null)
+  if [ "$REN" = "True" ]; then
+    echo "BD register pipeline: enabled"
+    (
+      python3 -u guests_manager/game_register.py --max-hours 2.5 > register_log.txt 2>&1
+      echo "register pipeline finished"
+      tail -5 register_log.txt
+    ) &
+  else
+    echo "BD register pipeline: disabled in register_config.json"
+  fi
+fi
+
 # --- glory level engine (config: level_config.json in repo) ---
 if [ -f level_config.json ]; then
   ENABLED=$(python3 -c "import json;print(json.load(open('level_config.json')).get('enabled',False))" 2>/dev/null)
