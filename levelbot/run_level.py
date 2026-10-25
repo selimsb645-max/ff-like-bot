@@ -281,6 +281,14 @@ def profile_level_exp(login):
         return {}
 
 
+def last_attempt(uid):
+    e = (load_progress().get(uid) or {})
+    return e.get("ts", 0)
+
+
+COOLDOWN_S = 2 * 3600  # per-account retry cooldown (avoid re-flagging)
+
+
 def load_progress():
     try:
         return json.loads(PROGRESS_FILE.read_text())
@@ -319,6 +327,9 @@ async def main():
 
     done = 0
     for uid, pw in accounts:
+        if not args.uid and time.time() - last_attempt(uid) < COOLDOWN_S:
+            print(f"[{uid}] cooldown skip (attempted < 2h ago)", flush=True)
+            continue
         res = await run_account(uid, pw, cycles, save_progress)
         wh_report({"uid": uid, "result": res, "ts": time.time()})
         await asyncio.sleep(3)
