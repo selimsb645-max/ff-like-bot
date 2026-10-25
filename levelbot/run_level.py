@@ -246,7 +246,7 @@ async def run_account(uid, pw, cycles, on_done):
         await conn.close()
     except Exception:
         pass
-    lvl = profile_level_exp(login)
+    lvl = profile_level_exp(login["jwt"], login["uid"])
     res = {"status": "done", "cycles": stats.cycles_completed,
            "level": lvl.get("level"), "exp": lvl.get("exp"), "ts": int(time.time())}
     print(f"{tag} DONE cycles={stats.cycles_completed} level={res['level']} exp={res['exp']}", flush=True)
@@ -264,10 +264,10 @@ async def run_account(uid, pw, cycles, on_done):
     return res
 
 
-def profile_level_exp(login):
+def profile_level_exp(jwt, uid):
     """Raw profile fetch: f6=level, f7=exp, f21=likes."""
     try:
-        body = api._enc(b"\x08" + api._pb_varint(int(login["uid"])))
+        body = api._enc(b"\x08" + api._pb_varint(int(uid)))
         r = httpx.post("https://clientbp.ggpolarbear.com/GetPlayerPersonalShow",
             headers=api._headers(login["jwt"], "OB55"), data=body, timeout=20, verify=False)
         out = {}
@@ -279,6 +279,113 @@ def profile_level_exp(login):
         return {"level": out.get(6), "exp": out.get(7), "likes": out.get(21)}
     except Exception:
         return {}
+
+
+
+# ---- external token pool mode (BD JWTs from community pools, no passwords needed) ----
+
+def jwt_claims(jwt):
+    p = jwt.split(".")[1]
+    return json.loads(base64.urlsafe_b64decode(p + "=" * (-len(p) % 4)))
+
+
+def ext_login_data(jwt):
+    """GetLoginData via Bearer JWT only -> (w_ip, w_port, o_ip, o_port, f34) or None."""
+    try:
+        H = dict(api._headers(jwt, "OB55"))
+        H["Authorization"] = f"Bearer {jwt}"
+        H["Content-Type"] = "application/octet-stream"
+        r = httpx.post("https://clientbp.ggpolarbear.com/GetLoginData", headers=H,
+                       data=api._enc(b""), timeout=25, verify=False)
+        if r.status_code != 200:
+            return None
+        fields = {}
+        for f, k, v in api._walk_pb(r.content):
+            fields.setdefault(f, []).append(v)
+
+        def ipport(b):
+            ip, _, port = b.decode(errors="replace").partition(":")
+            return ip, int(port or 0)
+
+        o_ip, o_port = ipport(fields[14][0])
+        w_ip, w_port = ipport(fields[32][0])
+        return (w_ip, w_port, o_ip, o_port, fields.get(34, [b""])[0])
+    except Exception:
+        return None
+
+
+async def ext_build_token(account_id, jwt, key, iv, ts):
+    jwt_hex = jwt.encode().hex()
+    enc = await EnC_PacKeT(jwt_hex, key, iv)
+    uid_hex = hex(account_id)[2:]
+    L = len(uid_hex)
+    hdr = {9: "0000000", 8: "00000000", 10: "000000", 7: "000000000"}.get(L, "0000000")
+    ts_hex = await DecodE_HeX(ts)
+    enc_len = hex(len(enc) // 2)[2:]
+    return f"0115{hdr}{uid_hex}{ts_hex}00000{enc_len}{enc}"
+
+
+async def run_external(entry, cycles, on_done):
+    """Farm one external BD token: try key candidates, run match cycles, auto-join at lvl>=6."""
+    jwt = entry["token"]
+    c = jwt_claims(jwt)
+    account_id = c.get("account_id")
+    uid = str(c.get("external_uid") or c.get("account_id"))
+    tag = f"[ext:{uid}]"
+    if not account_id:
+        print(f"{tag} no account_id", flush=True)
+        return {"status": "ext_no_account", "cycles": 0}
+    servers = ext_login_data(jwt)
+    if not servers:
+        print(f"{tag} GetLoginData failed", flush=True)
+        return {"status": "ext_logindata_failed", "cycles": 0}
+    w_ip, w_port, o_ip, o_port, f34 = servers
+    print(f"{tag} online={o_ip}:{o_port} whisper={w_ip}:{w_port} f34={f34.hex()[:20]}", flush=True)
+
+    cands = [("default", api.AES_KEY, api.AES_IV)]
+    if len(f34) >= 32:
+        cands.append(("f34halves", f34[:16], f34[16:32]))
+    cands.append(("bd_static", bytes.fromhex("71ca1a47fef365f7504205380a321025"),
+                  bytes.fromhex("40f26949fef476f37102055014310026")))
+    for tagk, key, iv in cands:
+        token = await ext_build_token(account_id, jwt, key, iv, int(time.time()))
+        conn = GameConnection()
+        conn.set_crypto(key, iv, region="bd")
+        pb = PacketBuilder(key, iv, region="bd")
+        try:
+            await asyncio.wait_for(conn.connect(w_ip, w_port, o_ip, o_port, token), timeout=25)
+        except Exception as e:
+            print(f"{tag} TCP {tagk} failed: {str(e)[:70]}", flush=True)
+            continue
+        print(f"{tag} TCP CONNECTED with key={tagk}", flush=True)
+        engine = MatchEngine(conn, pb, spam_duration=17, spam_delay=0.2,
+                             wait_after_match=20, uid=account_id)
+        stats = await engine.start("0", max_cycles=cycles)
+        try:
+            await conn.close()
+        except Exception:
+            pass
+        prof = profile_level_exp(jwt, uid) if jwt else {}
+        res = {"status": "done", "mode": "external", "key": tagk,
+               "cycles": stats.cycles_completed, "level": prof.get("level"),
+               "exp": prof.get("exp"), "ts": int(time.time())}
+        print(f"{tag} DONE cycles={res['cycles']} level={res['level']} exp={res['exp']} key={tagk}", flush=True)
+        if prof.get("level") and prof["level"] >= 6:
+            try:
+                try:
+                    cfg3 = json.loads((ROOT / "level_config.json").read_text())
+                except Exception:
+                    cfg3 = {}
+                ok, msg = api.request_join_clan(cfg3.get("clan_id", 0) or 3071565979, jwt)
+                res["join"] = msg
+                print(f"{tag} RequestJoinClan: {ok} {msg}", flush=True)
+            except Exception as e:
+                res["join"] = f"ERR:{e}"
+        on_done(uid, res)
+        return res
+    res = {"status": "ext_tcp_all_keys_failed", "cycles": 0, "ts": int(time.time())}
+    on_done(uid, res)
+    return res
 
 
 def last_attempt(uid):
@@ -337,6 +444,22 @@ async def main():
             done += 1
         if done >= want:
             break
+
+    # external pool fallback: farm BD JWTs from community token pools
+    if done < want and cfg.get("external", True):
+        try:
+            exts = [t for t in api.fetch_external_tokens() if t.get("region") == "BD"][:3]
+        except Exception:
+            exts = []
+        print(f"external fallback: {len(exts)} BD tokens", flush=True)
+        for e in exts:
+            res = await run_external(e, min(cycles, 4), save_progress)
+            wh_report({"uid": "ext:" + str(e.get("uid", "?")), "result": res, "ts": time.time()})
+            if res and res.get("status") == "done":
+                done += 1
+                if done >= want:
+                    break
+            await asyncio.sleep(3)
 
     d = load_progress()
     print("PROGRESS:", json.dumps(d)[-1500:], flush=True)
