@@ -298,19 +298,28 @@ def ext_login_data(jwt):
         r = httpx.post("https://clientbp.ggpolarbear.com/GetLoginData", headers=H,
                        data=api._enc(b""), timeout=25, verify=False)
         if r.status_code != 200:
+            print(f"[extLD] HTTP {r.status_code}: {r.content[:60]}", flush=True)
             return None
-        fields = {}
-        for f, k, v in api._walk_pb(r.content):
-            fields.setdefault(f, []).append(v)
+        if b"Protection Bypass" in r.content:
+            print("[extLD] Protection Bypass flag", flush=True)
+            return None
+        try:
+            fields = {}
+            for f, k, v in api._walk_pb(r.content):
+                fields.setdefault(f, []).append(v)
 
-        def ipport(b):
-            ip, _, port = b.decode(errors="replace").partition(":")
-            return ip, int(port or 0)
+            def ipport(b):
+                ip, _, port = b.decode(errors="replace").partition(":")
+                return ip, int(port or 0)
 
-        o_ip, o_port = ipport(fields[14][0])
-        w_ip, w_port = ipport(fields[32][0])
-        return (w_ip, w_port, o_ip, o_port, fields.get(34, [b""])[0])
-    except Exception:
+            o_ip, o_port = ipport(fields[14][0])
+            w_ip, w_port = ipport(fields[32][0])
+            return (w_ip, w_port, o_ip, o_port, fields.get(34, [b""])[0])
+        except Exception as e:
+            print(f"[extLD] parse err: {e} | body: {r.content[:60]}", flush=True)
+            return None
+    except Exception as e:
+        print(f"[extLD] req err: {str(e)[:80]}", flush=True)
         return None
 
 
@@ -448,7 +457,7 @@ async def main():
     # external pool fallback: farm BD JWTs from community token pools
     if done < want and cfg.get("external", True):
         try:
-            exts = [t for t in api.fetch_external_tokens() if t.get("region") == "BD"][:3]
+            exts = [t for t in api.fetch_external_tokens() if t.get("region") == "BD"][:6]
         except Exception:
             exts = []
         print(f"external fallback: {len(exts)} BD tokens", flush=True)
