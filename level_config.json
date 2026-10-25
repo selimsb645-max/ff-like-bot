@@ -1,10 +1,9 @@
 {
  "enabled": true,
- "accounts": 3,
- "cycles": 8,
+ "accounts": 2,
+ "cycles": 10,
  "clan_id": 3071565979,
  "prefer": [
-  "8079065600",
   "8081853118",
   "8080009405"
  ]
