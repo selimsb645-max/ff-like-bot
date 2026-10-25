@@ -315,15 +315,13 @@ def load_json(path, default):
 
 
 def guest_only_mode(end_at):
-    """No BD exit available: keep generating unlimited MSDK guests into guests.json.
-
-    Guests are region-free at auth level and become like-ready BD game accounts
-    automatically once a BD exit-IP registers them in a later run.
-    """
-    import socket as _s
-    globals()["socket"] = _s
+    """No BD exit available: generate MSDK guests like the original 200 —
+    gentle batch pace (old gen style), commit each batch of 5, long-backoff on
+    MSDK throttle; end run early on persistent throttle so the next hourly run
+    retries on a fresh runner IP (so generation never stops overall)."""
     made = 0
-    while time.time() < end_at:
+    throttle_rounds = 0
+    while time.time() < end_at and made < 120:  # per-run quota: keep runner IP healthy
         s = requests.Session()
         got, err = None, None
         for _ in range(3):
@@ -334,22 +332,29 @@ def guest_only_mode(end_at):
                 print("MSDK 429, waiting 70s", flush=True)
                 time.sleep(70)
         if got:
+            throttle_rounds = 0
             guests = load_json(GUESTS_FILE, [])
             guests.append({"uid": str(got[0]), "password": got[1]})
             Path(GUESTS_FILE).write_text(json.dumps(guests, indent=0))
             made += 1
             print(f"[guest {made}] uid={got[0]} (stockpile={len(guests)})", flush=True)
-            if made % 10 == 0:
+            if made % 5 == 0:  # batch-commit every 5, like the original 200 flow
                 gh_commit("guests_manager/guests.json", json.dumps(guests, indent=0),
-                          f"guests +{made} (guest-only mode)")
+                          f"guests +{made} (gentle batch mode)")
+            time.sleep(30)  # ~2/min: the sustainable pace that produced the first 200
         else:
-            print("msdk register failing, backoff 70s", flush=True)
-            time.sleep(70)
-        time.sleep(20)  # ~3/min: within MSDK rate limit, 429s self-backoff
+            throttle_rounds += 1
+            if throttle_rounds >= 5:
+                print("MSDK throttled this runner IP — ending early; hourly run "
+                      "retries on a fresh IP (generation continues)", flush=True)
+                break
+            print("msdk failing, long backoff 10min", flush=True)
+            time.sleep(600)
     guests = load_json(GUESTS_FILE, [])
     gh_commit("guests_manager/guests.json", json.dumps(guests, indent=0),
-              f"guests +{made} (guest-only mode)")
-    write_status("no_bd_proxy", len(load_json(REG_FILE, [])))
+              f"guests +{made} (gentle batch mode)")
+    write_status("no_bd_proxy" if made else "msdk_throttled",
+                 len(load_json(REG_FILE, [])))
     print(f"guest-only run done: +{made} guests", flush=True)
 
 
