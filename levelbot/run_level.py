@@ -11,6 +11,8 @@ import argparse
 import asyncio
 import base64
 import json
+import random
+from datetime import datetime, timezone
 import os
 import re
 import sys
@@ -69,19 +71,82 @@ def load_accounts(limit, prefer=None):
     return out[:limit]
 
 
+FULL_ML_URL = "https://loginbp.ppmainecoonghj.com/MajorLogin"
+DEVICES = [
+    ("Symphony Z60", "Android OS 12 / API-31 (SP1A.210812.016)", "Mali-G57"),
+    ("Walton Primo RX8", "Android OS 13 / API-33 (TP1A.220624.014)", "PowerVR GE8320"),
+    ("Realme C55", "Android OS 13 / API-33 (TP1A.220624.014)", "Mali-G57 MC2"),
+    ("Samsung SM-A145F", "Android OS 13 / API-33 (TP1A.220624.014)", "Mali-G68"),
+    ("Xiaomi Redmi 12C", "Android OS 12 / API-31 (SP1A.210812.016)", "PowerVR GE8320"),
+]
+BD_IPS = ["103.4.146.10", "103.230.104.22", "103.108.148.15", "103.87.202.25",
+          "103.100.88.10", "103.84.148.22", "103.102.28.10", "103.56.208.15"]
+FULL_UAS = [
+    "GarenaMSDK/4.0.44(25028RN03A ;Android 15;bn;BD;app 1.132.1 2019121229;)",
+    "GarenaMSDK/4.0.43(25028RN03A ;Android 14;bn;BD;app 1.131.1 2019121229;)",
+    "GarenaMSDK/4.0.45(25028RN03A ;Android 13;bn;BD;app 1.133.1 2019121229;)",
+]
+
+
+def _evb(n):
+    out = bytearray()
+    while True:
+        b = n & 0x7F
+        n >>= 7
+        if n:
+            b |= 0x80
+        out.append(b)
+        if not n:
+            return bytes(out)
+
+
+def _pf_full(f, v):
+    if isinstance(v, int):
+        return _evb((f << 3)) + _evb(v)
+    v = v.encode() if isinstance(v, str) else v
+    return _evb((f << 3) | 2) + _evb(len(v)) + v
+
+
+def _full_device_wire(oid, at, lang="bn"):
+    import uuid as _uuid
+    model, os_s, gpu = random.choice(DEVICES)
+    fields = {
+        3: datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+        4: "free fire", 5: 4, 7: "1.132.1", 8: "2019116753",
+        9: os_s, 10: "Handheld", 11: model, 12: 1280, 13: 720, 14: "240",
+        15: "x86-64 SSE3 SSE4.1 SSE4.2 AVX AVX2 | 2400 | 4",
+        16: random.choice([5951, 6000, 6100, 5500]), 17: gpu,
+        18: "OpenGL ES 3.1 v1.46", 19: f"Google|{_uuid.uuid4()}",
+        20: random.choice(BD_IPS), 21: lang, 22: oid, 23: "4", 24: "Handheld",
+        25: model, 26: "BD", 29: at, 30: 1, 41: "Grameenphone", 42: "WIFI",
+        92: random.choice([19788, 20000, 21000]), 93: "android_max",
+        97: 1, 98: 1, 99: "4", 100: "4", 104: 77149, 105: 1,
+    }
+    return b"".join(_pf_full(k, v) for k, v in fields.items())
+
+
 def raw_login(uid, pw):
     """guest grant + raw MajorLogin -> dict(jwt, key, iv, ts, url, region, account_id) or None."""
     at, oid = api.guest_grant(uid, pw)
     if not at:
         return None
-    wire = (api._pf_str(22, oid) + api._pf_str(23, "4")
-            + api._pf_str(29, at) + api._pf_str(99, "4"))
+    wire = _full_device_wire(oid, at)
     body = api._enc(wire)
-    h = {"User-Agent": api.LOGIN_UA, "Connection": "Keep-Alive",
-         "Accept-Encoding": "gzip", "X-GA-SV": "1789638359",
-         "Content-Type": "application/x-www-form-urlencoded", "Expect": "100-continue",
-         "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1", "ReleaseVersion": "OB55"}
-    r = httpx.post(ML_URL, headers=h, data=body, timeout=25, verify=False)
+    h = {"User-Agent": random.choice(FULL_UAS), "Accept-Encoding": "deflate, gzip",
+         "X-GA-SV": "1789535859", "Authorization": f"Bearer {at}",
+         "X-GA": "v1 1", "ReleaseVersion": "OB55",
+         "Content-Type": "application/octet-stream",
+         "X-Unity-Version": "2018.4.12f1"}
+    r = httpx.post(FULL_ML_URL, headers=h, data=body, timeout=25, verify=False)
+    if r.status_code != 200 or b"eyJ" not in r.content:
+        # fallback: minimal login (old path)
+        wire = (api._pf_str(22, oid) + api._pf_str(23, "4")
+                + api._pf_str(29, at) + api._pf_str(99, "4"))
+        h2 = {"User-Agent": api.LOGIN_UA, "Connection": "Keep-Alive",
+              "Accept-Encoding": "gzip", "X-GA-SV": "1789638359",
+              "Content-Type": "application/x-www-form-urlencoded", "Expect": "100-continue",
+              "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1", "ReleaseVersion": "OB55"}
+        r = httpx.post(ML_URL, headers=h2, data=api._enc(wire), timeout=25, verify=False)
     if r.status_code != 200 or b"eyJ" not in r.content:
         return None
     fields = {}
