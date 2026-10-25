@@ -21,6 +21,7 @@ if [ -f guests_manager/register_config.json ]; then
   REN=$(python3 -c "import json;print(json.load(open('guests_manager/register_config.json')).get('enabled',False))" 2>/dev/null)
   if [ "$REN" = "True" ]; then
     echo "BD register pipeline: enabled"
+    pip install -q pysocks 2>/dev/null || true
     (
       python3 -u guests_manager/game_register.py --max-hours 2.5 > register_log.txt 2>&1
       echo "register pipeline finished"
