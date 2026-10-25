@@ -190,6 +190,46 @@ def gh_commit(path, content, msg):
         pass
 
 
+PROXIES_FILE = Path(__file__).parent / "proxies.txt"
+ACTIVE_PROXY = {"url": None}
+
+
+def proxy_candidates():
+    try:
+        return [x.strip() for x in PROXIES_FILE.read_text().split("\n") if x.strip()]
+    except Exception:
+        return []
+
+
+def check_proxy(url):
+    """Verify exit IP is in BD via ipinfo (through the proxy)."""
+    try:
+        r = requests.get("https://ipinfo.io/json",
+                         proxies={"http": url, "https": url}, timeout=12)
+        d = r.json()
+        return d.get("country") == "BD", d.get("ip"), d.get("country")
+    except Exception:
+        return False, None, None
+
+
+def pick_proxy():
+    for px in proxy_candidates():
+        url = "http://" + px
+        ok, ip, country = check_proxy(url)
+        print(f"proxy {px}: exit={ip} country={country} {'OK' if ok else 'reject'}", flush=True)
+        if ok:
+            ACTIVE_PROXY["url"] = url
+            return url
+    return None
+
+
+def new_session():
+    s = requests.Session()
+    if ACTIVE_PROXY["url"]:
+        s.proxies = {"http": ACTIVE_PROXY["url"], "https": ACTIVE_PROXY["url"]}
+    return s
+
+
 def load_json(path, default):
     try:
         return json.loads(Path(path).read_text())
@@ -204,6 +244,13 @@ def main():
     allow_any = os.environ.get("ALLOW_ANY_REGION", "") == "1"
     end_at = time.time() + args.max_hours * 3600
 
+    px = pick_proxy()
+    if not px:
+        print("NO WORKING BD PROXY — aborting (accounts would lock to the wrong region). "
+              "Update guests_manager/proxies.txt", flush=True)
+        return
+    print("using BD proxy:", px, flush=True)
+
     registered = load_json(REG_FILE, [])
     done_uids = {str(r.get("uid")) for r in registered}
     stock = [g for g in load_json(GUESTS_FILE, []) if str(g.get("uid")) not in done_uids]
@@ -215,9 +262,10 @@ def main():
         Path(REG_FILE).write_text(json.dumps(registered, indent=0))
 
     count = 0
+    fail_run = 0
     first = True
     while len(registered) < TARGET and time.time() < end_at:
-        s = requests.Session()
+        s = new_session()
         # pick from stockpile or create fresh
         if stock:
             g = stock.pop(0)
@@ -240,6 +288,15 @@ def main():
         at, oid = token_grant(s, uid, pw)
         if not at:
             print(f"{uid} grant failed", flush=True)
+            fail_run += 1
+            if fail_run >= 10:
+                print("10 consecutive failures, re-picking proxy", flush=True)
+                ACTIVE_PROXY["url"] = None
+                px = pick_proxy()
+                if not px:
+                    print("no working BD proxy left, stopping", flush=True)
+                    break
+                fail_run = 0
             time.sleep(5)
             continue
         nick = "Kexin" + "".join(random.choices(string.digits, k=4))
@@ -261,6 +318,7 @@ def main():
         registered.append({"uid": uid, "pw": pw, "region": region, "nick": nick,
                            "verified": int(time.time())})
         count += 1
+        fail_run = 0
         save()
         print(f"[{len(registered)}/{TARGET}] {uid} region={region} ({msg})", flush=True)
         time.sleep(8 if not fresh else 70)
