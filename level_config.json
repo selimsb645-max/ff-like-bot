@@ -1,10 +1,1 @@
-{
- "enabled": true,
- "accounts": 2,
- "cycles": 10,
- "clan_id": 3071565979,
- "prefer": [
-  "8081853118",
-  "8080009405"
- ]
-}
+{"enabled": true, "accounts": 1, "cycles": 4, "clan_id": 3071565979, "prefer": ["8081853118", "8080009405"]}
