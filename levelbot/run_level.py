@@ -292,7 +292,11 @@ async def run_account(uid, pw, cycles, on_done):
 
     engine = MatchEngine(conn, pb, spam_duration=17, spam_delay=0.2,
                          wait_after_match=20, uid=login["account_id"])
-    stats = await engine.start("0", max_cycles=cycles)  # "0" = Lone Wolf solo
+    try:
+        tc = (json.loads((ROOT / "level_config.json").read_text()).get("team_code") or "0")
+    except Exception:
+        tc = "0"
+    stats = await engine.start(tc, max_cycles=cycles)  # "0" = solo, else squad team-code
     try:
         await conn.close()
     except Exception:
