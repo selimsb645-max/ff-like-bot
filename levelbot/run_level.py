@@ -108,6 +108,17 @@ def load_accounts(limit, prefer=None):
             u, pw = ln.split(":", 1)
             if pw.isupper() and len(pw) == 64:  # self-minted guests only
                 out.append((u, pw))
+    # merge phone-born BD accounts (any pw format, pushed by phone pipeline)
+    pa = Path(__file__).parent.parent / "phone_accounts.json"
+    try:
+        known = {u for u, _ in out}
+        for r in json.loads(pa.read_text()):
+            u, p = str(r.get("uid", "")).strip(), str(r.get("pw", "")).strip()
+            if u and p and u not in known:
+                out.append((u, p))
+                known.add(u)
+    except Exception:
+        pass
     if prefer:
         pref = [(u, pw) for u, pw in out if u in prefer]
         rest = [(u, pw) for u, pw in out if u not in prefer]
