@@ -1376,9 +1376,13 @@ def cmd_guests(m):
     data = gh_json("guests_manager/guests.json")
     regs = gh_json("guests_manager/registered_pool.json")
     phone = gh_json("phone_accounts.json")
-    ready_cache = ff_bd_api.ready_uids()
-    phone_ready = sum(1 for r in phone if (ready_cache.get(str(r.get("uid"))) or {}).get("ready"))
-    phone_new = len(phone) - phone_ready
+    prog = gh_json("level_progress.json")
+    prog = prog if isinstance(prog, dict) else {}
+    # ACTIVATED = engine played real matches on it (cycles >= 1) -> game profile live
+    phone_active = sum(
+        1 for r in phone
+        if ((prog.get(str(r.get("uid"))) or {}).get("cycles") or 0) >= 1)
+    phone_inactive = len(phone) - phone_active
     n = len(data)
     reg_bd = sum(1 for r in regs if str(r.get("region", "")).upper() == "BD")
     reg_other = len(regs) - reg_bd
@@ -1392,17 +1396,16 @@ def cmd_guests(m):
             "running": "🔄 BD রেজিস্ট্রেশন চলছে",
             "done": "✅ টার্গেট সম্পূর্ণ",
             "partial": "⏸ রান শেষ — পরের রানে আবার চালু"}
-    st_line = ""
-    if isinstance(st, dict) and st.get("status"):
-        st_line = f"\n📌 স্ট্যাটাস: {smap.get(st['status'], st['status'])}"
+    st_line = ""  # cloud register paused; phone pipeline is primary
     bot.edit_message_text(
         f"👥 অ্যাকাউন্ট স্ট্যাটাস (টার্গেট <b>1000</b>)\n"
         f"✅ রেজিস্টার্ড BD (ব্যবহারযোগ্য): <b>{reg_bd}</b>\n"
         f"{bar} <b>{min(prog * 100 // 1000, 100)}%</b>\n"
         f"🌎 রেজিস্টার্ড অন্য রেজিওন: {reg_other}\n"
         f"📦 গেস্ট স্টকপাইল: <b>{n}</b> (US-born — BD-তে ব্যবহারযোগ্য না)\n"
-        f"📱 টার্মাক্সে তৈরি (BD): <b>{len(phone)}</b>\n"
-        f"✅ লাইক-রেডি (গেম-প্রোফাইল সহ): <b>{phone_ready}</b> | 🔄 অ্যাক্টিভেশন-প্রয়োজন: {phone_new}\n"
+        f"📱 টার্মাক্সে তৈরি: <b>{len(phone)}</b>\n"
+        f"✅ অ্যাক্টিভ (গেম-প্রোফাইল সহ): <b>{phone_active}</b>\n"
+        f"⏳ ইনএক্টিভ (অ্যাক্টিভেশন বাকি): <b>{phone_inactive}</b>\n"
         f"🧾 মোট ইনভেন্টরি: {total}\n"
         f"🔔 সর্বশেষ UID: <code>{last_uid}</code>{st_line}",
         msg.chat.id, msg.message_id)
