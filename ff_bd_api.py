@@ -69,13 +69,25 @@ def _headers(jwt: str, rv: str = "OB55") -> dict:
 
 def load_creds() -> list:
     if not CREDS_FILE.exists():
-        return []
-    creds = []
-    for line in CREDS_FILE.read_text().splitlines():
-        line = line.strip()
-        if line and ":" in line and not line.startswith("#"):
-            uid, pw = line.split(":", 1)
-            creds.append((uid.strip(), pw.strip()))
+        creds = []
+    else:
+        creds = []
+        for line in CREDS_FILE.read_text().splitlines():
+            line = line.strip()
+            if line and ":" in line and not line.startswith("#"):
+                uid, pw = line.split(":", 1)
+                creds.append((uid.strip(), pw.strip()))
+    # auto-merge phone-born BD accounts (pushed by ff_bd_reg.py v6 via ffPhoneRegisterReport)
+    known = {u for u, _ in creds}
+    pa = Path(__file__).parent / "phone_accounts.json"
+    try:
+        for r in json.loads(pa.read_text()):
+            u, p = str(r.get("uid", "")).strip(), str(r.get("pw", "")).strip()
+            if u and p and u not in known:
+                creds.append((u, p))
+                known.add(u)
+    except Exception:
+        pass
     return creds
 
 
