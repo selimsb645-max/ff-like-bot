@@ -388,7 +388,21 @@ def main():
     end_at = time.time() + args.max_hours * 3600
     hook(f"pipeline starting (max_hours={args.max_hours})")
 
-    px = pick_proxy()
+    if os.environ.get("BD_TUNNEL") == "1":
+        try:
+            d = requests.get("https://ipinfo.io/json", timeout=10).json()
+            if d.get("country") == "BD":
+                print("BD tunnel active — registering directly through it", flush=True)
+                hook("BD TUNNEL active — direct register mode")
+                px = "tunnel"
+                end_check = True
+            else:
+                print(f"tunnel country {d.get('country')} — not BD, falling back", flush=True)
+                px = None
+        except Exception:
+            px = None
+    else:
+        px = pick_proxy()
     while not px and time.time() < end_at:
         print("NO BD PROXY yet — GUEST-ONLY gen for 30min (unlimited, never stops), then rescan", flush=True)
         write_status("no_bd_proxy", len(load_json(REG_FILE, [])))
