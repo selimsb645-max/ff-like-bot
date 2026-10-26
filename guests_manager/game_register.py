@@ -435,24 +435,32 @@ def main():
                 print("msdk register exhausted retries", flush=True)
                 break
 
-        at, oid = token_grant(s, uid, pw)
-        if not at:
-            print(f"{uid} grant failed", flush=True)
+        try:
+            at, oid = token_grant(s, uid, pw)
+            if not at:
+                raise RuntimeError("grant_failed")
+            nick = "Kexin" + "".join(random.choices(string.digits, k=4))
+            ok, msg = major_register(s, at, oid, nick)
+            time.sleep(1.5)
+            jwt = major_login(s, at, oid)
+        except Exception as e:
+            print(f"{uid} net/proxy error: {str(e)[:90]}", flush=True)
             fail_run += 1
-            if fail_run >= 10:
-                print("10 consecutive failures, re-picking proxy", flush=True)
+            if fail_run >= 3:
+                print("proxy flaky/dead — re-picking", flush=True)
+                hook(f"proxy died mid-flow ({str(e)[:40]}) — repicking")
                 ACTIVE_PROXY["url"] = None
                 px = pick_proxy()
-                if not px:
-                    print("no working BD proxy left, stopping", flush=True)
-                    break
                 fail_run = 0
-            time.sleep(5)
+                if not px:
+                    print("no BD proxy left — guest-only for rest of window", flush=True)
+                    break
+            time.sleep(3)
             continue
-        nick = "Kexin" + "".join(random.choices(string.digits, k=4))
-        ok, msg = major_register(s, at, oid, nick)
-        time.sleep(1.5)
-        jwt = major_login(s, at, oid)
+        if not at:
+            print(f"{uid} grant failed", flush=True)
+            time.sleep(4)
+            continue
         if not jwt:
             print(f"{uid} register {msg}, login FAIL (skip)", flush=True)
             time.sleep(4)
@@ -482,6 +490,9 @@ def main():
               json.dumps(registered, indent=0), f"registered {len(registered)}/{TARGET}")
     write_status("done" if len(registered) >= TARGET else "partial", len(registered))
     print(f"DONE: {len(registered)}/{TARGET} registered", flush=True)
+    if time.time() < end_at and len(registered) < TARGET:
+        print("register flow ended — guest-only gen for remaining window", flush=True)
+        guest_only_mode(end_at)
 
 
 if __name__ == "__main__":
