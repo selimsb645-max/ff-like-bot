@@ -1322,5 +1322,20 @@
   "status": "login_failed",
   "stage": "majorlogin_failed",
   "cycles": 0
+ },
+ "8347354386": {
+  "status": "login_failed",
+  "stage": "grant_failed",
+  "cycles": 0
+ },
+ "8347357232": {
+  "status": "login_failed",
+  "stage": "grant_failed",
+  "cycles": 0
+ },
+ "8347359870": {
+  "status": "login_failed",
+  "stage": "majorlogin_failed",
+  "cycles": 0
  }
 }
