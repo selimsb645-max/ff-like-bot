@@ -22,7 +22,26 @@ if [ -f guests_manager/register_config.json ]; then
   if [ "$REN" = "True" ]; then
     echo "BD register pipeline: enabled"
     pip install -q pysocks 2>/dev/null || true
+    BD_TUNNEL=0
+    if [ -f guests_manager/bdvpn/bd.ovpn ]; then
+      echo "trying BD openvpn tunnel (103.163.246.25)..."
+      sudo apt-get install -y -q openvpn >/dev/null 2>&1 || true
+      sudo openvpn --config guests_manager/bdvpn/bd.ovpn --daemon --log /tmp/vpn.log --verb 3 2>/dev/null || true
+      sleep 12
+      COUNTRY=$(curl -s --max-time 10 https://ipinfo.io/json 2>/dev/null | python3 -c "import json,sys
+try: print(json.load(sys.stdin).get('country'))
+except Exception: print('x')" 2>/dev/null)
+      echo "tunnel exit country: $COUNTRY"
+      if [ "$COUNTRY" = "BD" ]; then
+        BD_TUNNEL=1
+        echo "BD TUNNEL UP — direct BD exit active"
+      else
+        sudo pkill openvpn 2>/dev/null || true
+        echo "tunnel failed/exit not BD — falling back to proxy hunt"
+      fi
+    fi
     (
+      BD_TUNNEL=$BD_TUNNEL python3 -u guests_manager/game_register.py --max-hours 2.5 2>&1 | tee register_log.txt
       python3 -u guests_manager/game_register.py --max-hours 2.5 2>&1 | tee register_log.txt
       echo "register pipeline finished"
       tail -5 register_log.txt
