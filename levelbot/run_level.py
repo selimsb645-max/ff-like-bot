@@ -205,7 +205,8 @@ def _full_device_wire(oid, at, uid, lang="bn"):
 
 def raw_login(uid, pw):
     """guest grant + raw MajorLogin -> dict(jwt, key, iv, ts, url, region, account_id) or None."""
-    at, oid = api.guest_grant(uid, pw)
+    pair = api.guest_grant(uid, pw)
+    at, oid = pair if pair else (None, None)
     if not at:
         return None
     wire = _full_device_wire(oid, at, uid)
