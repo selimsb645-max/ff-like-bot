@@ -92,7 +92,7 @@ def load_creds() -> list:
 
 
 # ── Self-minted JWT (MajorLogin, verified 2026-10-23) ──────────────
-GRANT_URL = "https://ffmconnect.live.gop.garenanow.com/api/v2/oauth/guest/token:grant"
+GRANT_URL = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
 MAJOR_LOGIN_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
 CLIENT_SECRET = "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
 LOGIN_UA = "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)"
@@ -124,12 +124,12 @@ def guest_grant(uid: str, pw: str):
             headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
             timeout=15, verify=False)
         if r.status_code != 200:
-            return (None, None)
+            return None
         d = r.json().get("data", r.json())
         at, oid = d.get("access_token"), d.get("open_id")
-        return (at, oid) if at and oid else (None, None)
+        return (at, oid) if at and oid else None
     except Exception:
-        return (None, None)
+        return None
 
 
 def major_login(access_token: str, open_id: str) -> str | None:
@@ -371,7 +371,10 @@ HEALTH_TARGET = 9563969432  # known-valid popular UID for auth checks
 
 def load_dead() -> set:
     try:
-        return set(json.loads(DEAD_FILE.read_text()))
+        try:
+            return set(json.loads(DEAD_FILE.read_text()))
+        except Exception:
+            return set()
     except Exception:
         return set()
 
@@ -405,7 +408,10 @@ def check_token(jwt: str) -> bool:
 def drop_from_pool(dead_ids) -> int:
     """Remove dead account_ids from the cached pool file (minted part)."""
     try:
-        pool = json.loads(POOL_FILE.read_text())
+        try:
+            pool = json.loads(POOL_FILE.read_text())
+        except Exception:
+            pool = []
     except Exception:
         return 0
     dead = set(dead_ids)
@@ -606,7 +612,10 @@ def get_pool(force: bool = False) -> list:
     if force or not POOL_FILE.exists():
         base = refresh_pool()
     else:
-        pool = json.loads(POOL_FILE.read_text())
+        try:
+            pool = json.loads(POOL_FILE.read_text())
+        except Exception:
+            pool = []
         now = time.time()
         if not pool or all(t.get("exp", 0) < now + 60 for t in pool):
             base = refresh_pool()
@@ -716,6 +725,8 @@ def is_activated(t: dict, cache: dict) -> bool:
     """A like only counts if the sender has a live game profile (entered game once).
     Freshly registered-but-never-played accounts return 200 but land nothing."""
     uid = str(t.get("uid"))
+    if not isinstance(cache, dict):
+        cache = {}
     ent = cache.get(uid) or {}
     if ent.get("ready") and time.time() - ent.get("ts", 0) < 6 * 3600:
         return True
@@ -730,7 +741,8 @@ def is_activated(t: dict, cache: dict) -> bool:
 def ready_uids() -> dict:
     """{uid: {ready, ts}} for admin display."""
     try:
-        return json.loads(READY_FILE.read_text())
+        data = json.loads(READY_FILE.read_text())
+        return data if isinstance(data, dict) else {}
     except Exception:
         return {}
 
@@ -738,7 +750,10 @@ def ready_uids() -> dict:
 def phone_accounts() -> list:
     """Phone-born accounts pushed by the Termux pipeline."""
     try:
-        return json.loads((Path(__file__).parent / "phone_accounts.json").read_text())
+        try:
+            return json.loads((Path(__file__).parent / "phone_accounts.json").read_text())
+        except Exception:
+            return []
     except Exception:
         return []
 
