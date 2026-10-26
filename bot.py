@@ -138,18 +138,18 @@ def build_uid_card(user_id):
     rem = _load_json(REMINDERS_FILE).get(str(user_id), {})
     saved_at = rem.get("saved_at")
     if saved and str(saved).isdigit():
-        txt = (f"⚙️ <b>আমার UID</b>\n\n"
-               f"🆔 সেভ করা UID: <code>{saved}</code>\n")
+        txt = (f"⚙️ <b>My UID</b>\n\n"
+               f"🆔 Saved UID: <code>{saved}</code>\n")
         if saved_at:
             import datetime
-            txt += f"📅 সেভ করা হয়েছে: {datetime.datetime.fromtimestamp(saved_at).strftime('%d %b %Y, %H:%M')}\n"
-        txt += "\nএখন <code>/like</code> বা <code>/stats</code> লিখলেই এই UID-তে কাজ হবে।"
+            txt += f"📅 Saved on: {datetime.datetime.fromtimestamp(saved_at).strftime('%d %b %Y, %H:%M')}\n"
+        txt += "\nNow <code>/like</code> and <code>/stats</code> run on this UID automatically."
         kb = types.InlineKeyboardMarkup(row_width=2)
-        kb.add(types.InlineKeyboardButton("✏️ UID পরিবর্তন করুন", callback_data="uid:change"),
-               types.InlineKeyboardButton("🗑️ UID মুছে ফেলুন", callback_data="uid:clear"))
+        kb.add(types.InlineKeyboardButton("✏️ Change UID", callback_data="uid:change"),
+               types.InlineKeyboardButton("🗑️ Delete UID", callback_data="uid:clear"))
         return txt, kb
-    return ("⚠️ আপনার কোনো UID সেভ করা নেই।\n"
-            "✏️ UID পরিবর্তন করুন বাটনে চাপ দিয়ে নতুন UID সেভ করুন।", None)
+    return ("⚠️ You have no saved UID.\n"
+            "Tap the Change UID button to save one.", None)
 
 
 def run_like_flow(chat_id, target, user, skip_slot=False):
@@ -158,7 +158,7 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
         ok, wait = _like_slot_free(user.id)
         if not ok:
             try:
-                bot.send_message(chat_id, f"⏳ লাইক সিস্টেম ব্যস্ত / কুলডাউনে। *{wait} সেকেন্ড* পরে আবার চেষ্টা করুন।")
+                bot.send_message(chat_id, f"⏳ Like system busy / cooling down. *{wait} seconds*, then try again.")
             except Exception:
                 pass
             return
@@ -176,7 +176,7 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
         likes_before = s0.get("likes") if s0 else None
         sent = ff_bd_api.send_like(target, count=pool_size, used=used)
     except Exception as e:
-        bot.send_message(chat_id, f"❌ এরর: {e}")
+        bot.send_message(chat_id, f"❌ Error: {e}")
         return
     with USAGE_LOCK:
         usage["used_pairs"] = [list(k) for k in used]
@@ -197,17 +197,17 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
     except Exception:
         pass
     if sent == 0:
-        bot.send_message(chat_id, "⚠️ পুলের সব অ্যাকাউন্ট এই টার্গেটে লাইক দিয়ে দিয়েছে। কাল আবার চেষ্টা করুন।")
+        bot.send_message(chat_id, "⚠️ Every account in the pool already liked this target. Try again tomorrow.")
     elif delta == 0:
-        bot.send_message(chat_id, "⚠️ আজ এই UID-তে ইতিমধ্যে লাইক দেওয়া হয়েছে — কাল আবার চেষ্টা করুন।")
+        bot.send_message(chat_id, "⚠️ This UID was already liked today — try again tomorrow.")
     elif delta is not None and 0 < delta < sent:
-        bot.send_message(chat_id, f"⚠️ {sent}টা পাঠানোর চেষ্টা হয়েছে, আসলে গেছে {delta}টা।\n"
-                                  f"❤️ এখন মোট Likes: <b>{likes_after}</b>")
+        bot.send_message(chat_id, f"⚠️ {sent} attempted, actually landed {delta}.\n"
+                                  f"❤️ Total Likes now: <b>{likes_after}</b>")
     elif delta is not None and delta > 0:
-        bot.send_message(chat_id, f"✅ {delta}টা লাইক যোগ হয়েছে!\n"
-                                  f"❤️ এখন মোট Likes: <b>{likes_after}</b>")
+        bot.send_message(chat_id, f"✅ {delta} likes added!\n"
+                                  f"❤️ Total Likes now: <b>{likes_after}</b>")
     else:
-        bot.send_message(chat_id, f"✅ {sent}টা রিকোয়েস্ট সফল। /stats {target} দিয়ে চেক করুন।")
+        bot.send_message(chat_id, f"✅ {sent} requests succeeded. Check /stats {target} to check.")
 
 
 def run_stats_flow(chat_id, target, user):
@@ -216,16 +216,16 @@ def run_stats_flow(chat_id, target, user):
         jwt = pool[0]["token"] if pool else None
         s = ff_bd_api.get_stats(target, jwt)
     except Exception as e:
-        bot.send_message(chat_id, f"❌ এরর: {e}")
+        bot.send_message(chat_id, f"❌ Error: {e}")
         return
     if not s:
-        bot.send_message(chat_id, "❌ প্লেয়ার পাওয়া যায়নি।")
+        bot.send_message(chat_id, "❌ player not found।")
     elif s.get("error"):
         bot.send_message(chat_id, f"❌ {s['error']}")
     else:
         bot.send_message(chat_id,
             f"👤 <b>{s.get('name') or '-'}</b>\n🆔 UID: <code>{s.get('uid')}</code>\n"
-            f"⭐ লেভেল: <b>{s.get('level') or '-'}</b>\n❤️ Likes: <b>{s.get('likes')}</b>")
+            f"⭐ Level: <b>{s.get('level') or '-'}</b>\n❤️ Likes: <b>{s.get('likes')}</b>")
 
 
 def run_profile_flow(chat_id, target, user):
@@ -234,26 +234,26 @@ def run_profile_flow(chat_id, target, user):
         jwt = pool[0]["token"] if pool else None
         p = ff_bd_api.get_profile(target, jwt)
     except Exception as e:
-        bot.send_message(chat_id, f"❌ এরর: {e}")
+        bot.send_message(chat_id, f"❌ Error: {e}")
         return
     if not p or p.get("error"):
-        bot.send_message(chat_id, "❌ প্রোফাইল আনা যায়নি।")
+        bot.send_message(chat_id, "❌ Could not fetch profile.")
         return
     g = p.get("guild")
-    card = ("👤 <b>প্লেয়ার প্রোফাইল</b>\n━━━━━━━━━━━━━━━\n"
-            f"🎯 নাম: <b>{p.get('name') or '-'}</b>\n"
+    card = ("👤 <b>Player Profile</b>\n━━━━━━━━━━━━━━━\n"
+            f"🎯 Name: <b>{p.get('name') or '-'}</b>\n"
             f"🆔 UID: <code>{p.get('uid')}</code>\n"
-            f"🌍 রিজিওন: <b>{p.get('region') or '-'}</b>\n"
-            f"⭐ লেভেল: <b>{p.get('level')}</b>\n"
-            f"❤️ লাইক: <b>{p.get('likes')}</b>\n"
-            f"🛡️ BR র‍্যাঙ্ক: <b>{p.get('br_rank') or 'Unranked'}</b>"
+            f"🌍 Region: <b>{p.get('region') or '-'}</b>\n"
+            f"⭐ Level: <b>{p.get('level')}</b>\n"
+            f"❤️ Likes: <b>{p.get('likes')}</b>\n"
+            f"🛡️ BR Rank: <b>{p.get('br_rank') or 'Unranked'}</b>"
             + (f" ({p.get('br_points')} RP)" if p.get("br_points") else "") + "\n"
-            f"⚔️ CS র‍্যাঙ্ক: <b>{p.get('cs_rank') or 'Unranked'}</b>"
+            f"⚔️ CS Rank: <b>{p.get('cs_rank') or 'Unranked'}</b>"
             + (f" ({p.get('cs_points')}★)" if p.get("cs_points") is not None else "") + "\n")
     if g:
-        card += f"🏛️ গিল্ড: <b>{g.get('name')}</b> ({g.get('members')}/{g.get('capacity')})\n"
+        card += f"🏛️ Guild: <b>{g.get('name')}</b> ({g.get('members')}/{g.get('capacity')})\n"
     if p.get("pet"):
-        card += f"🐾 পেট: {p['pet']['name']} (Lv {p['pet']['level']})\n"
+        card += f"🐾 Pet: {p['pet']['name']} (Lv {p['pet']['level']})\n"
     bot.send_message(chat_id, card)
 
 
@@ -261,7 +261,7 @@ def build_history_text(user_id) -> str:
     hist = _load_json(HISTORY_FILE)
     entries = (hist.get("users") or {}).get(str(user_id), [])
     if not entries:
-        return "📜 আপনার এখনো কোনো লাইক হিস্ট্রি নেই।\n/like বা 💖 বাটন দিয়ে লাইক নিলে এখানে জমা হবে।"
+        return "📜 No like history yet.\nIt will fill up once you use /like or the 💖 button."
     total_req = len(entries)
     total_land = sum(e.get("landed", 0) for e in entries)
     per_uid = {}
@@ -272,12 +272,12 @@ def build_history_text(user_id) -> str:
         u["last"] = max(u["last"], e.get("ts", 0))
     from datetime import datetime, timezone, timedelta
     tz = timezone(timedelta(hours=6))
-    lines = ["📜 <b>আপনার লাইক হিস্ট্রি</b>",
-             f"📦 মোট রিকোয়েস্ট: <b>{total_req}</b> বার",
-             f"❤️ মোট ডেলিভারি: <b>{total_land}</b>টা লাইক", "", "🎯 <b>UID অনুযায়ী:</b>"]
+    lines = ["📜 <b>Your Like History</b>",
+             f"📦 Total requests: <b>{total_req}</b> times",
+             f"❤️ Total delivered: <b>{total_land}</b> likes", "", "🎯 <b>Per UID:</b>"]
     for uid, d in sorted(per_uid.items(), key=lambda x: -x[1]["landed"])[:12]:
         dt = datetime.fromtimestamp(d["last"], tz).strftime("%d-%m %H:%M")
-        lines.append(f"• <code>{uid}</code> — {d['landed']} লাইক ({d['times']} বার, শেষ: {dt})")
+        lines.append(f"• <code>{uid}</code> — {d['landed']} likes ({d['times']} times, last: {dt})")
     return "\n".join(lines)
 
 
@@ -334,27 +334,27 @@ def _persist_admins():
 
 @bot.message_handler(commands=["claim"])
 def cmd_claim(m):
-    """অ্যাডমিন দাবি: /claim <কোড>"""
+    """Admin claim: /claim <code>"""
     if not m.from_user:
         return
     if is_admin(m.from_user.id):
-        bot.reply_to(m, "👑 আপনি এরকমই অ্যাডমিন!")
+        bot.reply_to(m, "👑 You are already an admin!")
         return
     d = _load_admins()
     code = d.get("claim_code", "")
     parts = m.text.split()
     if len(parts) < 2 or parts[1] != code or not code:
-        bot.reply_to(m, "⛔ ভুল কোড। কোড জানলে লিখুন: /claim <কোড>")
+        bot.reply_to(m, "⛔ Wrong code. Usage: /claim <code>")
         return
     uid = str(m.from_user.id)
     admins = d.get("admins", [])
     if uid not in admins:
         admins.append(uid)
     d["admins"] = admins
-    d["claim_code"] = ""  # একবার ব্যবহারের পর কোড নষ্ট
+    d["claim_code"] = ""  # one-time code: cleared after use
     _save_admins(d)
     threading.Thread(target=_persist_admins, daemon=True).start()
-    bot.reply_to(m, "👑 অ্যাডমিন হিসেবে যুক্ত হলেন! এখন /pool, /guests দেখতে পাবেন।")
+    bot.reply_to(m, "👑 You are now an admin! You can use /pool and /guests.")
 
 
 # ── Admin Dashboard / User Analytics ──────────────────────────
@@ -434,11 +434,11 @@ def _bd_date(ts: int) -> str:
 @bot.message_handler(commands=["admin"])
 def cmd_admin(m):
     if not is_admin(m.from_user.id if m.from_user else 0):
-        bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
+        bot.reply_to(m, "⛔ Admin-only command.")
         return
     users = _load_json(USERS_FILE)
     if not users:
-        bot.reply_to(m, "ℹ️ এখনো কোনো ইউজার রেকর্ড হয়নি।")
+        bot.reply_to(m, "ℹ️ No users recorded yet.")
         return
     now = int(time.time())
     today0 = now - ((now + BD_TZ_OFFSET) % 86400)
@@ -463,21 +463,21 @@ def cmd_admin(m):
     lines = [
         "📊 *BOT USER ANALYTICS* (ADMIN PANEL)",
         "━━━━━━━━━━━━━━━━━━",
-        f"👥 মোট মেম্বার: *{total}* জন",
-        f"⚡ আজ যুক্ত হয়েছে: *{today_joined}* জন",
-        f"🟢 অ্যাক্টিভ ইউজার (৭ দিন): *{active}* জন",
-        f"🔴 ইনঅ্যাক্টিভ: *{inactive}* জন",
+        f"👥 Total members: *{total}* users",
+        f"⚡ Joined today: *{today_joined}* users",
+        f"🟢 Active users (7d): *{active}* users",
+        f"🔴 Inactive: *{inactive}* users",
         "━━━━━━━━━━━━━━━━━━",
-        f"❤️ মোট লাইক ডেলিভারি: *{tot_land}*",
-        f"🔄 মোট লাইক রিকোয়েস্ট: *{tot_req}*",
+        f"❤️ Total likes delivered: *{tot_land}*",
+        f"🔄 Total like requests: *{tot_req}*",
     ]
     if top:
-        lines.append("🏆 *টপ ইউজার*:")
+        lines.append("🏆 *Top users*:")
         for i, (uid, (landed, nm)) in enumerate(top, 1):
-            lines.append(f"  {i}. {nm} — {landed} লাইক")
+            lines.append(f"  {i}. {nm} — {landed} likes")
     import datetime
     lines.append("━━━━━━━━━━━━━━━━━━")
-    lines.append("📅 সর্বশেষ আপডেট: " +
+    lines.append("📅 Last updated: " +
                  datetime.datetime.fromtimestamp(now + BD_TZ_OFFSET, datetime.timezone.utc).strftime("%d-%m-%Y %I:%M %p"))
     bot.reply_to(m, "\n".join(lines))
 
@@ -485,18 +485,18 @@ def cmd_admin(m):
 @bot.message_handler(commands=["broadcast"])
 def cmd_broadcast(m):
     if not is_admin(m.from_user.id if m.from_user else 0):
-        bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
+        bot.reply_to(m, "⛔ Admin-only command.")
         return
     parts = m.text.split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
-        bot.reply_to(m, "⚠️ লিখুন: <code>/broadcast আপনার মেসেজ</code>")
+        bot.reply_to(m, "⚠️ Usage: <code>/broadcast your message</code>")
         return
     text = parts[1].strip()
     users = _load_json(USERS_FILE)
     if not users:
-        bot.reply_to(m, "ℹ️ ইউজার ডেটাবেস খালি।")
+        bot.reply_to(m, "ℹ️ User database is empty.")
         return
-    msg = bot.reply_to(m, f"📢 ব্রডকাস্ট শুরু... (মোট {len(users)} জন)")
+    msg = bot.reply_to(m, f"📢 Broadcast started... (total {len(users)} users)")
 
     def do_bc():
         ok = fail = 0
@@ -519,7 +519,7 @@ def cmd_broadcast(m):
         except Exception:
             pass
         try:
-            bot.edit_message_text(f"✅ ব্রডকাস্ট শেষ!\n📬 সফল: {ok}\n❌ ফেইল: {fail}",
+            bot.edit_message_text(f"✅ Broadcast done!\n📬 Success: {ok}\n❌ Failed: {fail}",
                                   msg.chat.id, msg.message_id)
         except Exception:
             pass
@@ -530,11 +530,11 @@ def cmd_broadcast(m):
 @bot.message_handler(commands=["export_users"])
 def cmd_export_users(m):
     if not is_admin(m.from_user.id if m.from_user else 0):
-        bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
+        bot.reply_to(m, "⛔ Admin-only command.")
         return
     users = _load_json(USERS_FILE)
     if not users:
-        bot.reply_to(m, "ℹ️ ইউজার ডেটাবেস খালি।")
+        bot.reply_to(m, "ℹ️ User database is empty.")
         return
     lines = ["user_id | name | username | joined | last_seen | active"]
     for uid, u in sorted(users.items(), key=lambda kv: kv[1].get("joined_at", 0)):
@@ -544,7 +544,7 @@ def cmd_export_users(m):
     import io
     bio = io.BytesIO(("\n".join(lines)).encode("utf-8"))
     bio.name = "users.txt"
-    bot.send_document(m.chat.id, bio, caption=f"📋 মোট {len(users)} ইউজার")
+    bot.send_document(m.chat.id, bio, caption=f"📋 Total {len(users)} users")
 
 
 def reminder_loop():
@@ -559,9 +559,9 @@ def reminder_loop():
                     try:
                         kb = types.InlineKeyboardMarkup()
                         kb.add(types.InlineKeyboardButton(
-                            "🔥 লাইক নিন", callback_data=f"like:{info['uid']}"))
+                            "🔥 Get Likes", callback_data=f"like:{info['uid']}"))
                         bot.send_message(int(uid),
-                            f"🔔 <b>আজকের ফ্রি লাইক দাবি করতে ক্লিক করুন!</b>\n"
+                            f"🔔 <b>Tap to claim today's free likes!</b>\n"
                             f"UID: <code>{info['uid']}</code>", reply_markup=kb)
                         info["remind_at"] = now + 24 * 3600
                         changed = True
@@ -600,7 +600,7 @@ def health_loop():
                 total_dead = ff_bd_api.add_dead(dead_ids)
                 print(f"[health] dropped {dropped} cached, {len(dead_ids)} dead this cycle, blacklist={total_dead}")
                 threading.Thread(target=persist_usage_github, daemon=True).start()
-            # অটো-রিকভারি: হেলদি পুল কমে গেলে নিজের অ্যাকাউন্ট রি-মিন্ট
+            # auto-recovery: re-mint own accounts when healthy pool runs low
             pool = ff_bd_api.get_pool()
             if len(pool) < 30:
                 print("[health] pool low, forcing re-mint")
@@ -610,7 +610,7 @@ def health_loop():
                     print("[health] re-mint failed:", e)
         except Exception as e:
             print("[health] loop error:", e)
-        time.sleep(1200)  # প্রতি ২০ মিনিটে এক সাইকেল
+        time.sleep(1200)  # one cycle every 20 minutes
 
 
 # ── Smart Spam Shield ────────────────────────────────────────
@@ -691,14 +691,14 @@ def wrap_with_guard(fn):
                 nm = uu.first_name or str(uu.id)
                 threading.Thread(
                     target=notify_admins,
-                    args=(f"🎉 নতুন ইউজার জয়েন করেছে!\n👤 {nm}\n🆔 {uu.id}",),
+                    args=(f"🎉 New user joined!\n👤 {nm}\n🆔 {uu.id}",),
                     daemon=True,
                 ).start()
         except Exception:
             pass
         left = _spam_guard(m.from_user.id)
         if left:
-            _spamsafe_reply(m, f"⏳ অনেক দ্রুত কমান্ড দিচ্ছেন! অনুগ্রহ করে *{left} সেকেন্ড* অপেক্ষা করুন।")
+            _spamsafe_reply(m, f"⏳ Too many commands! Please wait *{left} seconds*.")
             return None
         return fn(m, *a, **kw)
     return guarded
@@ -709,7 +709,7 @@ def wrap_callback_with_guard(fn):
         left = _spam_guard(c.from_user.id)
         if left:
             try:
-                bot.answer_callback_query(c.id, f"⏳ {left} সেকেন্ড অপেক্ষা করুন!")
+                bot.answer_callback_query(c.id, f"⏳ Wait {left} seconds!")
             except Exception:
                 pass
             return None
@@ -728,16 +728,16 @@ def install_guard():
 def cmd_myid(m):
     left = MUTES.get(m.from_user.id, 0) - time.time()
     lines = [
-        "🆔 *আপনার তথ্য*",
+        "🆔 *Your Info*",
         f"Telegram ID: `{m.from_user.id}`",
-        f"নাম: {m.from_user.first_name or '-'}",
+        f"Name: {m.from_user.first_name or '-'}",
     ]
     if m.from_user.id in ADMIN_IDS:
-        lines.append("👑 স্ট্যাটাস: অ্যাডমিন (সব লিমিট মুক্ত)")
+        lines.append("👑 Status: admin (all limits free)")
     else:
-        lines.append(f"🔒 মিউট: {'হ্যাঁ, ' + str(int(left)) + ' সেকেন্ড বাকি' if left > 0 else 'নেই'}")
+        lines.append(f"🔒 Mute: {'yes, ' + str(int(left)) + ' seconds left' if left > 0 else 'none'}")
         cd = USER_LIKE_CD.get(m.from_user.id, 0) - time.time()
-        lines.append(f"❤️ লাইক কুলডাউন: {str(int(cd)) + ' সেকেন্ড' if cd > 0 else 'প্রস্তুত'}")
+        lines.append(f"❤️ Like cooldown: {str(int(cd)) + ' seconds' if cd > 0 else 'ready'}")
     bot.reply_to(m, "\n".join(lines))
 
 
@@ -745,58 +745,58 @@ def cmd_myid(m):
 def build_welcome_kb():
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
-        types.InlineKeyboardButton("💖 লাইক নিন", callback_data="menu:like"),
-        types.InlineKeyboardButton("⚙️ UID সেট করুন", callback_data="menu:setuid"),
+        types.InlineKeyboardButton("💖 Get Likes", callback_data="menu:like"),
+        types.InlineKeyboardButton("⚙️ Set UID", callback_data="menu:setuid"),
     )
-    kb.add(types.InlineKeyboardButton("📊 আমার প্রোফাইল", callback_data="menu:profile"))
+    kb.add(types.InlineKeyboardButton("📊 My Profile", callback_data="menu:profile"))
     return kb
 
 
 def cmd_start(m):
-    # নতুন ইউজার হলে অ্যাকাউন্ট-ক্রিয়েট ওয়েলকাম, পুরোনো হলে welcome-back
+    # welcome message for new vs returning users
     is_new = getattr(m, "_ff_new_user", False)
     if is_new:
         u = m.from_user
         reg_date = _bd_date(time.time())
         bot.reply_to(m,
-            f"👋 স্বাগতম, <b>{u.first_name or 'Player'}!</b>\n\n"
-            f"🎉 আপনার অ্যাকাউন্ট সফলভাবে তৈরি হয়েছে!\n"
+            f"👋 Welcome, <b>{u.first_name or 'Player'}!</b>\n\n"
+            f"🎉 Your account has been created!\n"
             f"🆔 Account ID: <code>{u.id}</code>\n"
             f"📅 Registration Date: {reg_date}\n"
-            f"❤️ ফ্রি লাইক: <b>আনলিমিটেড</b>\n\n"
-            f"💡 ব্যবহার শুরু করতে আপনার Free Fire UID সেট করুন, "
-            f"অথবা নিচের বাটনে ক্লিক করুন 👇",
+            f"❤️ Free likes: <b>Unlimited</b>\n\n"
+            f"💡 To get started, set your Free Fire UID "
+            f"or tap a button below 👇",
             reply_markup=build_welcome_kb())
         return
-    # রেফার পেলোড হ্যান্ডেল: /start ref<referrer_id>
+    # referral payload: /start ref<referrer_id>
     ref_greet = ""
     parts = m.text.split(maxsplit=1)
     if len(parts) > 1 and parts[1].startswith("ref") and parts[1][3:].isdigit():
         try:
             record_referral(int(parts[1][3:]))
-            ref_greet = "\n🎁 আপনি রেফার করে এসেছেন — স্বাগতম!"
+            ref_greet = "\n🎁 Welcome — you joined via a referral!"
         except Exception:
             pass
     bot.reply_to(m,
         "<b>🔥 FF BD Bot</b>\n\n"
-        "নিচের বাটন থেকে এক ক্লিকে সব কাজ করুন:\n\n"
-        "<b>/stats</b> <code>UID</code> — প্লেয়ার প্রোফাইল (নাম, লাইক)\n"
-        "<b>/like</b> <code>UID [count]</code> — লাইক পাঠান\n"
-        "<b>/profile</b> <code>UID</code> — ফুল প্লেয়ার কার্ড (লেভেল, র‍্যাঙ্ক, গিল্ড)\n"
-        "<b>/setuid</b> <code>UID</code> — আপনার UID সেভ করুন (সব কমান্ডে অটো ব্যবহৃত)\n"
-        "<b>/myuid</b> — সেভ করা UID দেখুন / বদলান\n"
-        "<b>/stopremind</b> — রিমাইন্ডার বন্ধ\n"
-        "<b>/history</b> — আপনার লাইক হিস্ট্রি\n"
-        "<b>/referrals</b> — আপনার রেফার কাউন্ট\n"
-        "<b>/myid</b> — আপনার ID ও কুলডাউন স্ট্যাটাস\n"
-        "<b>/guildlike</b> <code>GUILD_ID [count]</code> — গিল্ড মেম্বারদের লাইক\n"
-        "<b>/setguild</b> <code>GUILD_ID</code> — আপনার গিল্ড সেভ করুন"
-        + ("\n\n👑 <b>অ্যাডমিন কমান্ড</b>\n"
-           "<b>/pool</b> — লাইক পুল স্ট্যাটাস\n"
-           "<b>/guests</b> — গেস্ট অ্যাকাউন্ট স্ট্যাটাস\n"
-           "<b>/admin</b> — 📊 ইউজার অ্যানালিটিক্স ড্যাশবোর্ড\n"
-           "<b>/broadcast</b> <code>msg</code> — সবাইকে মেসেজ পাঠান\n"
-           "<b>/export_users</b> — ইউজার লিস্ট ফাইল"
+        "Everything works with one tap of the buttons below:\n\n"
+        "<b>/stats</b> <code>UID</code> — player profile (name, likes)\n"
+        "<b>/like</b> <code>UID [count]</code> — send likes\n"
+        "<b>/profile</b> <code>UID</code> — full player card (level, rank, guild)\n"
+        "<b>/setuid</b> <code>UID</code> — save your UID (auto-used in all commands)\n"
+        "<b>/myuid</b> — view / change your saved UID\n"
+        "<b>/stopremind</b> — disable the reminder\n"
+        "<b>/history</b> — your like history\n"
+        "<b>/referrals</b> — your referral count\n"
+        "<b>/myid</b> — your ID and cooldown status\n"
+        "<b>/guildlike</b> <code>GUILD_ID [count]</code> — like guild members\n"
+        "<b>/setguild</b> <code>GUILD_ID</code> — save your guild"
+        + ("\n\n👑 <b>Admin Commands</b>\n"
+           "<b>/pool</b> — like pool status\n"
+           "<b>/guests</b> — guest account status\n"
+           "<b>/admin</b> — 📊 user analytics dashboard\n"
+           "<b>/broadcast</b> <code>msg</code> — message everyone\n"
+           "<b>/export_users</b> — user list export"
            if is_admin(m.from_user.id if m.from_user else 0) else "")
         + ref_greet,
         reply_markup=build_menu())
@@ -809,16 +809,16 @@ def cb_uid_actions(c):
     if act == "change":
         PENDING[user_id] = ("setuid", time.time())
         bot.answer_callback_query(c.id)
-        bot.send_message(c.message.chat.id, "✏️ নতুন UID নম্বর পাঠান (শুধু নম্বর):")
+        bot.send_message(c.message.chat.id, "✏️ Send your new UID (numbers only):")
     elif act == "clear":
         cancel_reminder(user_id)
         update_user(user_id, saved_uid="")
-        bot.answer_callback_query(c.id, "🗑️ UID মুছে ফেলা হয়েছে")
+        bot.answer_callback_query(c.id, "🗑️ UID deleted")
         try:
-            bot.edit_message_text("🗑️ আপনার সেভ করা UID মুছে ফেলা হয়েছে।\n"
-                                  "আবার সেট করতে: /setuid <UID>", c.message.chat.id, c.message.message_id)
+            bot.edit_message_text("🗑️ Your saved UID was deleted.\n"
+                                  "Set again: /setuid <UID>", c.message.chat.id, c.message.message_id)
         except Exception:
-            bot.send_message(c.message.chat.id, "🗑️ সেভ করা UID মুছে ফেলা হয়েছে।")
+            bot.send_message(c.message.chat.id, "🗑️ Saved UID deleted.")
 
 
 @bot.message_handler(commands=["stats"])
@@ -831,18 +831,18 @@ def cmd_stats(m):
         if saved:
             uid = int(saved)
         else:
-            bot.reply_to(m, "⚠️ আপনার কোনো UID সেভ করা নেই!\n"
-                             "<code>/setuid &lt;UID&gt;</code> লিখে আগে সেভ করুন\n"
-                             "অথবা <code>/stats &lt;UID&gt;</code> ব্যবহার করুন।")
+            bot.reply_to(m, "⚠️ No saved UID!\n"
+                             "First save it: <code>/setuid &lt;UID&gt;</code>\n"
+                             "or use <code>/stats &lt;UID&gt;</code>.")
             return
-    msg = bot.reply_to(m, "🔄 খোঁজা হচ্ছে...")
+    msg = bot.reply_to(m, "🔄 Searching...")
     try:
         s = ff_bd_api.get_stats(uid)
     except Exception as e:
-        bot.edit_message_text(f"❌ এরর: {e}", msg.chat.id, msg.message_id)
+        bot.edit_message_text(f"❌ Error: {e}", msg.chat.id, msg.message_id)
         return
     if not s or s.get("error"):
-        bot.edit_message_text(f"❌ {s.get('error') if s else 'এরর'}\nUID ঠিক আছে? BD সার্ভারের প্লেয়ার তো?",
+        bot.edit_message_text(f"❌ {s.get('error') if s else 'error'}\nIs the UID correct? A BD-server player?",
                              msg.chat.id, msg.message_id)
         return
     bot.edit_message_text(
@@ -856,7 +856,7 @@ def cmd_stats(m):
 def cmd_like(m):
     ok, wait = _like_slot_free(m.from_user.id)
     if not ok:
-        _spamsafe_reply(m, f"⏳ লাইক সিস্টেম এখন ব্যস্ত / কুলডাউনে আছে। *{wait} সেকেন্ড* পরে আবার চেষ্টা করুন।")
+        _spamsafe_reply(m, f"⏳ Like system is busy / cooling down. *{wait} seconds*, then try again.")
         return
     parts = m.text.split()
     if len(parts) > 1 and parts[1].isdigit():
@@ -866,9 +866,9 @@ def cmd_like(m):
         if saved:
             target = int(saved)
         else:
-            bot.reply_to(m, "⚠️ আপনার কোনো UID সেভ করা নেই!\n"
-                             "<code>/setuid &lt;UID&gt;</code> লিখে আগে সেভ করুন\n"
-                             "অথবা <code>/like &lt;UID&gt;</code> ব্যবহার করুন।")
+            bot.reply_to(m, "⚠️ No saved UID!\n"
+                             "First save it: <code>/setuid &lt;UID&gt;</code>\n"
+                             "or use <code>/like &lt;UID&gt;</code>.")
             return
     try:
         pool_size = len(ff_bd_api.get_pool())
@@ -876,11 +876,11 @@ def cmd_like(m):
         pool_size = MAX_LIKES_PER_REQUEST
     count = min(int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else pool_size,
                 MAX_LIKES_PER_REQUEST)
-    msg = bot.reply_to(m, f"🔄 {target} কে {count}টা লাইক পাঠানো হচ্ছে...")
+    msg = bot.reply_to(m, f"🔄 {target} → {count} likes being sent...")
     usage = load_usage()
     with USAGE_LOCK:
         used = set(tuple(k) for k in usage.get("used_pairs", []))
-    # আগের লাইক কাউন্ট
+    # like count before
     try:
         s0 = ff_bd_api.get_stats(target)
         likes_before = s0.get("likes") if s0 else None
@@ -889,13 +889,13 @@ def cmd_like(m):
     try:
         sent = ff_bd_api.send_like(target, count=count, used=used)
     except Exception as e:
-        bot.edit_message_text(f"❌ এরর: {e}", msg.chat.id, msg.message_id)
+        bot.edit_message_text(f"❌ Error: {e}", msg.chat.id, msg.message_id)
         return
     with USAGE_LOCK:
         usage["used_pairs"] = [list(k) for k in used]
         save_usage(usage)
     threading.Thread(target=persist_usage_github, daemon=True).start()
-    # পরের লাইক কাউন্ট
+    # like count after
     time.sleep(3)
     try:
         s1 = ff_bd_api.get_stats(target)
@@ -904,28 +904,28 @@ def cmd_like(m):
         likes_after = None
 
     if sent == 0:
-        bot.edit_message_text("⚠️ পুলের সব অ্যাকাউন্ট এই টার্গেটে লাইক দিয়ে দিয়েছে। পরে আবার চেষ্টা করুন।",
+        bot.edit_message_text("⚠️ Every account in the pool already liked this target. Try again later.",
                               msg.chat.id, msg.message_id)
         return
     delta = None
     if isinstance(likes_before, int) and isinstance(likes_after, int):
         delta = likes_after - likes_before
     if delta == 0:
-        text = ("❌ লাইক যায়নি — সার্ভারে কাউন্ট বাড়েনি "
-                f"(আগে {likes_before}, এখনো {likes_after})।\n"
-                "সাধারণ কারণ: পুলের অ্যাকাউন্টগুলো আগেই এই প্রোফাইলে লাইক দিয়েছে, "
-                "আর এক অ্যাকাউন্ট এক প্রোফাইলে একবারই লাইক দিতে পারে।")
+        text = ("❌ Like did not land — server count did not increase "
+                f"(before {likes_before}, still {likes_after})।\n"
+                "Common reason: pool accounts already liked this profile; "
+                "one account can like a profile only once.")
     elif delta is not None and delta < sent:
-        text = (f"⚠️ {sent}টা পাঠানোর চেষ্টা হয়েছে, আসলে গেছে {delta}টা।\n"
-                f"❤️ এখন মোট Likes: <b>{likes_after}</b>")
+        text = (f"⚠️ {sent} attempted, actually landed {delta}.\n"
+                f"❤️ Total Likes now: <b>{likes_after}</b>")
     elif delta is not None:
-        text = (f"✅ {delta}টা লাইক যোগ হয়েছে!\n"
-                f"❤️ এখন মোট Likes: <b>{likes_after}</b>")
+        text = (f"✅ {delta} likes added!\n"
+                f"❤️ Total Likes now: <b>{likes_after}</b>")
     else:
-        text = (f"✅ {sent}টা রিকোয়েস্ট সফল হয়েছে, তবে ভেরিফাই করা গেল না।\n"
-                f"/stats {target} দিয়ে নিজে চেক করুন।")
+        text = (f"✅ {sent} requests succeeded, but verification failed.\n"
+                f"/stats {target} to check yourself.")
     bot.edit_message_text(text, msg.chat.id, msg.message_id)
-    # হিস্ট্রি + অটো রিমাইন্ডার
+    # history + auto reminder
     try:
         record_history(m.from_user.id, m.from_user.first_name or "",
                        target, count, delta if isinstance(delta, int) and delta > 0 else sent)
@@ -946,58 +946,58 @@ def cmd_profile(m):
         if saved:
             target = int(saved)
         else:
-            bot.reply_to(m, "⚠️ আপনার কোনো UID সেভ করা নেই!\n"
-                             "<code>/setuid &lt;UID&gt;</code> লিখে আগে সেভ করুন\n"
-                             "অথবা <code>/profile &lt;UID&gt;</code> ব্যবহার করুন।")
+            bot.reply_to(m, "⚠️ No saved UID!\n"
+                             "First save it: <code>/setuid &lt;UID&gt;</code>\n"
+                             "or use <code>/profile &lt;UID&gt;</code>.")
             return
-    msg = bot.reply_to(m, "🔍 প্রোফাইল আনা হচ্ছে...")
+    msg = bot.reply_to(m, "🔍 Fetching profile...")
     try:
         pool = ff_bd_api.get_pool()
         jwt = pool[0]["token"] if pool else None
         p = ff_bd_api.get_profile(target, jwt)
     except Exception as e:
-        bot.edit_message_text(f"❌ এরর: {e}", msg.chat.id, msg.message_id)
+        bot.edit_message_text(f"❌ Error: {e}", msg.chat.id, msg.message_id)
         return
     if not p or p.get("error"):
-        err = (p or {}).get("error", "প্লেয়ার পাওয়া যায়নি")
-        bot.edit_message_text(f"❌ প্রোফাইল আনা যায়নি: {err}", msg.chat.id, msg.message_id)
+        err = (p or {}).get("error", "player not found")
+        bot.edit_message_text(f"❌ Could not fetch profile: {err}", msg.chat.id, msg.message_id)
         return
     import time as _t
     age = ""
     if p.get("create_at"):
         days = int((_t.time() - p["create_at"]) / 86400)
-        age = f" ({days} দিন আগে)"
+        age = f" ({days} days ago)"
     region = p.get("region") or "-"
     card = (
-        "👤 <b>প্লেয়ার প্রোফাইল</b>\n"
+        "👤 <b>Player Profile</b>\n"
         "━━━━━━━━━━━━━━━\n"
-        f"🎯 নাম: <b>{p.get('name') or '-'}</b>\n"
+        f"🎯 Name: <b>{p.get('name') or '-'}</b>\n"
         f"🆔 UID: <code>{p.get('uid')}</code>\n"
-        f"🌍 রিজিওন: <b>{region}</b>  |  🎮 {p.get('release_version') or '-'}\n"
+        f"🌍 Region: <b>{region}</b>  |  🎮 {p.get('release_version') or '-'}\n"
         "━━━━━━━━━━━━━━━\n"
-        f"⭐ লেভেল: <b>{p.get('level')}</b>  (EXP: {p.get('exp')})\n"
-        f"❤️ লাইক: <b>{p.get('likes')}</b>\n"
-        f"🛡️ BR র‍্যাঙ্ক: <b>{p.get('br_rank') or 'Unranked'}</b>"
+        f"⭐ Level: <b>{p.get('level')}</b>  (EXP: {p.get('exp')})\n"
+        f"❤️ Likes: <b>{p.get('likes')}</b>\n"
+        f"🛡️ BR Rank: <b>{p.get('br_rank') or 'Unranked'}</b>"
         + (f" ({p.get('br_points')} RP)" if p.get("br_points") else "") + "\n"
-        f"⚔️ CS র‍্যাঙ্ক: <b>{p.get('cs_rank') or 'Unranked'}</b>"
+        f"⚔️ CS Rank: <b>{p.get('cs_rank') or 'Unranked'}</b>"
         + (f" ({p.get('cs_points')}★)" if p.get("cs_points") is not None else "") + "\n"
     )
     g = p.get("guild")
     if g:
         card += "━━━━━━━━━━━━━━━\n"
-        card += f"🏛️ গিল্ড: <b>{g.get('name')}</b>\n"
-        card += f"   Lv {g.get('level')} | 👥 {g.get('members')}/{g.get('capacity')} মেম্বার\n"
+        card += f"🏛️ Guild: <b>{g.get('name')}</b>\n"
+        card += f"   Lv {g.get('level')} | 👥 {g.get('members')}/{g.get('capacity')} members\n"
     else:
-        card += "🏛️ গিল্ড: নেই\n"
+        card += "🏛️ Guild: none\n"
     extras = []
     if p.get("pet"):
-        extras.append(f"🐾 পেট: {p['pet']['name']} (Lv {p['pet']['level']})")
+        extras.append(f"🐾 Pet: {p['pet']['name']} (Lv {p['pet']['level']})")
     if p.get("credit_score") is not None:
-        extras.append(f"💯 ক্রেডিট স্কোর: {p['credit_score']}")
+        extras.append(f"💯 Credit score: {p['credit_score']}")
     if extras:
         card += "━━━━━━━━━━━━━━━\n" + "\n".join(extras) + "\n"
     if age:
-        card += f"📅 অ্যাকাউন্ট বয়স{age}\n"
+        card += f"📅 Account age{age}\n"
     bot.edit_message_text(card, msg.chat.id, msg.message_id)
 
 @bot.message_handler(commands=["myuid"])
@@ -1010,25 +1010,25 @@ def cmd_myuid(m):
 def cmd_setuid(m):
     parts = m.text.split()
     if len(parts) < 2 or not parts[1].isdigit():
-        bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/setuid 18328637549</code>")
+        bot.reply_to(m, "⚠️ Correct format: <code>/setuid 18328637549</code>")
         return
     target = parts[1]
     set_reminder(m.from_user.id, m.from_user.first_name or "", target, 24 * 3600)
     update_user(m.from_user.id, saved_uid=target)
     threading.Thread(target=persist_usage_github, daemon=True).start()
-    bot.reply_to(m, "✅ আপনার UID (<code>" + target + "</code>) সফলভাবে সেভ করা হয়েছে!\n"
-                     "এখন থেকে যেকোনো কমান্ড দিলে এই UID-তেই কাজ করবে।\n\n"
-                     "⏰ প্রতিদিন ২৪ ঘণ্টা পর আমি নিজে থেকেই রিমাইন্ডার পাঠাবো — "
-                     "\"আজকের ফ্রি লাইক দাবি করতে ক্লিক করুন!\"\n"
-                     "বন্ধ করতে: /stopremind")
+    bot.reply_to(m, "✅ Your UID (<code>" + target + "</code>) saved successfully!\n"
+                     "Every command will now run on this UID.\n\n"
+                     "⏰ I will send a daily reminder every 24h — "
+                     "\"Claim your daily free likes!\"\n"
+                     "Disable: /stopremind")
 
 
 @bot.message_handler(commands=["stopremind"])
 def cmd_stopremind(m):
     if cancel_reminder(m.from_user.id):
-        bot.reply_to(m, "✅ অটো রিমাইন্ডার বন্ধ করা হয়েছে। আবার চালু করতে /setuid দিন।")
+        bot.reply_to(m, "✅ Auto-reminder disabled. Use /setuid to enable again.")
     else:
-        bot.reply_to(m, "ℹ️ আপনার কোনো রিমাইন্ডার সেট করা নেই।")
+        bot.reply_to(m, "ℹ️ You have no reminder set.")
 
 
 @bot.message_handler(commands=["history"])
@@ -1036,8 +1036,8 @@ def cmd_history(m):
     hist = _load_json(HISTORY_FILE)
     entries = (hist.get("users") or {}).get(str(m.from_user.id), [])
     if not entries:
-        bot.reply_to(m, "📜 আপনার এখনো কোনো লাইক হিস্ট্রি নেই।\n"
-                        "/like দিয়ে লাইক নিলে এখানে জমা হবে।")
+        bot.reply_to(m, "📜 No like history yet.\n"
+                        "It will fill up once you use /like.")
         return
     total_req = sum(e.get("requested", 0) for e in entries)
     total_land = sum(e.get("landed", 0) for e in entries)
@@ -1047,15 +1047,15 @@ def cmd_history(m):
         u["landed"] += e.get("landed", 0)
         u["times"] += 1
         u["last"] = max(u["last"], e.get("ts", 0))
-    lines = [f"📜 <b>আপনার লাইক হিস্ট্রি</b>",
-             f"📦 মোট রিকোয়েস্ট: <b>{len(entries)}</b> বার",
-             f"❤️ মোট ডেলিভারি: <b>{total_land}</b>টা লাইক",
-             "", "🎯 <b>UID অনুযায়ী:</b>"]
+    lines = [f"📜 <b>Your Like History</b>",
+             f"📦 Total requests: <b>{len(entries)}</b> times",
+             f"❤️ Total delivered: <b>{total_land}</b> likes",
+             "", "🎯 <b>Per UID:</b>"]
     from datetime import datetime, timezone, timedelta
     tz = timezone(timedelta(hours=6))
     for uid, d in sorted(per_uid.items(), key=lambda x: -x[1]["landed"])[:12]:
         dt = datetime.fromtimestamp(d["last"], tz).strftime("%d-%m %H:%M")
-        lines.append(f"• <code>{uid}</code> — {d['landed']} লাইক ({d['times']} বার, শেষ: {dt})")
+        lines.append(f"• <code>{uid}</code> — {d['landed']} likes ({d['times']} times, last: {dt})")
     bot.reply_to(m, "\n".join(lines))
 
 
@@ -1063,9 +1063,9 @@ def cmd_history(m):
 def cb_like(c):
     target = c.data.split(":", 1)[1]
     if not target.isdigit():
-        bot.answer_callback_query(c.id, "⚠️ অবৈধ UID")
+        bot.answer_callback_query(c.id, "⚠️ Invalid UID")
         return
-    bot.answer_callback_query(c.id, "⏳ লাইক পাঠানো হচ্ছে...")
+    bot.answer_callback_query(c.id, "⏳ sending likes...")
     try:
         pool_size = len(ff_bd_api.get_pool())
     except Exception:
@@ -1078,7 +1078,7 @@ def cb_like(c):
         likes_before = s0.get("likes") if s0 else None
         sent = ff_bd_api.send_like(int(target), count=pool_size, used=used)
     except Exception as e:
-        bot.send_message(c.message.chat.id, f"❌ এরর: {e}")
+        bot.send_message(c.message.chat.id, f"❌ Error: {e}")
         return
     with USAGE_LOCK:
         usage["used_pairs"] = [list(k) for k in used]
@@ -1100,19 +1100,19 @@ def cb_like(c):
         pass
     if delta and delta > 0:
         bot.send_message(c.message.chat.id,
-            f"✅ {delta}টা লাইক যোগ হয়েছে!\n❤️ এখন মোট Likes: <b>{likes_after}</b>")
+            f"✅ {delta} likes added!\n❤️ Total Likes now: <b>{likes_after}</b>")
     elif delta == 0:
         bot.send_message(c.message.chat.id,
-            "⚠️ আজ এই UID-তে ইতিমধ্যে লাইক দেওয়া হয়েছে — কাল আবার চেষ্টা করুন।")
+            "⚠️ This UID was already liked today — try again tomorrow.")
     else:
         bot.send_message(c.message.chat.id,
-            f"✅ {sent}টা রিকোয়েস্ট গেছে। /stats {target} দিয়ে চেক করুন।")
+            f"✅ {sent} requests sent. Check /stats {target} to check.")
 
 
 @bot.message_handler(func=lambda m: m.text and not m.text.startswith("/")
                              and m.text.strip().isdigit() and len(m.text.strip()) <= 12)
 def cmd_plain_uid(m):
-    """যখন ইউজার শুধু নম্বর পাঠায় (বাটনের পর) — সেটা UID ধরে কাজ করি।"""
+    """User sent only a number (after a button) — treat it as UID."""
     uid = m.text.strip()
     user_id = m.from_user.id
     LAST_UID[user_id] = uid
@@ -1120,7 +1120,7 @@ def cmd_plain_uid(m):
     saved = get_saved_uid(user_id)
     if action:
         if action[0] == "like":
-            bot.reply_to(m, f"🔄 {uid} কে লাইক পাঠানো হচ্ছে...")
+            bot.reply_to(m, f"🔄 {uid} → sending likes...")
             run_like_flow(m.chat.id, int(uid), m.from_user)
         elif action[0] == "stats":
             run_stats_flow(m.chat.id, int(uid), m.from_user)
@@ -1137,24 +1137,24 @@ def cmd_plain_uid(m):
             rem[str(user_id)] = e
             _save_json(REMINDERS_FILE, rem)
             threading.Thread(target=persist_usage_github, daemon=True).start()
-            bot.reply_to(m, f"✅ Guild ID (<code>{uid}</code>) সেভ হয়েছে!\n"
-                            "এখন [🏰 My Guild] বাটনে টিপলেই গিল্ড লাইক যাবে।")
+            bot.reply_to(m, f"✅ Guild ID (<code>{uid}</code>) saved!\n"
+                            "The [🏰 My Guild] button will now like your guild.")
         elif action[0] == "setuid":
             set_reminder(user_id, m.from_user.first_name or "", uid, 24 * 3600)
             update_user(user_id, saved_uid=uid)
             threading.Thread(target=persist_usage_github, daemon=True).start()
-            bot.reply_to(m, f"✅ আপনার UID (<code>{uid}</code>) সফলভাবে সেভ করা হয়েছে!\n"
-                            "এখন থেকে যেকোনো কমান্ড দিলে এই UID-তেই কাজ করবে।",
+            bot.reply_to(m, f"✅ Your UID (<code>{uid}</code>) saved successfully!\n"
+                            "Every command will now run on this UID.",
                         reply_markup=build_menu())
         return
     if saved:
-        bot.reply_to(m, f"🔄 আপনার সেভ করা UID ({saved}) কে লাইক পাঠানো হচ্ছে...\n"
-                        f"অন্য UID-তে লাইক চাইলে: /like {uid}")
+        bot.reply_to(m, f"🔄 Sending likes to your saved UID ({saved})...\n"
+                        f"For a different UID: /like {uid}")
         run_like_flow(m.chat.id, int(saved), m.from_user)
     else:
         PENDING[user_id] = ("like", time.time())
-        bot.reply_to(m, f"✅ UID পেলাম: <code>{uid}</code>\n"
-                        f"কী করতে চান? নিচের বাটন থেকে বাছুন 👇",
+        bot.reply_to(m, f"✅ Got it — UID: <code>{uid}</code>\n"
+                        f"Pick what you want from the buttons below 👇",
                     reply_markup=build_menu())
 
 
@@ -1167,11 +1167,11 @@ def cb_menu(c):
         bot.answer_callback_query(c.id)
         target = saved or LAST_UID.get(user_id)
         if target and str(target).isdigit():
-            bot.send_message(c.message.chat.id, f"🔄 {target} কে লাইক পাঠানো হচ্ছে...")
+            bot.send_message(c.message.chat.id, f"🔄 {target} → sending likes...")
             run_like_flow(c.message.chat.id, int(target), c.from_user)
         else:
             PENDING[user_id] = ("like", time.time())
-            bot.send_message(c.message.chat.id, "🎯 আপনার গেমের UID নম্বরটা পাঠান (শুধু নম্বর)")
+            bot.send_message(c.message.chat.id, "🎯 Send your game UID (numbers only)")
     elif act == "stats":
         bot.answer_callback_query(c.id)
         target = saved or LAST_UID.get(user_id)
@@ -1179,7 +1179,7 @@ def cb_menu(c):
             run_stats_flow(c.message.chat.id, int(target), c.from_user)
         else:
             PENDING[user_id] = ("stats", time.time())
-            bot.send_message(c.message.chat.id, "📊 কার স্ট্যাটাস দেখবো? UID নম্বর পাঠান")
+            bot.send_message(c.message.chat.id, "📊 Whose stats? Send a UID")
     elif act == "profile":
         bot.answer_callback_query(c.id)
         target = saved or LAST_UID.get(user_id)
@@ -1187,26 +1187,26 @@ def cb_menu(c):
             run_profile_flow(c.message.chat.id, int(target), c.from_user)
         else:
             PENDING[user_id] = ("profile", time.time())
-            bot.send_message(c.message.chat.id, "👤 কার প্রোফাইল দেখবো? UID নম্বর পাঠান")
+            bot.send_message(c.message.chat.id, "👤 Whose profile? Send a UID")
     elif act == "guild":
         bot.answer_callback_query(c.id)
         clan = get_saved_guild(user_id)
         if clan and str(clan).isdigit():
             if _like_slot_free(user_id)[0]:
-                bot.send_message(c.message.chat.id, f"🛡️ Guild {clan} এর মেম্বারদের লাইক পাঠানো হচ্ছে...")
+                bot.send_message(c.message.chat.id, f"🛡️ Sending likes to members of Guild {clan}...")
                 threading.Thread(target=run_guildlike_flow,
                                  args=(c.message.chat.id, int(clan), c.from_user, 20), daemon=True).start()
             else:
-                bot.send_message(c.message.chat.id, "⏳ লাইক সিস্টেম ব্যস্ত, একটু পরে আবার চেষ্টা করুন।")
+                bot.send_message(c.message.chat.id, "⏳ Like system busy, try again in a bit.")
         else:
             PENDING[user_id] = ("setguild", time.time())
-            bot.send_message(c.message.chat.id, "🏰 আপনার Guild ID (Clan ID) নম্বর পাঠান")
+            bot.send_message(c.message.chat.id, "🏰 Send your Guild ID (Clan ID)")
     elif act == "setuid":
         bot.answer_callback_query(c.id)
         PENDING[user_id] = ("setuid", time.time())
         bot.send_message(c.message.chat.id,
-            "⚙️ আপনার Free Fire UID নম্বর পাঠান (শুধু সংখ্যা)।\n"
-            "UID গেমের প্রোফাইলে দেখানো হয়।")
+            "⚙️ Send your Free Fire UID (numbers only).\n"
+            "The UID is shown on your in-game profile.")
     elif act == "myuid":
         bot.answer_callback_query(c.id)
         txt, kb = build_uid_card(user_id)
@@ -1221,16 +1221,16 @@ def cb_menu(c):
             link = f"https://t.me/{me.username}?start=ref{user_id}"
             cnt = referral_count(user_id)
             kb = types.InlineKeyboardMarkup()
-            kb.add(types.InlineKeyboardButton("📤 বন্ধুকে শেয়ার করুন",
-                                             switch_inline_query=f"🔥 ফ্রি ফায়ার লাইক বট! {link}"))
+            kb.add(types.InlineKeyboardButton("📤 Share with friends",
+                                             switch_inline_query=f"🔥 Free Fire Like Bot! {link}"))
             bot.send_message(c.message.chat.id,
-                "🔗 <b>শেয়ার ও রেফার</b>\n\n"
-                f"আপনার রেফার লিংক:\n<code>{link}</code>\n\n"
-                f"👥 এ পর্যন্ত রেফার: <b>{cnt}</b> জন\n\n"
-                "লিংক কপি করে বন্ধুদের পাঠান — বন্ধু জয়েন করলেই কাউন্ট বাড়বে!",
+                "🔗 <b>Share & Refer</b>\n\n"
+                f"Your referral link:\n<code>{link}</code>\n\n"
+                f"👥 Referrals so far: <b>{cnt}</b>\n\n"
+                "Copy the link and send it to friends — the count grows with each join!",
                 reply_markup=kb)
         except Exception as e:
-            bot.send_message(c.message.chat.id, f"❌ শেয়ার লিংক বানানো গেল না: {e}")
+            bot.send_message(c.message.chat.id, f"❌ Could not create a share link: {e}")
 
 
 @bot.message_handler(commands=["referrals"])
@@ -1241,8 +1241,8 @@ def cmd_referrals(m):
     except Exception:
         link = "https://t.me/ffbdlikebot"
     bot.reply_to(m,
-        f"🔗 আপনার রেফার লিংক:\n<code>{link}</code>\n\n"
-        f"👥 মোট রেফার: <b>{referral_count(m.from_user.id)}</b> জন")
+        f"🔗 Your referral link:\n<code>{link}</code>\n\n"
+        f"👥 Total referrals: <b>{referral_count(m.from_user.id)}</b> users")
 
 
 # ── Guild Bulk Like ─────────────────────────────────────────
@@ -1259,15 +1259,15 @@ def run_guildlike_flow(chat_id, clan_id, user, count=20):
     except Exception:
         g = None
     if not g or not g.get("uids"):
-        bot.send_message(chat_id, f"❌ গিল্ড {clan_id} খুঁজে পাওয়া যায়নি। Guild ID ঠিক আছে? BD সার্ভারের গিল্ড তো?")
+        bot.send_message(chat_id, f"❌ Guild {clan_id} not found. Is the Guild ID correct? A BD-server guild?")
         return
     uids = [u for u in g["uids"] if isinstance(u, int) and u > 0]
     total = len(uids)
     prog = bot.send_message(chat_id,
         f"🛡️ <b>Guild Bulk Like</b>\n"
         f"🏰 Guild: <b>{g.get('name', clan_id)}</b>\n"
-        f"👥 Active members: <b>{total}</b> (মোট {g.get('members_total', '?')} জন)\n"
-        f"⏳ শুরু হচ্ছে...")
+        f"👥 Active members: <b>{total}</b> (total {g.get('members_total', '?')} users)\n"
+        f"⏳ starting...")
     msg_id, chat = prog.message_id, prog.chat.id
     sent_total, ok_members = 0, 0
     used = set(tuple(k) for k in load_usage().get("used_pairs", []))
@@ -1286,8 +1286,8 @@ def run_guildlike_flow(chat_id, clan_id, user, count=20):
                 bot.edit_message_text(
                     f"🛡️ <b>Guild Bulk Like</b>\n"
                     f"🏰 Guild: <b>{g.get('name', clan_id)}</b>\n"
-                    f"⏳ প্রোগ্রেস: [{blocks}] {pct}% ({i}/{total})\n"
-                    f"✅ লাইক পাঠানো হয়েছে: {sent_total} | 👤 মেম্বার কভার: {ok_members}",
+                    f"⏳ Progress: [{blocks}] {pct}% ({i}/{total})\n"
+                    f"✅ Likes sent: {sent_total} | 👤 Members covered: {ok_members}",
                     chat, msg_id)
         except Exception:
             pass
@@ -1302,14 +1302,14 @@ def run_guildlike_flow(chat_id, clan_id, user, count=20):
     except Exception:
         pass
     bot.edit_message_text(
-        f"🛡️ <b>Guild Bulk Like — ফাইনাল রিপোর্ট</b>\n"
+        f"🛡️ <b>Guild Bulk Like — Final Report</b>\n"
         f"🏰 Guild: <b>{g.get('name', clan_id)}</b> (Lv {g.get('level', '?')})\n"
-        f"👥 Active members: {total} (মোট {g.get('members_total', '?')} জন)\n"
-        f"✅ সফলভাবে পাঠানো হয়েছে: <b>{sent_total}</b> লাইক\n"
-        f"👤 যেসব মেম্বার লাইক পেয়েছে: <b>{ok_members}</b>\n"
-        f"⚠️ স্কিপ (আগেই লাইক দেওয়া/ডেড): {total - ok_members}",
+        f"👥 Active members: {total} (total {g.get('members_total', '?')} users)\n"
+        f"✅ Successfully sent: <b>{sent_total}</b> likes\n"
+        f"👤 Members who received likes: <b>{ok_members}</b>\n"
+        f"⚠️ Skipped (already liked / dead): {total - ok_members}",
         chat, msg_id)
-    # history: প্রতি মেম্বার হিসাব
+    # history: per-member accounting
     for uid in uids:
         record_history(user.id, user.first_name or "", uid, count, 0)
     persist_usage_github()
@@ -1318,13 +1318,13 @@ def run_guildlike_flow(chat_id, clan_id, user, count=20):
 @bot.message_handler(commands=["guildlike"])
 def cmd_guildlike(m):
     if not _like_slot_free(m.from_user.id)[0]:
-        _spamsafe_reply(m, "⏳ লাইক সিস্টেম ব্যস্ত / কুলডাউনে। একটু পরে আবার চেষ্টা করুন।")
+        _spamsafe_reply(m, "⏳ Like system busy / cooling down. Try again in a bit.")
         return
     parts = m.text.split()
     clan = parts[1] if len(parts) > 1 and parts[1].isdigit() else get_saved_guild(m.from_user.id) or get_saved_uid(m.from_user.id)
     if not clan or not str(clan).isdigit():
-        bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/guildlike 3071565979</code>\n"
-                        "অথবা আগে /setguild <GUILD_ID> দিয়ে সেভ করুন।")
+        bot.reply_to(m, "⚠️ Correct format: <code>/guildlike 3071565979</code>\n"
+                        "or first save it with /setguild <GUILD_ID>.")
         return
     try:
         count = min(int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 20, 100)
@@ -1338,7 +1338,7 @@ def cmd_guildlike(m):
 def cmd_setguild(m):
     parts = m.text.split()
     if len(parts) < 2 or not parts[1].isdigit():
-        bot.reply_to(m, "⚠️ ঠিকভাবে লিখুন: <code>/setguild 3071565979</code>")
+        bot.reply_to(m, "⚠️ Correct format: <code>/setguild 3071565979</code>")
         return
     clan = parts[1]
     rem = _load_json(REMINDERS_FILE)
@@ -1352,17 +1352,17 @@ def cmd_setguild(m):
     rem[str(m.from_user.id)] = e
     _save_json(REMINDERS_FILE, rem)
     threading.Thread(target=persist_usage_github, daemon=True).start()
-    bot.reply_to(m, f"✅ আপনার Guild ID (<code>{clan}</code>) সেভ হয়েছে!\n"
-                    "এখন থেকে [🏰 My Guild] বাটনে টিপলেই পুরো গিল্ডের অ্যাক্টিভ মেম্বারদের লাইক যাবে।")
+    bot.reply_to(m, f"✅ Your Guild ID (<code>{clan}</code>) saved!\n"
+                    "The [🏰 My Guild] button now likes all active members of your guild.")
 
 
 @bot.message_handler(commands=["guests"])
 def cmd_guests(m):
     if not is_admin(m.from_user.id if m.from_user else 0):
-        bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
+        bot.reply_to(m, "⛔ Admin-only command.")
         return
 
-    msg = bot.reply_to(m, "🔄 অ্যাকাউন্ট স্ট্যাটাস আনছি...")
+    msg = bot.reply_to(m, "🔄 Fetching account status...")
     import base64
     def gh_json(path):
         try:
@@ -1392,29 +1392,29 @@ def cmd_guests(m):
     bar_len = min(prog * 10 // 1000, 10)
     bar = "▰" * bar_len + "▱" * (10 - bar_len)
     st = gh_json("guests_manager/register_status.json")
-    smap = {"no_bd_proxy": "❌ BD প্রক্সি পাওয়া যায়নি — প্রতি রানে আবার খোঁজা হচ্ছে",
-            "running": "🔄 BD রেজিস্ট্রেশন চলছে",
-            "done": "✅ টার্গেট সম্পূর্ণ",
-            "partial": "⏸ রান শেষ — পরের রানে আবার চালু"}
+    smap = {"no_bd_proxy": "❌ No BD proxy found — hunting again next run",
+            "running": "🔄 BD registration running",
+            "done": "✅ Target complete",
+            "partial": "⏸ Run ended — resumes next run"}
     st_line = ""  # cloud register paused; phone pipeline is primary
     bot.edit_message_text(
-        f"👥 অ্যাকাউন্ট স্ট্যাটাস (টার্গেট <b>1000</b>)\n"
-        f"✅ রেজিস্টার্ড BD (ব্যবহারযোগ্য): <b>{reg_bd}</b>\n"
+        f"👥 Account Status (target <b>1000</b>)\n"
+        f"✅ Registered BD (usable): <b>{reg_bd}</b>\n"
         f"{bar} <b>{min(prog * 100 // 1000, 100)}%</b>\n"
-        f"🌎 রেজিস্টার্ড অন্য রেজিওন: {reg_other}\n"
-        f"📦 গেস্ট স্টকপাইল: <b>{n}</b> (US-born — BD-তে ব্যবহারযোগ্য না)\n"
-        f"📱 টার্মাক্সে তৈরি: <b>{len(phone)}</b>\n"
-        f"✅ অ্যাক্টিভ (গেম-প্রোফাইল সহ): <b>{phone_active}</b>\n"
-        f"⏳ ইনএক্টিভ (অ্যাক্টিভেশন বাকি): <b>{phone_inactive}</b>\n"
-        f"🧾 মোট ইনভেন্টরি: {total}\n"
-        f"🔔 সর্বশেষ UID: <code>{last_uid}</code>{st_line}",
+        f"🌎 Registered other regions: {reg_other}\n"
+        f"📦 Guest stockpile: <b>{n}</b> (US-born — not usable on BD)\n"
+        f"📱 Phone BD (Termux): <b>{len(phone)}</b>\n"
+        f"✅ Active (game profile live): <b>{phone_active}</b>\n"
+        f"⏳ Inactive (activation pending): <b>{phone_inactive}</b>\n"
+        f"🧾 Total inventory: {total}\n"
+        f"🔔 Latest UID: <code>{last_uid}</code>{st_line}",
         msg.chat.id, msg.message_id)
 
 
 @bot.message_handler(commands=["pool"])
 def cmd_pool(m):
     if not is_admin(m.from_user.id if m.from_user else 0):
-        bot.reply_to(m, "⛔ এই কমান্ড শুধু অ্যাডমিনের জন্য।")
+        bot.reply_to(m, "⛔ Admin-only command.")
         return
     pool = ff_bd_api.get_pool()
     fresh = sum(1 for t in pool if t.get("exp", 0) > time.time())
@@ -1434,19 +1434,19 @@ def cmd_pool(m):
         phone = json.loads(open("phone_accounts.json").read())
         rc = ff_bd_api.ready_uids()
         pr = sum(1 for r in phone if (rc.get(str(r.get("uid"))) or {}).get("ready"))
-        pool_line2 = f"📱 টার্মাক্স BD: <b>{len(phone)}</b> (লাইক-রেডি: {pr})\n"
+        pool_line2 = f"📱 Termux BD: <b>{len(phone)}</b> (like-ready: {pr})\n"
     except Exception:
         pool_line2 = ""
-    bot.reply_to(m, f"🔋 লাইক পুল: <b>{len(pool)}</b> অ্যাকাউন্ট ({fresh} টোকেন এখনো ভ্যালিড)\n"
-                    f"🩺 অটো-হেলথ: চলছে | 🖤 ব্ল্যাকলিস্টেড: {dead}টা ডেড টোকেন\n"
-                    f"✅ রেজিস্টার্ড BD: <b>{reg_bd}</b> | অন্য রেজিওন: {reg_other}\n"
-                    f"📦 গেস্ট স্টকপাইল: <b>{stock}</b> (US-born — BD ব্যবহারযোগ্য না)\n"
+    bot.reply_to(m, f"🔋 Like pool: <b>{len(pool)}</b> accounts ({fresh} tokens still valid)\n"
+                    f"🩺 Auto-health: running | 🖤 Blacklisted: {dead} dead tokens\n"
+                    f"✅ Registered BD: <b>{reg_bd}</b> | Other regions: {reg_other}\n"
+                    f"📦 Guest stockpile: <b>{stock}</b> (US-born — not usable on BD)\n"
                     f"{pool_line2}")
 
 
 if __name__ == "__main__":
     if not BOT_TOKEN:
-        print("BOT_TOKEN env var নেই! @BotFather থেকে টোকেন নিন আর চালান:")
+        print("BOT_TOKEN env var missing! Get a token from @BotFather and set it:")
         print("  export BOT_TOKEN=123:ABC... && python3 bot.py")
         raise SystemExit(1)
     install_guard()
