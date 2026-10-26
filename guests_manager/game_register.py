@@ -105,11 +105,11 @@ def pf(field: int, val):
     return evb((field << 3) | 2) + evb(len(v)) + v
 
 
-def msdk_register(session):
+def msdk_register(session, timeout=15):
     pw = "".join(secrets.choice("0123456789abcdef") for _ in range(32))
     body = json.dumps({"app_id": 100067, "client_type": 2, "password": pw, "source": 2})
     sig = hmac.new(HEX_KEY.encode(), body.encode(), hashlib.sha256).hexdigest()
-    r = session.post(MSDK_REGISTER, data=body, timeout=15,
+    r = session.post(MSDK_REGISTER, data=body, timeout=timeout,
         headers={"User-Agent": "GarenaMSDK/4.0.39(SM-A325M ;Android 13;en;HK;)",
                  "Authorization": "Signature " + sig,
                  "Content-Type": "application/json; charset=utf-8"})
@@ -247,14 +247,16 @@ def check_proxy(url, timeout=7):
             return False, d.get("ip"), d.get("country")
     except Exception:
         return False, None, None
-    # garena reachability: any HTTP status (even 4xx/5xx) proves the tunnel works
+    # MSDK reachability (the BIRTH endpoint — region stamps here): any HTTP
+    # status (400/401/415 all fine) proves the proxy can carry guest:register
     try:
-        requests.post("https://loginbp.ggpolarbear.com/MajorLogin",
-                      data=b"", headers={"User-Agent": "GarenaMSDK/4.0.19P10"},
-                      proxies={"http": url, "https": url}, timeout=8)
+        requests.post("https://100067.connect.garena.com/api/v2/oauth/guest:register",
+                      data=b"", headers={"User-Agent": "GarenaMSDK/4.0.39(SM-A325M ;Android 13;en;HK;)",
+                                         "Content-Type": "application/json"},
+                      proxies={"http": url, "https": url}, timeout=12)
         return True, d.get("ip"), "BD"
     except Exception:
-        return False, d.get("ip"), "BD-no-garena"
+        return False, d.get("ip"), "BD-no-msdk"
 
 
 def tcp_alive(hostport, timeout=4):
@@ -405,9 +407,9 @@ def main():
     else:
         px = pick_proxy()
     while not px and time.time() < end_at:
-        print("NO BD PROXY yet — GUEST-ONLY gen for 30min (unlimited, never stops), then rescan", flush=True)
-        write_status("no_bd_proxy", len(load_json(REG_FILE, [])))
-        guest_only_mode(min(end_at, time.time() + 1800))
+        print("NO BD ROUTE — US-born gen skipped (region stamps at birth); rescan in 15min", flush=True)
+        write_status("waiting_bd_route", len(load_json(REG_FILE, [])))
+        time.sleep(min(900, max(0, end_at - time.time())))
         if time.time() >= end_at:
             return
         print("rescanning for BD proxy...", flush=True)
@@ -416,28 +418,12 @@ def main():
         return
     print("using BD proxy:", px, flush=True)
 
-    # --- region-origin diagnostic: does region follow AUTH birth IP or register IP? ---
-    try:
-        s = new_session()
-        got, err = msdk_register(s)  # fresh guest BORN through the BD proxy
-        if got:
-            f_uid, f_pw = str(got[0]), got[1]
-            at2, oid2 = token_grant(s, f_uid, f_pw)
-            ok2, msg2 = major_register(s, at2, oid2, "Kexin" + "".join(random.choices(string.digits, k=4))) if at2 else (False, "grant-fail")
-            time.sleep(1.5)
-            jwt2 = major_login(s, at2, oid2) if at2 else None
-            regionA = jwt_region(jwt2) if jwt2 else "?"
-            hook(f"DIAG auth-born-THROUGH-PROXY region={regionA}")
-            print(f"DIAG A (auth born via BD proxy): region={regionA}", flush=True)
-            json.dump({"uid": f_uid, "pw": f_pw, "region": regionA},
-                      open("diag_bd_born.json", "w"))
-            if regionA == "BD":
-                # auth birth IP decides: stockpile (US-born) is useless; switch to BD-born-only mode
-                hook("BD MODE: auth must be born through BD route; gen+register all via proxy")
-                global BD_BORN_MODE
-                BD_BORN_MODE = True
-    except Exception as e:
-        print("diag A error:", str(e)[:100], flush=True)
+    # region stamps at guest BIRTH (proven on phone + proxy tests): all accounts
+    # must be BORN via this BD route; register IP no longer matters
+    print("BD-BORN MODE: guests will be birthed through the BD proxy", flush=True)
+    hook("BD-born mode via " + str(px))
+    global BD_BORN_MODE
+    BD_BORN_MODE = True
 
     registered = load_json(REG_FILE, [])
     done_uids = {str(r.get("uid")) for r in registered}
@@ -461,7 +447,7 @@ def main():
             fresh = False
         else:
             for _ in range(3):
-                got, err = msdk_register(s)
+                got, err = msdk_register(s, timeout=25)
                 if got:
                     uid, pw = str(got[0]), got[1]
                     fresh = True
