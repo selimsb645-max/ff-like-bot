@@ -545,16 +545,21 @@ def _push_progress():
     repo = os.environ.get("GITHUB_REPOSITORY")
     if not tok or not repo or not PROGRESS_FILE.exists():
         return
-    try:
-        api = f"https://api.github.com/repos/{repo}/contents/level_progress.json"
-        r = httpx.get(api, headers={"Authorization": f"Bearer {tok}"}, timeout=15)
-        sha = r.json().get("sha") if r.status_code == 200 else None
-        httpx.put(api, headers={"Authorization": f"Bearer {tok}"}, timeout=15,
-                  json={"message": "engine activation progress",
-                        "content": base64.b64encode(PROGRESS_FILE.read_bytes()).decode(),
-                        "sha": sha})
-    except Exception as e:
-        print("progress push failed:", e)
+    api = f"https://api.github.com/repos/{repo}/contents/level_progress.json"
+    for attempt in range(3):  # retry on sha race between parallel workers
+        try:
+            r = httpx.get(api, headers={"Authorization": f"Bearer {tok}"}, timeout=15)
+            sha = r.json().get("sha") if r.status_code == 200 else None
+            resp = httpx.put(api, headers={"Authorization": f"Bearer {tok}"}, timeout=15,
+                             json={"message": "engine activation progress",
+                                   "content": base64.b64encode(PROGRESS_FILE.read_bytes()).decode(),
+                                   "sha": sha})
+            if resp.status_code in (200, 201):
+                return
+        except Exception as e:
+            print("progress push failed:", e)
+            return
+        time.sleep(1)
 
 
 async def main():
@@ -590,24 +595,53 @@ async def main():
         want, cycles = 1, args.cycles
     else:
         accounts = load_accounts(max(want * 3, 8), prefer=prefer)
-    print(f"candidates: {[a[0] for a in accounts]}, want={want}, cycles={cycles}", flush=True)
+    print(f"candidates: {len(accounts)} accounts, want={want}, cycles={cycles}, first={[a[0] for a in accounts[:8]]}", flush=True)
 
     done = 0
-    for uid, pw in accounts:
-        if not args.uid and time.time() - last_attempt(uid) < COOLDOWN_S:
-            print(f"[{uid}] cooldown skip (attempted < 2h ago)", flush=True)
-            continue
-        wh_report({"uid": uid, "phase": "attempt_start", "ts": time.time()})
-        try:
-            res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=1500)
-        except asyncio.TimeoutError:
-            res = {"status": "watchdog_timeout", "cycles": 0}
-        wh_report({"uid": uid, "result": res, "ts": time.time()})
-        await asyncio.sleep(3)
-        if res and res.get("status") == "done":
-            done += 1
-        if done >= want:
-            break
+    workers = int(cfg.get("workers") or 1)
+    if workers > 1 and not args.uid:
+        # ==== BULK PARALLEL ACTIVATION ====
+        sem = asyncio.Semaphore(workers)
+        counter = [0]
+
+        async def _worker(uid, pw):
+            if counter[0] >= want:
+                return
+            if time.time() - last_attempt(uid) < COOLDOWN_S:
+                print(f"[{uid}] cooldown skip", flush=True)
+                return
+            async with sem:
+                if counter[0] >= want:
+                    return
+                wh_report({"uid": uid, "phase": "attempt_start", "ts": time.time()})
+                try:
+                    res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=420)
+                except asyncio.TimeoutError:
+                    res = {"status": "watchdog_timeout", "cycles": 0}
+                wh_report({"uid": uid, "result": res, "ts": time.time()})
+                if res and res.get("status") == "done":
+                    counter[0] += 1
+                print(f"[{uid}] -> {res.get('status') if res else '?'} | done={counter[0]}", flush=True)
+
+        print(f"BULK MODE: {len(accounts)} candidates, {workers} parallel workers, cycles={cycles}", flush=True)
+        await asyncio.gather(*[_worker(u, p) for u, p in accounts])
+        done = counter[0]
+    else:
+        for uid, pw in accounts:
+            if not args.uid and time.time() - last_attempt(uid) < COOLDOWN_S:
+                print(f"[{uid}] cooldown skip (attempted < 2h ago)", flush=True)
+                continue
+            wh_report({"uid": uid, "phase": "attempt_start", "ts": time.time()})
+            try:
+                res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=1500)
+            except asyncio.TimeoutError:
+                res = {"status": "watchdog_timeout", "cycles": 0}
+            wh_report({"uid": uid, "result": res, "ts": time.time()})
+            await asyncio.sleep(3)
+            if res and res.get("status") == "done":
+                done += 1
+            if done >= want:
+                break
 
     # external pool fallback: farm BD JWTs from community token pools
     if done < want and cfg.get("external", True):
