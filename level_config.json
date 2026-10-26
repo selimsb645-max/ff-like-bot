@@ -1,7 +1,7 @@
 {
  "enabled": true,
- "accounts": 4,
- "cycles": 2,
+ "accounts": 25,
+ "cycles": 1,
  "clan_id": 3106233034,
  "external": false,
  "team_code": "0",
