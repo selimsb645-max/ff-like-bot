@@ -536,6 +536,25 @@ def save_progress(uid, res):
     d = load_progress()
     d[uid] = res
     PROGRESS_FILE.write_text(json.dumps(d, indent=1))
+    _push_progress()
+
+
+def _push_progress():
+    """Commit progress immediately so the bot shows live active/inactive counts."""
+    tok = os.environ.get("GITHUB_USAGE_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if not tok or not repo or not PROGRESS_FILE.exists():
+        return
+    try:
+        api = f"https://api.github.com/repos/{repo}/contents/level_progress.json"
+        r = httpx.get(api, headers={"Authorization": f"Bearer {tok}"}, timeout=15)
+        sha = r.json().get("sha") if r.status_code == 200 else None
+        httpx.put(api, headers={"Authorization": f"Bearer {tok}"}, timeout=15,
+                  json={"message": "engine activation progress",
+                        "content": base64.b64encode(PROGRESS_FILE.read_bytes()).decode(),
+                        "sha": sha})
+    except Exception as e:
+        print("progress push failed:", e)
 
 
 async def main():
