@@ -555,6 +555,16 @@ async def main():
     prefer = cfg.get("prefer") or []
     want = cfg.get("accounts") or args.all or 4
     cycles = cfg.get("cycles") or args.cycles
+    # AUTO ACTIVATION: phone-born accounts never played a match go first
+    if cfg.get("auto_phone"):
+        try:
+            pa = json.loads((Path(__file__).parent.parent / "phone_accounts.json").read_text())
+            prog = load_progress()
+            new_phone = [str(r.get("uid")) for r in pa if str(r.get("uid")) not in prog]
+            prefer = new_phone + [u for u in prefer if u not in new_phone]
+            print(f"auto_phone: {len(new_phone)} new phone accounts to activate", flush=True)
+        except Exception:
+            pass
 
     if args.uid:
         accounts = [(args.uid, os.environ.get("GUEST_PW", ""))]
