@@ -709,9 +709,50 @@ def get_stats(account_id: int, jwt: str = None) -> dict | None:
     return {"uid": str(ai.UID), "name": ai.PlayerNickname, "likes": int(ai.Likes)}
 
 
+READY_FILE = Path(__file__).parent / "like_ready.json"
+
+
+def is_activated(t: dict, cache: dict) -> bool:
+    """A like only counts if the sender has a live game profile (entered game once).
+    Freshly registered-but-never-played accounts return 200 but land nothing."""
+    uid = str(t.get("uid"))
+    ent = cache.get(uid) or {}
+    if ent.get("ready") and time.time() - ent.get("ts", 0) < 6 * 3600:
+        return True
+    if ent.get("ready") is False and time.time() - ent.get("ts", 0) < 3600:
+        return False
+    s = get_stats(int(t["account_id"]), t["token"])
+    ready = bool(isinstance(s, dict) and s.get("likes") is not None)
+    cache[uid] = {"ready": ready, "ts": time.time()}
+    return ready
+
+
+def ready_uids() -> dict:
+    """{uid: {ready, ts}} for admin display."""
+    try:
+        return json.loads(READY_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def phone_accounts() -> list:
+    """Phone-born accounts pushed by the Termux pipeline."""
+    try:
+        return json.loads((Path(__file__).parent / "phone_accounts.json").read_text())
+    except Exception:
+        return []
+
+
 def send_like(account_id: int, count: int = 1, used: set = None) -> int:
-    """Send likes to a target. Each pool account can like once per target."""
-    pool = get_pool()
+    """Send likes to a target. Each pool account can like once per target.
+    Only ACTIVATED accounts (with a live game profile) are used - unactivated
+    ones return HTTP 200 but the like never lands."""
+    cache = ready_uids()
+    pool = [t for t in get_pool() if is_activated(t, cache)]
+    try:
+        READY_FILE.write_text(json.dumps(cache, indent=1))
+    except Exception:
+        pass
     used = used if used is not None else set()
     sent = 0
     for t in pool:
