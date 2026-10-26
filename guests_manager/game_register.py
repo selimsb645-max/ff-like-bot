@@ -204,6 +204,7 @@ def gh_commit(path, content, msg):
 
 PROXIES_FILE = Path(__file__).parent / "proxies.txt"
 ACTIVE_PROXY = {"url": None}
+BD_BORN_MODE = False
 
 
 def proxy_candidates():
@@ -415,6 +416,29 @@ def main():
         return
     print("using BD proxy:", px, flush=True)
 
+    # --- region-origin diagnostic: does region follow AUTH birth IP or register IP? ---
+    try:
+        s = new_session()
+        got, err = msdk_register(s)  # fresh guest BORN through the BD proxy
+        if got:
+            f_uid, f_pw = str(got[0]), got[1]
+            at2, oid2 = token_grant(s, f_uid, f_pw)
+            ok2, msg2 = major_register(s, at2, oid2, "Kexin" + "".join(random.choices(string.digits, k=4))) if at2 else (False, "grant-fail")
+            time.sleep(1.5)
+            jwt2 = major_login(s, at2, oid2) if at2 else None
+            regionA = jwt_region(jwt2) if jwt2 else "?"
+            hook(f"DIAG auth-born-THROUGH-PROXY region={regionA}")
+            print(f"DIAG A (auth born via BD proxy): region={regionA}", flush=True)
+            json.dump({"uid": f_uid, "pw": f_pw, "region": regionA},
+                      open("diag_bd_born.json", "w"))
+            if regionA == "BD":
+                # auth birth IP decides: stockpile (US-born) is useless; switch to BD-born-only mode
+                hook("BD MODE: auth must be born through BD route; gen+register all via proxy")
+                global BD_BORN_MODE
+                BD_BORN_MODE = True
+    except Exception as e:
+        print("diag A error:", str(e)[:100], flush=True)
+
     registered = load_json(REG_FILE, [])
     done_uids = {str(r.get("uid")) for r in registered}
     stock = [g for g in load_json(GUESTS_FILE, []) if str(g.get("uid")) not in done_uids]
@@ -430,8 +454,8 @@ def main():
     first = True
     while len(registered) < TARGET and time.time() < end_at:
         s = new_session()
-        # pick from stockpile or create fresh
-        if stock:
+        # pick from stockpile or create fresh (BD_BORN_MODE: only BD-born fresh accounts)
+        if stock and not BD_BORN_MODE:
             g = stock.pop(0)
             uid, pw = str(g["uid"]), g["password"]
             fresh = False
