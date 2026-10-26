@@ -1375,6 +1375,10 @@ def cmd_guests(m):
             return []
     data = gh_json("guests_manager/guests.json")
     regs = gh_json("guests_manager/registered_pool.json")
+    phone = gh_json("phone_accounts.json")
+    ready_cache = ff_bd_api.ready_uids()
+    phone_ready = sum(1 for r in phone if (ready_cache.get(str(r.get("uid"))) or {}).get("ready"))
+    phone_new = len(phone) - phone_ready
     n = len(data)
     reg_bd = sum(1 for r in regs if str(r.get("region", "")).upper() == "BD")
     reg_other = len(regs) - reg_bd
@@ -1397,6 +1401,8 @@ def cmd_guests(m):
         f"{bar} <b>{min(prog * 100 // 1000, 100)}%</b>\n"
         f"🌎 রেজিস্টার্ড অন্য রেজিওন: {reg_other}\n"
         f"📦 গেস্ট স্টকপাইল: <b>{n}</b> (US-born — BD-তে ব্যবহারযোগ্য না)\n"
+        f"📱 টার্মাক্সে তৈরি (BD): <b>{len(phone)}</b>\n"
+        f"✅ লাইক-রেডি (গেম-প্রোফাইল সহ): <b>{phone_ready}</b> | 🔄 অ্যাক্টিভেশন-প্রয়োজন: {phone_new}\n"
         f"🧾 মোট ইনভেন্টরি: {total}\n"
         f"🔔 সর্বশেষ UID: <code>{last_uid}</code>{st_line}",
         msg.chat.id, msg.message_id)
@@ -1421,10 +1427,18 @@ def cmd_pool(m):
         reg_other = len(regs) - reg_bd
     except Exception:
         pass
+    try:
+        phone = json.loads(open("phone_accounts.json").read())
+        rc = ff_bd_api.ready_uids()
+        pr = sum(1 for r in phone if (rc.get(str(r.get("uid"))) or {}).get("ready"))
+        pool_line2 = f"📱 টার্মাক্স BD: <b>{len(phone)}</b> (লাইক-রেডি: {pr})\n"
+    except Exception:
+        pool_line2 = ""
     bot.reply_to(m, f"🔋 লাইক পুল: <b>{len(pool)}</b> অ্যাকাউন্ট ({fresh} টোকেন এখনো ভ্যালিড)\n"
                     f"🩺 অটো-হেলথ: চলছে | 🖤 ব্ল্যাকলিস্টেড: {dead}টা ডেড টোকেন\n"
                     f"✅ রেজিস্টার্ড BD: <b>{reg_bd}</b> | অন্য রেজিওন: {reg_other}\n"
-                    f"📦 গেস্ট স্টকপাইল: <b>{stock}</b> (US-born — BD ব্যবহারযোগ্য না)")
+                    f"📦 গেস্ট স্টকপাইল: <b>{stock}</b> (US-born — BD ব্যবহারযোগ্য না)\n"
+                    f"{pool_line2}")
 
 
 if __name__ == "__main__":
