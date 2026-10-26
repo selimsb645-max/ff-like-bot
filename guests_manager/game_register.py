@@ -50,8 +50,8 @@ AES_KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94,
 AES_IV = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
 HEX_KEY = "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
 
-MSDK_REGISTER = "https://100067.connect.garena.com/api/v2/oauth/guest:register"
-MSDK_GRANT = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
+MSDK_REGISTER = "https://ffmconnect.live.gop.garenanow.com/api/v2/oauth/guest:register"
+MSDK_GRANT = "https://ffmconnect.live.gop.garenanow.com/api/v2/oauth/guest/token:grant"
 MAJOR_REGISTER_HOSTS = ["loginbp.ppmainecoonghj.com", "loginbp.ggpolarbear.com"]
 MAJOR_LOGIN = "https://loginbp.ggpolarbear.com/MajorLogin"
 
@@ -250,7 +250,7 @@ def check_proxy(url, timeout=7):
     # MSDK reachability (the BIRTH endpoint — region stamps here): any HTTP
     # status (400/401/415 all fine) proves the proxy can carry guest:register
     try:
-        requests.post("https://100067.connect.garena.com/api/v2/oauth/guest:register",
+        requests.post("https://ffmconnect.live.gop.garenanow.com/api/v2/oauth/guest:register",
                       data=b"", headers={"User-Agent": "GarenaMSDK/4.0.39(SM-A325M ;Android 13;en;HK;)",
                                          "Content-Type": "application/json"},
                       proxies={"http": url, "https": url}, timeout=12)
