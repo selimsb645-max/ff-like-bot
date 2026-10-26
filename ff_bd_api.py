@@ -92,7 +92,7 @@ def load_creds() -> list:
 
 
 # ── Self-minted JWT (MajorLogin, verified 2026-10-23) ──────────────
-GRANT_URL = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
+GRANT_URL = "https://ffmconnect.live.gop.garenanow.com/api/v2/oauth/guest/token:grant"
 MAJOR_LOGIN_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
 CLIENT_SECRET = "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
 LOGIN_UA = "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)"
@@ -124,12 +124,12 @@ def guest_grant(uid: str, pw: str):
             headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
             timeout=15, verify=False)
         if r.status_code != 200:
-            return None
+            return (None, None)
         d = r.json().get("data", r.json())
         at, oid = d.get("access_token"), d.get("open_id")
-        return (at, oid) if at and oid else None
+        return (at, oid) if at and oid else (None, None)
     except Exception:
-        return None
+        return (None, None)
 
 
 def major_login(access_token: str, open_id: str) -> str | None:
