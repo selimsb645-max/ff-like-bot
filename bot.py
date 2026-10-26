@@ -741,7 +741,6 @@ def cmd_myid(m):
     bot.reply_to(m, "\n".join(lines))
 
 
-@bot.message_handler(commands=["start", "help", "menu"])
 def build_welcome_kb():
     kb = types.InlineKeyboardMarkup(row_width=2)
     kb.add(
@@ -752,6 +751,7 @@ def build_welcome_kb():
     return kb
 
 
+@bot.message_handler(commands=["start", "help", "menu"])
 def cmd_start(m):
     # welcome message for new vs returning users
     is_new = getattr(m, "_ff_new_user", False)
