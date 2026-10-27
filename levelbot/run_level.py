@@ -352,6 +352,25 @@ def raw_login(uid, pw):
               "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1", "ReleaseVersion": "OB55"}
         r = httpx.post(ML_URL, headers=h2, data=api._enc(wire), timeout=25, verify=False)
     if r.status_code != 200 or b"eyJ" not in r.content:
+        print(f"    raw_login[{uid}]: httpx paths failed (status={r.status_code} len={len(r.content)} "
+              f"prot={b'Protection' in r.content}) — trying game_register requests path", flush=True)
+        # third attempt: game_register-style login via requests through the BD proxy
+        # session (this exact flow works for mint, so reuse it for farming too)
+        try:
+            import game_register as gr
+            wire3 = (gr.pf(22, oid) + gr.pf(23, "4") + gr.pf(29, at) + gr.pf(99, "4"))
+            h3 = {"User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
+                  "Accept-Encoding": "gzip", "X-GA-SV": "1789638359",
+                  "Content-Type": "application/x-www-form-urlencoded",
+                  "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1", "ReleaseVersion": "OB55"}
+            sess = gr.new_session()
+            r = sess.post("https://loginbp.ggpolarbear.com/MajorLogin", headers=h3,
+                          data=gr.encrypt_payload(wire3), timeout=20, verify=False)
+            print(f"    raw_login[{uid}]: gr path status={r.status_code} len={len(r.content)} "
+                  f"prot={b'Protection' in r.content}", flush=True)
+        except Exception as e:
+            print(f"    raw_login[{uid}]: gr path EXC {str(e)[:80]}", flush=True)
+    if r.status_code != 200 or b"eyJ" not in r.content:
         return None
     fields = {}
     for f, k, v in api._walk_pb(r.content[64:]):
