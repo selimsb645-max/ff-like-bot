@@ -193,6 +193,39 @@ def hunt_bd_proxies(gr, max_n=8, extra=None):
     return urls
 
 
+FRESH_NICKS = {}
+
+
+def save_fresh_to_pool(accounts):
+    """Persist freshly minted (uid, pw) BD accounts into registered_pool.json so the
+    like bot pool (ff_bd_api.load_registered_bd) picks them up automatically."""
+    rp = ROOT / "guests_manager" / "registered_pool.json"
+    try:
+        try:
+            data = json.loads(rp.read_text())
+        except Exception:
+            data = []
+        if not isinstance(data, list):
+            data = []
+        have = {str(r.get("uid")) for r in data}
+        added = 0
+        for uid, pw in accounts:
+            if str(uid) in have:
+                continue
+            data.append({"uid": str(uid), "pw": pw, "region": "BD",
+                         "nick": FRESH_NICKS.get(str(uid), "Kexin"),
+                         "verified": int(time.time())})
+            added += 1
+        if added:
+            body = json.dumps(data, indent=1)
+            rp.write_text(body)
+            gh_commit("guests_manager/registered_pool.json", body,
+                      f"pool: +{added} fresh BD account(s) for like bot")
+        print(f"pool: {added} fresh account(s) saved to registered_pool.json", flush=True)
+    except Exception as e:
+        print(f"pool save EXC: {str(e)[:80]}", flush=True)
+
+
 def mint_fresh_accounts(n, gr, proxies):
     """Mint n fresh BD-locked game accounts via the game_register pipeline.
     REQUIRES BD exit (tunnel up or BD proxy) — region locks permanently at MajorRegister.
@@ -238,6 +271,7 @@ def mint_fresh_accounts(n, gr, proxies):
             if region != "BD":
                 print(f"mint[t{tries}]: {uid} region={region} != BD — discarded", flush=True); continue
             fresh.append((uid, pw))
+            FRESH_NICKS[str(uid)] = nick
             print(f"mint[t{tries}]: FRESH BD ACCOUNT {uid} ({nick})", flush=True)
             wh_report({"mint": uid, "region": region, "nick": nick, "proxy": px, "ts": time.time()})
         except Exception as e:
@@ -781,6 +815,13 @@ async def main():
             wh_report({"engine": "mint_done", "minted": len(fresh), "ts": time.time()})
         except Exception as e:
             print(f"auto_mint setup EXC: {str(e)[:120]}", flush=True)
+
+    if fresh:
+        save_fresh_to_pool(fresh)
+    if cfg.get("farm") is False:
+        print("mint-only mode (farm:false): match engine SKIPPED — minted accounts saved to the like pool", flush=True)
+        wh_report({"engine": "mint_only_done", "minted": len(fresh), "ts": time.time()})
+        return
 
     if args.uid:
         accounts = [(args.uid, os.environ.get("GUEST_PW", ""))]

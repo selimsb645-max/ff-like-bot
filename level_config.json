@@ -8,5 +8,6 @@
  "prefer": [],
  "auto_phone": true,
  "workers": 1,
- "auto_mint": 1
+ "auto_mint": 1,
+ "farm": false
 }
