@@ -1,0 +1,14 @@
+{
+ "ts": 1793114061,
+ "candidates": 56,
+ "tokens": 5,
+ "landed": 0,
+ "log": [
+  "candidates sampled: 56",
+  "valid tokens minted: 5 / 56",
+  "target likes before: 4405",
+  "sends accepted (HTTP 200): 2",
+  "target likes after: 4405 | LANDED: 0"
+ ],
+ "sent": 2
+}
