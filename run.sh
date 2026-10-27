@@ -70,9 +70,9 @@ else
 fi
 
 # --- like delivery diagnostic (one-shot, triggered by like_diag.flag) ---
-if [ -f like_diag.flag ]; then
+if [ -f like_diag.flag ] && [ "$(python3 -c "import json;print(json.load(open('like_diag.flag')).get('enabled',False))" 2>/dev/null)" = "True" ]; then
   echo "like diagnostic: running..."
-  timeout 600 python3 scripts_diag_likes.py > like_diag_stdout.txt 2>&1 || true
+  timeout 480 python3 scripts_diag_likes.py > like_diag_stdout.txt 2>&1 || true
 fi
 
 # --- glory level engine (config: level_config.json in repo) ---
