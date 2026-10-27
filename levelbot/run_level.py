@@ -797,14 +797,19 @@ async def main():
                 env_px = (os.environ.get("BD_PROXY_URL") or "").strip()
                 cached = _load_proxy_cache()
                 proxies = []
-                if env_px and not env_px.startswith("socks4"):
-                    cached = [env_px] + [u for u in cached if u != env_px]
-                for round_n in range(1, 7):
-                    proxies = hunt_bd_proxies(gr, extra=cached)
-                    if proxies:
-                        break
-                    print(f"auto_mint: no usable BD proxy (round {round_n}/6) — retrying in 75s", flush=True)
-                    time.sleep(75)
+                if os.environ.get("PHONE_OK") == "1" and env_px:
+                    # OWNER'S PHONE PROXY (Tailscale) is live — mint straight through it.
+                    proxies = [env_px]
+                    print(f"auto_mint: using phone BD proxy {env_px} — hunt skipped", flush=True)
+                else:
+                    if env_px and not env_px.startswith("socks4"):
+                        cached = [env_px] + [u for u in cached if u != env_px]
+                    for round_n in range(1, 7):
+                        proxies = hunt_bd_proxies(gr, extra=cached)
+                        if proxies:
+                            break
+                        print(f"auto_mint: no usable BD proxy (round {round_n}/6) — retrying in 75s", flush=True)
+                        time.sleep(75)
                 if proxies:
                     _save_proxy_cache(proxies)
                     print(f"auto_mint: {len(proxies)} usable BD proxies: {proxies}", flush=True)

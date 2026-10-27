@@ -43,18 +43,44 @@ except Exception: print('x')" 2>/dev/null)
 fi
 export BD_TUNNEL
 
-# --- BD proxy hunt for the glory engine when tunnel is down ---
+# --- BD proxy: OWNER'S PHONE FIRST (Tailscale + Termux microsocks) ---
+# The phone on mobile data gives a real BD residential/mobile IP, which is far
+# less flagged than any public proxy. When PHONE_PROXY_URL is set and reachable
+# we use it for EVERYTHING (auth, mint, match engine) and skip the proxy hunt.
 BD_PROXY_URL=""
-if [ "$GEN" = "True" ] && [ "$BD_TUNNEL" != "1" ]; then
-  echo "BD tunnel down — hunting BD proxy for glory engine..."
-  BD_PROXY_URL=$(python3 levelbot/bd_proxy.py 2>/dev/null | tail -1)
-  if [ -n "$BD_PROXY_URL" ]; then
-    echo "BD proxy found: $BD_PROXY_URL"
-  else
-    echo "no working BD proxy found — engine will try direct login"
+PHONE_PX="${PHONE_PROXY_URL:-}"
+PHONE_OK=0
+if [ -n "$PHONE_PX" ]; then
+  echo "phone proxy configured: $PHONE_PX — testing..."
+  if python3 - "$PHONE_PX" <<'PYPX'
+import sys, httpx
+u = sys.argv[1]
+try:
+    j = httpx.get("https://ipinfo.io/json", proxy=u, timeout=25).json()
+    ok = j.get("country") == "BD"
+    print(f"phone proxy exit: {j.get('ip')} country={j.get('country')} org={j.get('org')} -> {'OK' if ok else 'NOT BD'}")
+    raise SystemExit(0 if ok else 1)
+except SystemExit:
+    raise
+except Exception as e:
+    print("phone proxy error:", str(e)[:160]); raise SystemExit(1)
+PYPX
+  then PHONE_OK=1; BD_PROXY_URL="$PHONE_PX"; fi
+fi
+if [ "$PHONE_OK" = "1" ]; then
+  echo "USING PHONE BD PROXY (owner's mobile IP) — public proxy hunt skipped"
+else
+  if [ "$GEN" = "True" ] && [ "$BD_TUNNEL" != "1" ]; then
+    echo "phone proxy unavailable — hunting public BD proxy for glory engine..."
+    BD_PROXY_URL=$(python3 levelbot/bd_proxy.py 2>/dev/null | tail -1)
+    if [ -n "$BD_PROXY_URL" ]; then
+      echo "BD proxy found: $BD_PROXY_URL"
+    else
+      echo "no working BD proxy found — engine will try direct login"
+    fi
   fi
 fi
-export BD_PROXY_URL
+export BD_PROXY_URL PHONE_OK
 
 # --- BD guest registration (config: guests_manager/register_config.json) ---
 if [ "$REN" = "True" ]; then
