@@ -22,25 +22,41 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-proxy-check" --accept-routes --reset
-          echo "--- tailnet peers ---"
-          sudo tailscale status
-      - name: Probe phone socks5
+          sudo tailscale status | tee /tmp/ts_status.txt
+          echo "PEERCOUNT=$(grep -c . /tmp/ts_status.txt)"
+          sudo tailscale status --json > /tmp/ts.json 2>/dev/null || true
+          python3 - <<'PY'
+          import json
+          d=json.load(open("/tmp/ts.json"))
+          me=d.get("Self") or {}
+          print("SELF:", me.get("HostName"), me.get("TailscaleIPs"))
+          for p in (d.get("Peer") or {}).values():
+              print("PEER:", p.get("HostName"), "| online:", p.get("Online"), "| ips:", p.get("TailscaleIPs"), "| os:", p.get("OS"), "| lastSeen:", p.get("LastSeen"))
+          PY
+      - name: TCP + socks diagnosis
         env:
           PHONE: ${{ secrets.PHONE_PROXY_IP }}
         run: |
-          echo "phone ip secret: $PHONE"
           python3 - <<'PY'
-          import os, httpx
-          ip = os.environ["PHONE"]; u = f"socks5://{ip}:1080"
-          print("PROBE TARGET:", u, flush=True)
+          import os, socket, time, httpx
+          ip = os.environ["PHONE"]
+          print("PHONE_SET:", bool(ip), "| len:", len(ip), flush=True)
+          for port in (1080,):
+              t0=time.time()
+              s=socket.socket(); s.settimeout(12)
+              try:
+                  s.connect((ip, port)); print(f"TCP {ip}:{port} OPEN in {time.time()-t0:.1f}s", flush=True)
+              except Exception as e:
+                  print(f"TCP {ip}:{port} FAILED after {time.time()-t0:.1f}s -> {type(e).__name__}: {e}", flush=True)
+              finally: s.close()
+              try:
+                  s=socket.socket(); s.settimeout(10); s.connect((ip, 443)); print(f"TCP {ip}:443 open", flush=True); s.close()
+              except Exception as e:
+                  print(f"TCP {ip}:443 failed -> {type(e).__name__}", flush=True)
+          u=f"socks5://{ip}:1080"
           try:
-              r = httpx.get("https://ipinfo.io/json", proxy=u, timeout=30)
-              print("IPINFO:", r.status_code, r.text[:220], flush=True)
+              r=httpx.get("https://ipinfo.io/json", proxy=u, timeout=30)
+              j=r.json(); print("SOCKS OK | exit:", j.get("ip"), j.get("country"), j.get("org"), flush=True)
           except Exception as e:
-              print("IPINFO FAILED:", str(e)[:220], flush=True)
-          try:
-              r = httpx.get("https://ffmconnect.live.gop.garenanow.com", proxy=u, timeout=25, verify=False)
-              print("GARENA:", r.status_code, flush=True)
-          except Exception as e:
-              print("GARENA FAILED:", str(e)[:220], flush=True)
+              print("SOCKS FAILED:", str(e)[:200], flush=True)
           PY
