@@ -405,6 +405,22 @@ def get_login_data(login):
     r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
                    data=body, timeout=25, verify=False)
     if r.status_code != 200:
+        print(f"    GetLoginData httpx failed (status={r.status_code}) — requests fallback", flush=True)
+        try:
+            import game_register as gr
+            sess = gr.new_session()
+            wire2 = (gr.pf(22, oid2) + gr.pf(23, "4") + gr.pf(29, at2) + gr.pf(99, "4"))
+            h2 = {"User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
+                  "Accept-Encoding": "gzip", "X-GA-SV": "1789638359",
+                  "Content-Type": "application/x-www-form-urlencoded",
+                  "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1", "ReleaseVersion": "OB55",
+                  "Authorization": f"Bearer {login['jwt']}"}
+            r = sess.post(login["url"].rstrip("/") + "/GetLoginData", headers=h2,
+                          data=gr.encrypt_payload(wire2), timeout=20, verify=False)
+            print(f"    GetLoginData requests fallback: status={r.status_code} len={len(r.content)}", flush=True)
+        except Exception as e:
+            print(f"    GetLoginData requests fallback EXC: {str(e)[:80]}", flush=True)
+    if r.status_code != 200:
         return None
     fields = {}
     for f, k, v in api._walk_pb(r.content):
