@@ -151,39 +151,73 @@ def load_accounts(limit, prefer=None):
     return out[:limit]
 
 
-def mint_fresh_accounts(n, gr):
+def hunt_bd_proxies(gr, max_n=8):
+    """Find multiple working BD-exit proxies that can actually reach Garena MSDK over TLS.
+    Single proxies pass ipinfo but fail on garenanow.com, so verify reachability too."""
+    from concurrent.futures import ThreadPoolExecutor
+    cands = gr.proxy_candidates()
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        alive = list(ex.map(gr.tcp_alive, cands))
+    cands = [c for c, a in zip(cands, alive) if a]
+    print(f"bd proxy hunt: {len(cands)} alive candidates", flush=True)
+    urls = []
+    for url, ip, country in gr.ex_map_results(cands):
+        if not url or country != "BD":
+            continue
+        try:
+            _ox_get("https://ffmconnect.live.gop.garenanow.com", proxy=url, timeout=8, verify=False)
+        except Exception:
+            print(f"bd proxy {url}: BD exit but can't reach garenanow — skip", flush=True)
+            continue
+        urls.append(url)
+        print(f"bd proxy OK: {url} exit={ip}", flush=True)
+        if len(urls) >= max_n:
+            break
+    return urls
+
+
+def mint_fresh_accounts(n, gr, proxies):
     """Mint n fresh BD-locked game accounts via the game_register pipeline.
     REQUIRES BD exit (tunnel up or BD proxy) — region locks permanently at MajorRegister.
-    Old pool accounts get flagged by Garena within ~a day, so farming must use
-    accounts minted minutes before use."""
+    Rotates through the given BD proxy list, retrying each slot up to 4 times."""
     fresh = []
-    for i in range(n):
+    tries = 0
+    max_tries = max(n * 4, 4)
+    while len(fresh) < n and tries < max_tries:
+        tries += 1
+        px = proxies[(tries - 1) % len(proxies)] if proxies else None
+        if px:
+            gr.ACTIVE_PROXY["url"] = px
+            os.environ["BD_PROXY_URL"] = px
+        else:
+            gr.ACTIVE_PROXY["url"] = None
+            os.environ.pop("BD_PROXY_URL", None)
         try:
             s = gr.new_session()
             reg = gr.msdk_register(s)
             if not reg:
-                print(f"mint[{i+1}/{n}]: msdk_register failed", flush=True); continue
+                print(f"mint[t{tries}]: msdk_register failed via {px}", flush=True); continue
             (uid, pw), _ = reg
             tok = gr.token_grant(s, uid, pw)
             if not tok or not tok[0]:
-                print(f"mint[{i+1}/{n}]: token_grant failed {uid}", flush=True); continue
+                print(f"mint[t{tries}]: token_grant failed {uid}", flush=True); continue
             at, oid = tok
             nick = "Kexin" + "".join(random.choices("0123456789", k=4))
             ok, msg = gr.major_register(s, at, oid, nick)
             if not ok:
-                print(f"mint[{i+1}/{n}]: major_register {uid}: {msg}", flush=True); continue
+                print(f"mint[t{tries}]: major_register {uid}: {msg}", flush=True); continue
             ml = gr.major_login(s, at, oid)
             if not ml:
-                print(f"mint[{i+1}/{n}]: major_login failed {uid}", flush=True); continue
+                print(f"mint[t{tries}]: major_login failed {uid}", flush=True); continue
             region = gr.jwt_region(ml)
             if region != "BD":
-                print(f"mint[{i+1}/{n}]: {uid} region={region} != BD — discarded", flush=True); continue
+                print(f"mint[t{tries}]: {uid} region={region} != BD — discarded", flush=True); continue
             fresh.append((uid, pw))
-            print(f"mint[{i+1}/{n}]: FRESH BD ACCOUNT {uid} ({nick})", flush=True)
-            wh_report({"mint": uid, "region": region, "nick": nick, "ts": time.time()})
+            print(f"mint[t{tries}]: FRESH BD ACCOUNT {uid} ({nick})", flush=True)
+            wh_report({"mint": uid, "region": region, "nick": nick, "proxy": px, "ts": time.time()})
         except Exception as e:
-            print(f"mint[{i+1}/{n}]: EXC {str(e)[:80]}", flush=True)
-        time.sleep(3)
+            print(f"mint[t{tries}]: EXC {str(e)[:80]}", flush=True)
+        time.sleep(2)
     return fresh
 
 
@@ -657,16 +691,18 @@ async def main():
         try:
             sys.path.insert(0, str(ROOT / "guests_manager"))
             import game_register as gr
-            if os.environ.get("BD_TUNNEL") != "1":
-                if (os.environ.get("BD_PROXY_URL") or "").strip():
-                    gr.ACTIVE_PROXY["url"] = os.environ["BD_PROXY_URL"].strip()
-                    print(f"auto_mint: using BD proxy from env: {gr.ACTIVE_PROXY['url']}", flush=True)
-                else:
-                    print("auto_mint: no tunnel/proxy env — hunting BD proxy...", flush=True)
-                    gr.pick_proxy()
-                    if gr.ACTIVE_PROXY["url"]:
-                        os.environ["BD_PROXY_URL"] = gr.ACTIVE_PROXY["url"]
-            fresh = mint_fresh_accounts(int(cfg["auto_mint"]), gr)
+            proxies = []
+            if os.environ.get("BD_TUNNEL") == "1":
+                print("auto_mint: BD tunnel up — minting directly through tunnel", flush=True)
+            else:
+                env_px = (os.environ.get("BD_PROXY_URL") or "").strip()
+                proxies = hunt_bd_proxies(gr)
+                if env_px and env_px not in proxies:
+                    proxies.insert(0, env_px)
+                if not proxies:
+                    print("auto_mint: NO usable BD proxy — cannot mint BD accounts", flush=True)
+                print(f"auto_mint: {len(proxies)} usable BD proxies: {proxies}", flush=True)
+            fresh = mint_fresh_accounts(int(cfg["auto_mint"]), gr, proxies)
             print(f"auto_mint: {len(fresh)} fresh BD accounts minted", flush=True)
             wh_report({"engine": "mint_done", "minted": len(fresh), "ts": time.time()})
         except Exception as e:
