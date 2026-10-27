@@ -16,39 +16,44 @@ END=$(( $(date +%s) + 20500 ))  # ~5h42m, under the 6h Actions limit
 ) &
 BOT_PID=$!
 
-# --- BD guest registration (config: guests_manager/register_config.json) ---
-if [ -f guests_manager/register_config.json ]; then
-  REN=$(python3 -c "import json;print(json.load(open('guests_manager/register_config.json')).get('enabled',False))" 2>/dev/null)
-  if [ "$REN" = "True" ]; then
-    echo "BD register pipeline: enabled"
-    pip install -q pysocks 2>/dev/null || true
-    BD_TUNNEL=0
-    if [ -f guests_manager/bdvpn/bd.ovpn ]; then
-      echo "trying BD openvpn tunnel (103.163.246.25)..."
-      sudo apt-get install -y -q openvpn >/dev/null 2>&1 || true
-      sudo openvpn --config guests_manager/bdvpn/bd.ovpn --daemon --log /tmp/vpn.log --verb 3 2>/dev/null || true
-      sleep 12
-      COUNTRY=$(curl -s --max-time 10 https://ipinfo.io/json 2>/dev/null | python3 -c "import json,sys
+# --- BD tunnel setup (SHARED: used by register pipeline AND glory engine) ---
+REN=False; GEN=False
+[ -f guests_manager/register_config.json ] && REN=$(python3 -c "import json;print(json.load(open('guests_manager/register_config.json')).get('enabled',False))" 2>/dev/null)
+[ -f level_config.json ] && GEN=$(python3 -c "import json;print(json.load(open('level_config.json')).get('enabled',False))" 2>/dev/null)
+BD_TUNNEL=0
+if [ "$REN" = "True" ] || [ "$GEN" = "True" ]; then
+  pip install -q pysocks 2>/dev/null || true
+  if [ -f guests_manager/bdvpn/bd.ovpn ]; then
+    echo "trying BD openvpn tunnel (103.163.246.25)..."
+    sudo apt-get install -y -q openvpn >/dev/null 2>&1 || true
+    sudo openvpn --config guests_manager/bdvpn/bd.ovpn --daemon --log /tmp/vpn.log --verb 3 2>/dev/null || true
+    sleep 12
+    COUNTRY=$(curl -s --max-time 10 https://ipinfo.io/json 2>/dev/null | python3 -c "import json,sys
 try: print(json.load(sys.stdin).get('country'))
 except Exception: print('x')" 2>/dev/null)
-      echo "tunnel exit country: $COUNTRY"
-      if [ "$COUNTRY" = "BD" ]; then
-        BD_TUNNEL=1
-        echo "BD TUNNEL UP — direct BD exit active"
-      else
-        sudo pkill openvpn 2>/dev/null || true
-        echo "tunnel failed/exit not BD — falling back to proxy hunt"
-      fi
+    echo "tunnel exit country: $COUNTRY"
+    if [ "$COUNTRY" = "BD" ]; then
+      BD_TUNNEL=1
+      echo "BD TUNNEL UP — direct BD exit active"
+    else
+      sudo pkill openvpn 2>/dev/null || true
+      echo "tunnel failed/exit not BD — falling back to direct/proxy"
     fi
-    (
-      BD_TUNNEL=$BD_TUNNEL python3 -u guests_manager/game_register.py --max-hours 2.5 2>&1 | tee register_log.txt
-      python3 -u guests_manager/game_register.py --max-hours 2.5 2>&1 | tee register_log.txt
-      echo "register pipeline finished"
-      tail -5 register_log.txt
-    ) &
-  else
-    echo "BD register pipeline: disabled in register_config.json"
   fi
+fi
+export BD_TUNNEL
+
+# --- BD guest registration (config: guests_manager/register_config.json) ---
+if [ "$REN" = "True" ]; then
+  echo "BD register pipeline: enabled"
+  (
+    BD_TUNNEL=$BD_TUNNEL python3 -u guests_manager/game_register.py --max-hours 2.5 2>&1 | tee register_log.txt
+    python3 -u guests_manager/game_register.py --max-hours 2.5 2>&1 | tee register_log.txt
+    echo "register pipeline finished"
+    tail -5 register_log.txt
+  ) &
+else
+  echo "BD register pipeline: disabled in register_config.json"
 fi
 
 # --- glory level engine (config: level_config.json in repo) ---
@@ -57,7 +62,7 @@ if [ -f level_config.json ]; then
   if [ "$ENABLED" = "True" ]; then
     ACC=$(python3 -c "import json;print(json.load(open('level_config.json')).get('accounts',2))" 2>/dev/null)
     CYC=$(python3 -c "import json;print(json.load(open('level_config.json')).get('cycles',5))" 2>/dev/null)
-    echo "glory engine: accounts=$ACC cycles=$CYC"
+    echo "glory engine: accounts=$ACC cycles=$CYC BD_TUNNEL=$BD_TUNNEL"
     python3 -m levelbot.run_level --all "$ACC" --cycles "$CYC" > farm_log.txt 2>&1 || true
     echo "=== farm log tail ==="
     tail -30 farm_log.txt
