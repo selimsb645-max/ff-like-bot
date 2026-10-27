@@ -164,6 +164,8 @@ def hunt_bd_proxies(gr, max_n=8):
     for url, ip, country in gr.ex_map_results(cands):
         if not url or country != "BD":
             continue
+        if url.startswith("socks4"):
+            continue  # socks4 proxies hang PySocks without honoring timeouts
         try:
             _ox_get("https://ffmconnect.live.gop.garenanow.com", proxy=url, timeout=8, verify=False)
         except Exception:
@@ -192,6 +194,14 @@ def mint_fresh_accounts(n, gr, proxies):
         else:
             gr.ACTIVE_PROXY["url"] = None
             os.environ.pop("BD_PROXY_URL", None)
+        def _alarm(signum, frame):
+            raise TimeoutError("mint attempt exceeded 120s")
+        try:
+            import signal
+            signal.signal(signal.SIGALRM, _alarm)
+            signal.alarm(120)
+        except Exception:
+            signal = None
         try:
             s = gr.new_session()
             reg = gr.msdk_register(s)
@@ -217,6 +227,11 @@ def mint_fresh_accounts(n, gr, proxies):
             wh_report({"mint": uid, "region": region, "nick": nick, "proxy": px, "ts": time.time()})
         except Exception as e:
             print(f"mint[t{tries}]: EXC {str(e)[:80]}", flush=True)
+        finally:
+            try:
+                signal.alarm(0)
+            except Exception:
+                pass
         time.sleep(2)
     return fresh
 
@@ -697,8 +712,13 @@ async def main():
             else:
                 env_px = (os.environ.get("BD_PROXY_URL") or "").strip()
                 proxies = hunt_bd_proxies(gr)
-                if env_px and env_px not in proxies:
-                    proxies.insert(0, env_px)
+                if not proxies and env_px and not env_px.startswith("socks4"):
+                    try:
+                        _ox_get("https://ffmconnect.live.gop.garenanow.com", proxy=env_px, timeout=8, verify=False)
+                        proxies = [env_px]
+                        print(f"auto_mint: env proxy verified usable: {env_px}", flush=True)
+                    except Exception:
+                        print("auto_mint: env proxy failed verification — ignoring", flush=True)
                 if not proxies:
                     print("auto_mint: NO usable BD proxy — cannot mint BD accounts", flush=True)
                 print(f"auto_mint: {len(proxies)} usable BD proxies: {proxies}", flush=True)
