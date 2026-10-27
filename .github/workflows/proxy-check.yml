@@ -1,0 +1,46 @@
+name: Phone Proxy Check
+on:
+  workflow_dispatch:
+concurrency:
+  group: ff-proxy-check
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -q socksio httpx
+      - name: Join Tailscale
+        env:
+          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscaled > /tmp/tailscaled.log 2>&1 &
+          sleep 5
+          sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-proxy-check" --accept-routes --reset
+          echo "--- tailnet peers ---"
+          sudo tailscale status
+      - name: Probe phone socks5
+        env:
+          PHONE: ${{ secrets.PHONE_PROXY_IP }}
+        run: |
+          echo "phone ip secret: $PHONE"
+          python3 - <<'PY'
+          import os, httpx
+          ip = os.environ["PHONE"]; u = f"socks5://{ip}:1080"
+          print("PROBE TARGET:", u, flush=True)
+          try:
+              r = httpx.get("https://ipinfo.io/json", proxy=u, timeout=30)
+              print("IPINFO:", r.status_code, r.text[:220], flush=True)
+          except Exception as e:
+              print("IPINFO FAILED:", str(e)[:220], flush=True)
+          try:
+              r = httpx.get("https://ffmconnect.live.gop.garenanow.com", proxy=u, timeout=25, verify=False)
+              print("GARENA:", r.status_code, flush=True)
+          except Exception as e:
+              print("GARENA FAILED:", str(e)[:220], flush=True)
+          PY
