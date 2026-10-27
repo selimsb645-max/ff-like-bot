@@ -43,6 +43,19 @@ except Exception: print('x')" 2>/dev/null)
 fi
 export BD_TUNNEL
 
+# --- BD proxy hunt for the glory engine when tunnel is down ---
+BD_PROXY_URL=""
+if [ "$GEN" = "True" ] && [ "$BD_TUNNEL" != "1" ]; then
+  echo "BD tunnel down — hunting BD proxy for glory engine..."
+  BD_PROXY_URL=$(python3 levelbot/bd_proxy.py 2>/dev/null | tail -1)
+  if [ -n "$BD_PROXY_URL" ]; then
+    echo "BD proxy found: $BD_PROXY_URL"
+  else
+    echo "no working BD proxy found — engine will try direct login"
+  fi
+fi
+export BD_PROXY_URL
+
 # --- BD guest registration (config: guests_manager/register_config.json) ---
 if [ "$REN" = "True" ]; then
   echo "BD register pipeline: enabled"

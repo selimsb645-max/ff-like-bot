@@ -25,7 +25,18 @@ import urllib3
 urllib3.disable_warnings()
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-import ff_bd_api as api  # our proven HTTP auth/pool module
+import ff_bd_api as api
+
+# --- BD proxy support: MajorLogin returns "Protection Bypass" from non-BD IPs.
+# run.sh sets BD_PROXY_URL when the BD tunnel is down but a BD proxy was found.
+_BD_PROXY = (os.environ.get("BD_PROXY_URL") or "").strip()
+if _BD_PROXY:
+    _ox_post, _ox_get, _ox_put, _ox_client = httpx.post, httpx.get, httpx.put, httpx.Client
+    httpx.post = lambda *a, **kw: _ox_post(*a, **{**kw, "proxy": _BD_PROXY})
+    httpx.get = lambda *a, **kw: _ox_get(*a, **{**kw, "proxy": _BD_PROXY})
+    httpx.put = lambda *a, **kw: _ox_put(*a, **{**kw, "proxy": _BD_PROXY})
+    httpx.Client = lambda *a, **kw: _ox_client(*a, **{**kw, "proxy": _BD_PROXY})
+    print(f"BD proxy active: {_BD_PROXY}", flush=True)  # our proven HTTP auth/pool module
 
 from levelbot.xC4 import EnC_PacKeT, DecodE_HeX
 from levelbot.connection import GameConnection
