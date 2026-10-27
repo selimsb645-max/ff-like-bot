@@ -74,7 +74,7 @@ class GameConnection:
                 from python_socks.async_.asyncio import Proxy
                 proxy = Proxy.from_url(px)
                 sock = await proxy.connect(dest_host=host, dest_port=port, timeout=20)
-                return await asyncio.open_connection(host=host, port=port, sock=sock)
+                return await asyncio.open_connection(sock=sock)
             except Exception as e:
                 logger.warning(f"socks connect failed ({e}) — falling back to direct")
                 return await asyncio.open_connection(host, port)
