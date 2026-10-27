@@ -46,12 +46,27 @@ def persist_usage_github():
     _github_commit_file("dead_tokens.json", "update dead token blacklist")
 
 
+def _dhaka_day() -> str:
+    import datetime
+    return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=6))).strftime("%Y-%m-%d")
+
+
 def load_usage() -> dict:
     if USAGE_FILE.exists():
         try:
-            return json.loads(USAGE_FILE.read_text())
+            u = json.loads(USAGE_FILE.read_text())
         except Exception:
             return {}
+        # daily reset: the game allows one like per target per day; our pair ledger
+        # must not lock a target out forever
+        if u.get("pairs_day") != _dhaka_day():
+            u["used_pairs"] = []
+            u["pairs_day"] = _dhaka_day()
+            try:
+                save_usage(u)
+            except Exception:
+                pass
+        return u
     return {}
 
 
