@@ -151,11 +151,26 @@ def load_accounts(limit, prefer=None):
     return out[:limit]
 
 
-def hunt_bd_proxies(gr, max_n=8):
+def _load_proxy_cache():
+    try:
+        return [u for u in json.loads((ROOT / "guests_manager" / "bd_proxy_cache.json").read_text())
+                if isinstance(u, str) and not u.startswith("socks4")]
+    except Exception:
+        return []
+
+
+def _save_proxy_cache(urls):
+    try:
+        (ROOT / "guests_manager" / "bd_proxy_cache.json").write_text(json.dumps(urls, indent=1))
+    except Exception:
+        pass
+
+
+def hunt_bd_proxies(gr, max_n=8, extra=None):
     """Find multiple working BD-exit proxies that can actually reach Garena MSDK over TLS.
     Single proxies pass ipinfo but fail on garenanow.com, so verify reachability too."""
     from concurrent.futures import ThreadPoolExecutor
-    cands = gr.proxy_candidates()
+    cands = list(dict.fromkeys((gr.proxy_candidates() + (extra or []))))
     with ThreadPoolExecutor(max_workers=12) as ex:
         alive = list(ex.map(gr.tcp_alive, cands))
     cands = [c for c, a in zip(cands, alive) if a]
@@ -711,17 +726,21 @@ async def main():
                 print("auto_mint: BD tunnel up — minting directly through tunnel", flush=True)
             else:
                 env_px = (os.environ.get("BD_PROXY_URL") or "").strip()
-                proxies = hunt_bd_proxies(gr)
-                if not proxies and env_px and not env_px.startswith("socks4"):
-                    try:
-                        _ox_get("https://ffmconnect.live.gop.garenanow.com", proxy=env_px, timeout=8, verify=False)
-                        proxies = [env_px]
-                        print(f"auto_mint: env proxy verified usable: {env_px}", flush=True)
-                    except Exception:
-                        print("auto_mint: env proxy failed verification — ignoring", flush=True)
-                if not proxies:
-                    print("auto_mint: NO usable BD proxy — cannot mint BD accounts", flush=True)
-                print(f"auto_mint: {len(proxies)} usable BD proxies: {proxies}", flush=True)
+                cached = _load_proxy_cache()
+                proxies = []
+                if env_px and not env_px.startswith("socks4"):
+                    cached = [env_px] + [u for u in cached if u != env_px]
+                for round_n in range(1, 7):
+                    proxies = hunt_bd_proxies(gr, extra=cached)
+                    if proxies:
+                        break
+                    print(f"auto_mint: no usable BD proxy (round {round_n}/6) — retrying in 75s", flush=True)
+                    time.sleep(75)
+                if proxies:
+                    _save_proxy_cache(proxies)
+                    print(f"auto_mint: {len(proxies)} usable BD proxies: {proxies}", flush=True)
+                else:
+                    print("auto_mint: NO usable BD proxy after 6 rounds — cannot mint BD accounts", flush=True)
             fresh = mint_fresh_accounts(int(cfg["auto_mint"]), gr, proxies)
             print(f"auto_mint: {len(fresh)} fresh BD accounts minted", flush=True)
             wh_report({"engine": "mint_done", "minted": len(fresh), "ts": time.time()})
