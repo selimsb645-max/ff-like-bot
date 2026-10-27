@@ -1,11 +1,11 @@
 {
- "enabled": false,
- "accounts": 0,
- "cycles": 1,
+ "enabled": true,
+ "accounts": 1,
+ "cycles": 30,
  "clan_id": 3106233034,
  "external": false,
  "team_code": "0",
  "prefer": [],
- "auto_phone": false,
+ "auto_phone": true,
  "workers": 1
 }
