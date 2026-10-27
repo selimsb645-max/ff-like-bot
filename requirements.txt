@@ -5,3 +5,4 @@ protobuf
 socksio
 requests
 urllib3
+python-socks

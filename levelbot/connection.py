@@ -5,6 +5,7 @@ Sends join/start/leave on ONLINE channel only (chat kills connections).
 """
 
 import asyncio
+import os
 import socket
 import time
 import logging
@@ -63,13 +64,28 @@ class GameConnection:
 
         auth_bytes = bytes.fromhex(token_hex)
 
+        async def _open(host, port):
+            """Open TCP stream — through BD socks proxy when BD_PROXY_URL is set,
+            so login IP and game IP match (Garena drops mismatched sessions)."""
+            px = (os.environ.get("BD_PROXY_URL") or "").strip()
+            if not px:
+                return await asyncio.open_connection(host, port)
+            try:
+                from python_socks.async_.asyncio import Proxy
+                proxy = Proxy.from_url(px)
+                sock = await proxy.connect(dest_host=host, dest_port=port, timeout=20)
+                return await asyncio.open_connection(host=host, port=port, sock=sock)
+            except Exception as e:
+                logger.warning(f"socks connect failed ({e}) — falling back to direct")
+                return await asyncio.open_connection(host, port)
+
         logger.info(f"Connecting to online {online_ip}:{online_port}...")
         self.online_reader, self.online_writer = await asyncio.wait_for(
-            asyncio.open_connection(self.online_ip, self.online_port), timeout=25)
+            _open(online_ip, int(online_port)), timeout=25)
 
         logger.info(f"Connecting to chat {whisper_ip}:{whisper_port}...")
         self.whisper_reader, self.whisper_writer = await asyncio.wait_for(
-            asyncio.open_connection(self.whisper_ip, self.whisper_port), timeout=25)
+            _open(whisper_ip, int(whisper_port)), timeout=25)
 
         # OS-level TCP keepalive on both sockets
         for writer in [self.online_writer, self.whisper_writer]:
