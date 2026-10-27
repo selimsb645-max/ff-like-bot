@@ -29,14 +29,17 @@ import ff_bd_api as api
 
 # --- BD proxy support: MajorLogin returns "Protection Bypass" from non-BD IPs.
 # run.sh sets BD_PROXY_URL when the BD tunnel is down but a BD proxy was found.
-_BD_PROXY = (os.environ.get("BD_PROXY_URL") or "").strip()
-if _BD_PROXY:
-    _ox_post, _ox_get, _ox_put, _ox_client = httpx.post, httpx.get, httpx.put, httpx.Client
-    httpx.post = lambda *a, **kw: _ox_post(*a, **{**kw, "proxy": _BD_PROXY})
-    httpx.get = lambda *a, **kw: _ox_get(*a, **{**kw, "proxy": _BD_PROXY})
-    httpx.put = lambda *a, **kw: _ox_put(*a, **{**kw, "proxy": _BD_PROXY})
-    httpx.Client = lambda *a, **kw: _ox_client(*a, **{**kw, "proxy": _BD_PROXY})
-    print(f"BD proxy active: {_BD_PROXY}", flush=True)  # our proven HTTP auth/pool module
+def _with_px(kw):
+    px = (os.environ.get("BD_PROXY_URL") or "").strip()
+    if px and "proxy" not in kw:
+        kw["proxy"] = px
+    return kw
+
+_ox_post, _ox_get, _ox_put, _ox_client = httpx.post, httpx.get, httpx.put, httpx.Client
+httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
+httpx.get = lambda *a, **kw: _ox_get(*a, **_with_px(kw))
+httpx.put = lambda *a, **kw: _ox_put(*a, **_with_px(kw))
+httpx.Client = lambda *a, **kw: _ox_client(*a, **_with_px(kw))  # our proven HTTP auth/pool module
 
 from levelbot.xC4 import EnC_PacKeT, DecodE_HeX
 from levelbot.connection import GameConnection
@@ -146,6 +149,42 @@ def load_accounts(limit, prefer=None):
         rest = [(u, pw) for u, pw in out if u not in prefer]
         out = pref + rest
     return out[:limit]
+
+
+def mint_fresh_accounts(n, gr):
+    """Mint n fresh BD-locked game accounts via the game_register pipeline.
+    REQUIRES BD exit (tunnel up or BD proxy) — region locks permanently at MajorRegister.
+    Old pool accounts get flagged by Garena within ~a day, so farming must use
+    accounts minted minutes before use."""
+    fresh = []
+    for i in range(n):
+        try:
+            s = gr.new_session()
+            reg = gr.msdk_register(s)
+            if not reg:
+                print(f"mint[{i+1}/{n}]: msdk_register failed", flush=True); continue
+            (uid, pw), _ = reg
+            tok = gr.token_grant(s, uid, pw)
+            if not tok or not tok[0]:
+                print(f"mint[{i+1}/{n}]: token_grant failed {uid}", flush=True); continue
+            at, oid = tok
+            nick = "Kexin" + "".join(random.choices("0123456789", k=4))
+            ok, msg = gr.major_register(s, at, oid, nick)
+            if not ok:
+                print(f"mint[{i+1}/{n}]: major_register {uid}: {msg}", flush=True); continue
+            ml = gr.major_login(s, at, oid)
+            if not ml:
+                print(f"mint[{i+1}/{n}]: major_login failed {uid}", flush=True); continue
+            region = gr.jwt_region(ml)
+            if region != "BD":
+                print(f"mint[{i+1}/{n}]: {uid} region={region} != BD — discarded", flush=True); continue
+            fresh.append((uid, pw))
+            print(f"mint[{i+1}/{n}]: FRESH BD ACCOUNT {uid} ({nick})", flush=True)
+            wh_report({"mint": uid, "region": region, "nick": nick, "ts": time.time()})
+        except Exception as e:
+            print(f"mint[{i+1}/{n}]: EXC {str(e)[:80]}", flush=True)
+        time.sleep(3)
+    return fresh
 
 
 FULL_ML_URL = "https://loginbp.ppmainecoonghj.com/MajorLogin"
@@ -613,11 +652,33 @@ async def main():
         except Exception:
             pass
 
+    fresh = []
+    if cfg.get("auto_mint") and not args.uid:
+        try:
+            sys.path.insert(0, str(ROOT / "guests_manager"))
+            import game_register as gr
+            if os.environ.get("BD_TUNNEL") != "1":
+                if (os.environ.get("BD_PROXY_URL") or "").strip():
+                    gr.ACTIVE_PROXY["url"] = os.environ["BD_PROXY_URL"].strip()
+                    print(f"auto_mint: using BD proxy from env: {gr.ACTIVE_PROXY['url']}", flush=True)
+                else:
+                    print("auto_mint: no tunnel/proxy env — hunting BD proxy...", flush=True)
+                    gr.pick_proxy()
+                    if gr.ACTIVE_PROXY["url"]:
+                        os.environ["BD_PROXY_URL"] = gr.ACTIVE_PROXY["url"]
+            fresh = mint_fresh_accounts(int(cfg["auto_mint"]), gr)
+            print(f"auto_mint: {len(fresh)} fresh BD accounts minted", flush=True)
+            wh_report({"engine": "mint_done", "minted": len(fresh), "ts": time.time()})
+        except Exception as e:
+            print(f"auto_mint setup EXC: {str(e)[:120]}", flush=True)
+
     if args.uid:
         accounts = [(args.uid, os.environ.get("GUEST_PW", ""))]
         want, cycles = 1, args.cycles
     else:
         accounts = load_accounts(max(want * 3, 8), prefer=prefer)
+        if fresh:
+            accounts = fresh + accounts
     print(f"candidates: {len(accounts)} accounts, want={want}, cycles={cycles}, first={[a[0] for a in accounts[:8]]}", flush=True)
 
     done = 0
