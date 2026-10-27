@@ -30,10 +30,10 @@ jobs:
           sleep 4
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-gh-runner" --accept-routes --reset
           echo "--- tailnet peers ---"
-          tailscale status || true
+          sudo tailscale status || true
           # Auto-discover the phone if PHONE_PROXY_IP is not set
           if [ -z "$PHONE_PROXY_IP" ]; then
-            PHONE_PROXY_IP=$(tailscale status --json | python3 -c "
+            PHONE_PROXY_IP=$(sudo tailscale status --json | python3 -c "
           import json,sys
           d=json.load(sys.stdin)
           peers=[p for p in (d.get('Peer') or {}).values()]
