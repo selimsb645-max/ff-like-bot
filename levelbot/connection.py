@@ -113,6 +113,19 @@ class GameConnection:
         self._last_data_time = time.time()
         self._ka_stop = asyncio.Event()
         self._ka_task = asyncio.create_task(self._keepalive_loop())
+        self._sniffer_task = asyncio.create_task(self._online_sniffer())
+
+    async def _online_sniffer(self):
+        """Log all server traffic on the online channel + close events (diagnostics)."""
+        try:
+            while True:
+                data = await self.online_reader.read(4096)
+                if not data:
+                    print(f"[conn] ONLINE channel closed by server at {time.strftime('%H:%M:%S')}", flush=True)
+                    break
+                print(f"[conn] online rx {len(data)}B head: {data[:28].hex()}", flush=True)
+        except Exception as e:
+            print(f"[conn] online sniffer end: {str(e)[:60]}", flush=True)
 
     async def _send_global_auth(self):
         """Send AutH_GlobAl on chat channel (same as ClanGloryBot)."""
