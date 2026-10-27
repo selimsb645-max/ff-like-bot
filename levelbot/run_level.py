@@ -108,6 +108,17 @@ def load_accounts(limit, prefer=None):
             u, pw = ln.split(":", 1)
             if pw.isupper() and len(pw) == 64:  # self-minted guests only
                 out.append((u, pw))
+    # verified BD accounts from game_register pipeline FIRST (freshest working logins)
+    try:
+        rp = Path(__file__).parent.parent / "guests_manager" / "registered_pool.json"
+        pool = []
+        for r in json.loads(rp.read_text()):
+            u, p = str(r.get("uid", "")).strip(), str(r.get("pw", "")).strip()
+            if u and p:
+                pool.append((u, p))
+        out = pool + out
+    except Exception:
+        pass
     # merge phone-born BD accounts (any pw format, pushed by phone pipeline)
     pa = Path(__file__).parent.parent / "phone_accounts.json"
     try:
