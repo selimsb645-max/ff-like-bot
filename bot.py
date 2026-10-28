@@ -921,7 +921,7 @@ def build_welcome_kb():
     return kb
 
 
-@bot.message_handler(commands=["start", "help", "menu"])
+@bot.message_handler(commands=["start"])
 def cmd_start(m):
     # welcome message for new vs returning users
     is_new = getattr(m, "_ff_new_user", False)
@@ -956,6 +956,50 @@ def cmd_start(m):
         + ref_greet,
         reply_markup=build_menu())
 
+
+
+@bot.message_handler(commands=["help", "menu"])
+def cmd_help(m):
+    txt = (
+        "📖 <b>FF • FREE LIKE BOT — সব কমান্ড</b>\n"
+        "━━━━━━━━━━━━━━━\n"
+        "🎮 <b>লাইক ও প্রোফাইল</b>\n"
+        "<b>/like</b> <code>UID [count]</code> — লাইক পাঠান\n"
+        "<b>/stats</b> <code>UID</code> — প্লেয়ারের লাইক ও নাম\n"
+        "<b>/profile</b> <code>UID</code> — ফুল প্রোফাইল (লেভেল, র্যাঙ্ক)\n"
+        "<b>/card</b> <code>UID</code> — 🎴 শেয়ারযোগ্য স্ট্যাট কার্ড ছবি\n"
+        "<b>/rank</b> — 📊 লেভেল/EXP/লাইক দৈনিক ট্র্যাক\n\n"
+        "🏰 <b>গিল্ড</b>\n"
+        "<b>/guild</b> <code>GUILD_ID</code> — গিল্ড ইনফো কার্ড\n"
+        "<b>/guildlike</b> <code>GUILD_ID</code> — গিল্ড মেম্বারদের লাইক\n"
+        "<b>/setguild</b> <code>GUILD_ID</code> — গিল্ড সেভ করুন\n\n"
+        "⚙️ <b>আপনার অ্যাকাউন্ট</b>\n"
+        "<b>/setuid</b> <code>UID</code> — UID সেভ করুন (সব কমান্ডে অটো)\n"
+        "<b>/myuid</b> — সেভ করা UID দেখা/বদলানো\n"
+        "<b>/myid</b> — আপনার টেলিগ্রাম আইডি ও কুলডাউন\n"
+        "<b>/history</b> — আপনার লাইক হিস্ট্রি\n"
+        "<b>/referrals</b> — রেফার কাউন্ট ও লিংক\n"
+        "<b>/stopremind</b> — দৈনিক রিমাইন্ডার বন্ধ\n\n"
+        "✨ <b>অতিরিক্ত</b>\n"
+        "<b>/namegen</b> — স্টাইলিশ FF নাম (style: gamer/bd/short)\n"
+        "<b>/redeem</b> — 🎁 অফিশিয়াল রিডিম কোড ও গাইড\n"
+        "<b>/help</b> — এই লিস্ট\n"
+        "<b>/start</b> — ওয়েলকাম মেনু\n"
+    )
+    if is_admin(m.from_user.id if m.from_user else 0):
+        txt += (
+            "\n👑 <b>অ্যাডমিন</b>\n"
+            "<b>/admin</b> — ইউজার অ্যানালিটিক্স\n"
+            "<b>/pool</b> — লাইক পুল স্ট্যাটাস\n"
+            "<b>/guests</b> — গেস্ট অ্যাকাউন্ট স্ট্যাটাস\n"
+            "<b>/broadcast</b> <code>msg</code> — সবাইকে মেসেজ\n"
+            "<b>/addcode</b> <code>CODE | reward | days</code> — কোড যোগ\n"
+            "<b>/delcode</b> <code>CODE</code> — কোড বাদ\n"
+            "<b>/export_users</b> — ইউজার লিস্ট ফাইল\n"
+            "<b>/claim</b> <code>CODE</code> — অ্যাডমিন কোড\n"
+        )
+    txt += "━━━━━━━━━━━━━━━\n👇 নিচের বাটন থেকেও শুরু করতে পারেন"
+    bot.reply_to(m, txt, reply_markup=build_menu())
 
 @bot.callback_query_handler(func=lambda c: c.data and c.data.startswith("uid:"))
 def cb_uid_actions(c):
