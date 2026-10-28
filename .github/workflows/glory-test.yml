@@ -22,35 +22,6 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: OAuth host probe (schemes + hosts)
-        env:
-          PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
-        run: |
-          python3 - <<'PY'
-          import os, httpx, socket, ssl
-          ip=os.environ["PHONE_PROXY_IP"]
-          for sch in (f"socks5://{ip}:1080", f"socks5h://{ip}:1080"):
-              print("==== scheme", sch.split("://")[0], flush=True)
-              for h in ["https://100067.connect.garena.com/api/v2/oauth/guest/token:grant",
-                        "https://100067.connect.garena.com/",
-                        "https://loginbp.ggpolarbear.com/MajorLogin",
-                        "https://ffmconnect.live.gop.garenanow.com/"]:
-                  try:
-                      r=httpx.request("POST" if ("MajorLogin" in h or "token:grant" in h) else "GET", h,
-                                      json={"client_id":100067,"client_type":2,"password":"x","response_type":"token","uid":8330016000},
-                                      timeout=20, verify=False, proxy=sch)
-                      print(f"  {h.split('/')[2]:40} HTTP {r.status_code} {r.text[:70]!r}", flush=True)
-                  except Exception as e:
-                      print(f"  {h.split('/')[2]:40} {type(e).__name__}: {str(e)[:110]}", flush=True)
-          for host in ("100067.connect.garena.com","loginbp.ggpolarbear.com"):
-              try:
-                  ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
-                  with socket.create_connection((host,443),timeout=15) as s:
-                      with ctx.wrap_socket(s, server_hostname=host) as ss:
-                          print(f"  TLS {host}: OK {ss.version()}", flush=True)
-              except Exception as e:
-                  print(f"  TLS {host}: {type(e).__name__}: {str(e)[:110]}", flush=True)
-          PY
       - name: Run glory engine through phone proxy
         env:
           BD_CREDS_B64: ${{ secrets.BD_CREDS_B64 }}
@@ -67,4 +38,4 @@ jobs:
           p.write_text(json.dumps(cfg, indent=1))
           print("test config ready")
           PY
-          timeout 900 python3 -u -m levelbot.run_level --all 1 --cycles 1 2>&1 | tail -60
+          timeout 900 python3 -u -m levelbot.run_level --all 1 --cycles 1 2>&1 | tail -100
