@@ -22,12 +22,12 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Modern MajorLogin test (timestamp sign)
+      - name: MajorLogin matrix debug
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
           python3 - <<'PY'
-          import os, json, httpx
+          import os, json, time, httpx, re
           px = "socks5://" + os.environ["PHONE_PROXY_IP"] + ":1080"
           import ff_bd_api as api, ff_majorlogin as fm
           acc = json.load(open("guests_manager/registered_pool.json"))[0]
@@ -35,14 +35,28 @@ jobs:
           print("grant:", bool(pair), flush=True)
           if not pair: raise SystemExit
           at, oid = pair
-          try: ip = httpx.get("https://ipinfo.io/json", proxy=px, timeout=20).json().get("ip")
-          except Exception: ip = "223.191.51.89"
-          _post = httpx.post
-          httpx.post = lambda *a, **kw: _post(*a, **{**kw, "proxy": px})
-          ml = fm.major_login(acc["uid"], oid, at, ip)
-          print("RESULT:", ("OK jwt=" + str(len(ml["jwt"])) + " key=" + str(bool(ml.get("key"))) + " iv=" + str(bool(ml.get("iv"))) + " url=" + str(ml.get("url"))[:40]) if ml else "None", "| ip:", ip, flush=True)
-          if ml:
-              open("/tmp/jwt_ok.txt","w").write(ml["jwt"][:80])
+          body = fm.encrypt(fm.build_min_payload(oid, at))
+          hosts = ["https://loginbp.ggblueshark.com/MajorLogin",
+                   "https://loginbp.ppmainecoonghj.com/MajorLogin",
+                   "https://loginbp.ggpolarbear.com/MajorLogin"]
+          variants = [
+            ("ts+bearer+octet", {"X-GA-SV": str(int(time.time())), "Authorization": "Bearer", "Content-Type": "application/octet-stream"}),
+            ("ts+token+octet",  {"X-GA-SV": str(int(time.time())), "Authorization": f"Bearer {at}", "Content-Type": "application/octet-stream"}),
+            ("ts+bearer+urlenc",{"X-GA-SV": str(int(time.time())), "Authorization": "Bearer", "Content-Type": "application/x-www-form-urlencoded"}),
+            ("nots+bearer+octet",{"Authorization": "Bearer", "Content-Type": "application/octet-stream"}),
+          ]
+          for host in hosts:
+              for label, extra in variants:
+                  h = {"User-Agent": "Dalvik/2.1.0 (Linux; U; Android 11; ASUS_Z01QD Build/PI)",
+                       "X-Unity-Version": "2018.4.11f1", "X-GA": "v1 1", "ReleaseVersion": "OB55"}
+                  h.update(extra)
+                  try:
+                      r = httpx.post(host, data=body, headers=h, timeout=20, verify=False, proxy=px)
+                      txt = r.content.decode("latin-1")
+                      strs = [s for s in re.findall(r"[ -~]{5,}", txt)][:3]
+                      print(f"{host.split('/')[2]:28} {label:18} -> {r.status_code} len={len(r.content)} strs={strs}", flush=True)
+                  except Exception as e:
+                      print(f"{host.split('/')[2]:28} {label:18} -> {type(e).__name__}: {str(e)[:70]}", flush=True)
           PY
       - name: Run glory engine through phone proxy
         if: false
