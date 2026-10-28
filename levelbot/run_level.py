@@ -362,9 +362,24 @@ def _full_device_wire(oid, at, uid, lang="bn"):
     return b"".join(_pf_full(k, v) for k, v in fields.items())
 
 
+def _grant_direct(uid, pw):
+    """guest_grant without the BD proxy: the phone tunnel intermittently kills TLS
+    to the OAuth host, and the grant endpoint does not need a BD IP anyway."""
+    saved = os.environ.pop("BD_PROXY_URL", "")
+    try:
+        pair = api.guest_grant(uid, pw)
+    finally:
+        if saved:
+            os.environ["BD_PROXY_URL"] = saved
+    if pair:
+        return pair
+    # last resort: retry through the proxy (some accounts only settle there)
+    return api.guest_grant(uid, pw)
+
+
 def raw_login(uid, pw):
     """guest grant + raw MajorLogin -> dict(jwt, key, iv, ts, url, region, account_id) or None."""
-    pair = api.guest_grant(uid, pw)
+    pair = _grant_direct(uid, pw)
     at, oid = pair if pair else (None, None)
     if not at:
         return None
