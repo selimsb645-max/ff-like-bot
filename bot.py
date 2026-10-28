@@ -948,33 +948,11 @@ def cmd_start(m):
         except Exception:
             pass
     bot.reply_to(m,
-        "<b>🔥 FF BD Bot</b>\n\n"
-        "Everything works with one tap of the buttons below:\n\n"
-        "<b>/stats</b> <code>UID</code> — player profile (name, likes)\n"
-        "<b>/like</b> <code>UID [count]</code> — send likes\n"
-        "<b>/profile</b> <code>UID</code> — full player card (level, rank, guild)\n"
-        "<b>/card</b> <code>UID</code> — 🎴 shareable stat card image\n"
-        "<b>/namegen</b> — ✧ stylish FF name generator\n"
-        "<b>/guild</b> <code>GUILD_ID</code> — 🏰 guild info card\n"
-        "<b>/rank</b> — 📊 track your level/EXP/likes daily\n"
-        "<b>/redeem</b> — 🎁 official redeem codes\n"
-        "<b>/setuid</b> <code>UID</code> — save your UID (auto-used in all commands)\n"
-        "<b>/myuid</b> — view / change your saved UID\n"
-        "<b>/stopremind</b> — disable the reminder\n"
-        "<b>/history</b> — your like history\n"
-        "<b>/referrals</b> — your referral count\n"
-        "<b>/myid</b> — your ID and cooldown status\n"
-        "<b>/guildlike</b> <code>GUILD_ID [count]</code> — like guild members\n"
-        "<b>/setguild</b> <code>GUILD_ID</code> — save your guild"
-        + ("\n\n👑 <b>Admin Commands</b>\n"
-           "<b>/pool</b> — like pool status\n"
-           "<b>/guests</b> — guest account status\n"
-           "<b>/admin</b> — 📊 user analytics dashboard\n"
-           "<b>/broadcast</b> <code>msg</code> — message everyone\n"
-           "<b>/addcode</b> — add a redeem code\n"
-           "<b>/delcode</b> — remove a redeem code\n"
-           "<b>/export_users</b> — user list export"
-           if is_admin(m.from_user.id if m.from_user else 0) else "")
+        "🔥 <b>স্বাগতম!</b> FF • FREE LIKE BOT-এ আপনাকে স্বাগতম। 🎮\n\n"
+        "এখানে আপনি পাবেন এক ক্লিকে লাইক বৃদ্ধি, প্লেয়ার প্রোফাইল চেক, "
+        "গিল্ড গ্লোরি ও ইউআইডি ম্যানেজমেন্টের সুব্যবস্থা। "
+        "আপনার ফ্রি ফায়ার অভিজ্ঞতাকে করুন আরও দারুণ! 🚀\n\n"
+        "নিচের বাটনগুলোতে ক্লিক করে আপনার প্রয়োজনীয় ফিচারটি ব্যবহার করুন 👇"
         + ref_greet,
         reply_markup=build_menu())
 
