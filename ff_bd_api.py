@@ -601,12 +601,37 @@ def load_registered_bd():
 
 
 def refresh_pool() -> list:
-    """Mint fresh JWTs for all pool accounts."""
-    pool = []
-    for uid, pw in load_creds() + load_registered_bd():
-        t = mint_jwt(uid, pw)
-        if t:
-            pool.append(t)
+    """Mint fresh JWTs for pool accounts — PARALLEL + INCREMENTAL.
+    Keeps still-valid cached tokens (no re-login), drops blacklisted dead ones,
+    and mints the rest with a 12-worker thread pool. Fixes the multi-minute
+    sequential rebuild that made /like requests crawl."""
+    from concurrent.futures import ThreadPoolExecutor
+    dead = {str(a) for a in load_dead()}
+    creds = load_creds() + load_registered_bd()
+    keep = {}
+    try:
+        cached = json.loads(POOL_FILE.read_text())
+    except Exception:
+        cached = []
+    for t in cached:
+        if (isinstance(t, dict) and t.get("uid")
+                and (t.get("exp") or 0) > time.time() + 300
+                and str(t.get("account_id")) not in dead):
+            keep[str(t["uid"])] = t
+    todo = [(u, pw) for u, pw in creds if str(u) not in keep]
+    pool = list(keep.values())
+
+    def _safe_mint(up):
+        try:
+            return mint_jwt(up[0], up[1])
+        except Exception:
+            return None
+
+    if todo:
+        with ThreadPoolExecutor(max_workers=12) as ex:
+            for t in ex.map(_safe_mint, todo):
+                if t and str(t.get("account_id")) not in dead:
+                    pool.append(t)
     POOL_FILE.write_text(json.dumps(pool, indent=1))
     return pool
 
@@ -765,8 +790,21 @@ def send_like(account_id: int, count: int = 1, used: set = None) -> int:
     """Send likes to a target. Each pool account can like once per target.
     Only ACTIVATED accounts (with a live game profile) are used - unactivated
     ones return HTTP 200 but the like never lands."""
+    from concurrent.futures import ThreadPoolExecutor
     cache = ready_uids()
-    pool = [t for t in get_pool() if is_activated(t, cache)]
+    base_pool = get_pool()
+
+    def _check(t):
+        try:
+            return t, is_activated(t, cache)
+        except Exception:
+            return t, False
+
+    pool = []
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        for t, ok in ex.map(_check, base_pool):
+            if ok:
+                pool.append(t)
     try:
         READY_FILE.write_text(json.dumps(cache, indent=1))
     except Exception:
