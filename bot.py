@@ -1015,6 +1015,91 @@ def cmd_profile(m):
         card += f"📅 Account age{age}\n"
     bot.edit_message_text(card, msg.chat.id, msg.message_id)
 
+@bot.message_handler(commands=["recover"])
+def cmd_recover(m):
+    """Admin-only ID recovery: full identity card for any UID (name, level, ranks,
+    guild, creation date, last login, pet, credit score, signature)."""
+    if not is_admin(m.from_user.id if m.from_user else 0):
+        bot.reply_to(m, "⛔ Admin-only command.")
+        return
+    parts = m.text.split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        bot.reply_to(m, "⚠️ Correct format: <code>/recover 18328637549</code>")
+        return
+    uid = int(parts[1])
+    msg = bot.reply_to(m, "🔄 আইডি খোঁজা হচ্ছে...")
+    try:
+        pool = ff_bd_api.get_pool()
+        jwt = pool[0]["token"] if pool else None
+        p = ff_bd_api.get_profile(uid, jwt)
+    except Exception as e:
+        bot.edit_message_text(f"❌ Error: {e}", msg.chat.id, msg.message_id)
+        return
+    if not p or p.get("error"):
+        bot.edit_message_text(
+            "❌ এই UID দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি।\n"
+            "UID ঠিক কিনা যাচাই করুন — অ্যাকাউন্টটি বাতিল (banned) বা ডিলিট হয়ে থাকতে পারে।",
+            msg.chat.id, msg.message_id)
+        return
+    import time as _t
+    created = ""
+    if p.get("create_at"):
+        try:
+            c = _t.strftime("%d %b %Y", _t.gmtime(p["create_at"]))
+            days = int((_t.time() - p["create_at"]) / 86400)
+            created = f"{c} ({days} দিন আগে)"
+        except Exception:
+            created = str(p.get("create_at"))
+    last = ""
+    if p.get("last_login"):
+        try:
+            ll = int(p["last_login"])
+            if ll > 1e9:
+                days_ago = int((_t.time() - ll) / 86400)
+                base = _t.strftime("%d %b %Y", _t.gmtime(ll))
+                last = base + (" (আজ)" if days_ago <= 0 else f" ({days_ago} দিন আগে)")
+            else:
+                last = str(ll)
+        except Exception:
+            last = str(p.get("last_login"))
+    g = p.get("guild")
+    card = (
+        "🔎 <b>আইডি রিকভারি রিপোর্ট</b>\n"
+        "━━━━━━━━━━━━━━━\n"
+        f"🎯 বর্তমান নাম: <b>{p.get('name') or '-'}</b>\n"
+        f"🆔 UID: <code>{p.get('uid')}</code>\n"
+        f"🌍 রিজিয়ন: <b>{p.get('region') or '-'}</b>  |  🎮 {p.get('release_version') or '-'}\n"
+        "━━━━━━━━━━━━━━━\n"
+        f"⭐ লেভেল: <b>{p.get('level')}</b>  (EXP: {p.get('exp')})\n"
+        f"❤️ লাইক: <b>{p.get('likes')}</b>\n"
+        f"🛡️ BR র‍্যাঙ্ক: <b>{p.get('br_rank') or 'Unranked'}</b>"
+        + (f" ({p.get('br_points')} RP)" if p.get('br_points') else "") + "\n"
+        f"⚔️ CS র‍্যাঙ্ক: <b>{p.get('cs_rank') or 'Unranked'}</b>"
+        + (f" ({p.get('cs_points')}★)" if p.get('cs_points') is not None else "") + "\n"
+        "━━━━━━━━━━━━━━━\n"
+    )
+    if g:
+        card += f"🏛️ গিল্ড: <b>{g.get('name')}</b> (ID: <code>{g.get('id')}</code>)\n"
+        card += f"   Lv {g.get('level')} | 👥 {g.get('members')}/{g.get('capacity')} জন\n"
+    else:
+        card += "🏛️ গিল্ড: নেই\n"
+    if created:
+        card += f"📅 তৈরি: <b>{created}</b>\n"
+    if last:
+        card += f"🕒 শেষ লগইন: <b>{last}</b>\n"
+    extras = []
+    if p.get("pet"):
+        extras.append(f"🐾 পেট: {p['pet']['name']} (Lv {p['pet']['level']})")
+    if p.get("credit_score") is not None:
+        extras.append(f"💯 ক্রেডিট স্কোর: {p['credit_score']}")
+    if p.get("signature"):
+        extras.append(f"✍️ সিগনেচার: {p['signature']}")
+    if extras:
+        card += "━━━━━━━━━━━━━━━\n" + "\n".join(extras) + "\n"
+    card += "━━━━━━━━━━━━━━━\n✅ স্ট্যাটাস: অ্যাকাউন্ট সক্রিয়"
+    bot.edit_message_text(card, msg.chat.id, msg.message_id)
+
+
 @bot.message_handler(commands=["myuid"])
 def cmd_myuid(m):
     txt, kb = build_uid_card(m.from_user.id)
