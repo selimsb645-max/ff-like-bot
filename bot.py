@@ -956,6 +956,7 @@ def cmd_start(m):
         "<b>/card</b> <code>UID</code> — 🎴 shareable stat card image\n"
         "<b>/namegen</b> — ✧ stylish FF name generator\n"
         "<b>/guild</b> <code>GUILD_ID</code> — 🏰 guild info card\n"
+        "<b>/rank</b> — 📊 track your level/EXP/likes daily\n"
         "<b>/setuid</b> <code>UID</code> — save your UID (auto-used in all commands)\n"
         "<b>/myuid</b> — view / change your saved UID\n"
         "<b>/stopremind</b> — disable the reminder\n"
@@ -1531,6 +1532,149 @@ def cmd_setguild(m):
 
 
 # ============ NEW: GUILD LOOKUP CARD (/guild) ============
+
+# ============ NEW: RANK TRACKER (/rank) ============
+RANKS_FILE = Path(__file__).parent / "rank_snapshots.json"
+RANKS_LOCK = threading.Lock()
+RANK_CHECK_EVERY = 6 * 3600   # check loop wake-up
+RANK_SNAPSHOT_GAP = 20 * 3600 # minimum gap between snapshots per day
+RANK_MAX_USERS = 150
+
+
+def load_ranks() -> dict:
+    return _load_json(RANKS_FILE)
+
+
+def save_ranks(data: dict):
+    with RANKS_LOCK:
+        _save_json(RANKS_FILE, data)
+
+
+def tracked_uids() -> dict:
+    """{uid: [user_ids]} built from saved-UID reminders + users.json."""
+    out = {}
+    rem = _load_json(REMINDERS_FILE)
+    for uid_s, info in (rem or {}).items():
+        u = str((info or {}).get("uid") or "").strip()
+        if u.isdigit():
+            out.setdefault(u, set()).add(uid_s)
+    users = _load_json(USERS_FILE) or {}
+    for uid_s, rec in users.items():
+        u = str((rec or {}).get("saved_uid") or "").strip()
+        if u.isdigit():
+            out.setdefault(u, set()).add(uid_s)
+    return {u: sorted(ids) for u, ids in out.items()}
+
+
+def rank_snapshot_once(force=False) -> int:
+    """Take one profile snapshot for all tracked UIDs; notify owners on change."""
+    ranks = load_ranks()
+    now = time.time()
+    if not force:
+        last = float(ranks.get("_last_run") or 0)
+        if now - last < RANK_SNAPSHOT_GAP:
+            return 0
+    uids = tracked_uids()
+    if not uids:
+        ranks["_last_run"] = now
+        save_ranks(ranks)
+        return 0
+    jwt = None
+    try:
+        pool = ff_bd_api.get_pool()
+        jwt = pool[0]["token"] if pool else None
+    except Exception:
+        jwt = None
+    hit = 0
+    for uid, owners in list(uids.items())[:RANK_MAX_USERS]:
+        try:
+            s = ff_bd_api.get_stats(int(uid), jwt) or {}
+            if s.get("error") or not s.get("name"):
+                continue
+            full = ff_bd_api.get_full_profile(int(uid), jwt) or {}
+            cur = {"name": s.get("name"), "likes": s.get("likes"),
+                   "level": full.get("level"), "exp": full.get("exp"), "ts": now}
+            old = ranks.get(uid) or {}
+            ranks[uid] = cur
+            hit += 1
+            if old:
+                changes = []
+                if old.get("level") is not None and cur.get("level") is not None and old["level"] != cur["level"]:
+                    d = cur["level"] - old["level"]
+                    changes.append(f"⭐ Level: {old['level']} → <b>{cur['level']}</b> ({'+' if d > 0 else ''}{d})")
+                if old.get("likes") is not None and cur.get("likes") is not None and old["likes"] != cur["likes"]:
+                    d = cur["likes"] - old["likes"]
+                    changes.append(f"❤️ Likes: {old['likes']} → <b>{cur['likes']}</b> ({'+' if d > 0 else ''}{d})")
+                if old.get("exp") is not None and cur.get("exp") is not None and old["exp"] != cur["exp"]:
+                    changes.append(f"📈 EXP: {old['exp']} → <b>{cur['exp']}</b>")
+                if changes:
+                    txt = (f"🔔 <b>PROFILE UPDATE</b>\n"
+                           f"🎯 {(cur.get('name') or '—')[:20]}  ·  UID <code>{uid}</code>\n"
+                           f"━━━━━━━━━━━━━━━\n" + "\n".join(changes) +
+                           f"\n━━━━━━━━━━━━━━━\nFull card: /card {uid}")
+                    for owner in owners:
+                        try:
+                            bot.send_message(int(owner), txt)
+                        except Exception:
+                            pass
+        except Exception:
+            continue
+        time.sleep(1.2)
+    ranks["_last_run"] = now
+    save_ranks(ranks)
+    try:
+        _github_commit_file(RANKS_FILE.name, "update rank snapshots")
+    except Exception:
+        pass
+    print(f"[rank] snapshot done: {hit} profiles tracked")
+    return hit
+
+
+def rank_watch_loop():
+    time.sleep(300)
+    while True:
+        try:
+            rank_snapshot_once()
+        except Exception as e:
+            print("[rank] loop error:", e)
+        time.sleep(RANK_CHECK_EVERY)
+
+
+@bot.message_handler(commands=["rank", "track"])
+def cmd_rank(m):
+    uid = get_saved_uid(m.from_user.id)
+    if not uid:
+        parts = m.text.split()
+        if len(parts) > 1 and parts[1].isdigit():
+            uid = parts[1]
+        else:
+            bot.reply_to(m, "⚠️ Save your UID first (/setuid UID) — then I will track your "
+                            "level, EXP and likes daily and message you when they change.\n"
+                            "Or check once: /rank UID")
+            return
+    ranks = load_ranks()
+    rec = ranks.get(str(uid)) or {}
+    total = len([k for k in ranks if not k.startswith("_")])
+    if rec:
+        when = time.strftime("%d %b %H:%M", time.localtime(rec.get("ts") or 0))
+        bot.reply_to(m,
+                     f"📊 <b>RANK TRACKER</b>\n"
+                     f"━━━━━━━━━━━━━━━\n"
+                     f"🎯 {(rec.get('name') or '—')[:20]}  ·  UID <code>{uid}</code>\n"
+                     f"⭐ Level: <b>{rec.get('level') if rec.get('level') is not None else '—'}</b>\n"
+                     f"❤️ Likes: <b>{rec.get('likes') if rec.get('likes') is not None else '—'}</b>\n"
+                     f"📈 EXP: <b>{rec.get('exp') if rec.get('exp') is not None else '—'}</b>\n"
+                     f"🕒 Last check: {when}\n"
+                     f"━━━━━━━━━━━━━━━\n"
+                     f"📡 Tracking {total} player(s). Changes are messaged automatically daily.\n"
+                     f"🎴 Full card: /card {uid}")
+    else:
+        bot.reply_to(m,
+                     f"📡 UID <code>{uid}</code> is now on the tracker list.\n"
+                     f"First snapshot runs within a few hours, then daily.\n"
+                     f"You will get a message when level, EXP or likes change.\n"
+                     f"Now tracking {total} player(s).")
+
 @bot.message_handler(commands=["guild"])
 def cmd_guild(m):
     parts = m.text.split()
@@ -1671,4 +1815,5 @@ if __name__ == "__main__":
     print("bot running... [spam shield + like cooldown + token health active]")
     threading.Thread(target=reminder_loop, daemon=True).start()
     threading.Thread(target=health_loop, daemon=True).start()
+    threading.Thread(target=rank_watch_loop, daemon=True).start()
     bot.infinity_polling(skip_pending=True)
