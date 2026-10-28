@@ -22,7 +22,46 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
+      - name: MajorLogin deep probe (real pool account)
+        env:
+          PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
+        run: |
+          export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
+          python3 - <<'PY'
+          import os, json, httpx, urllib3
+          urllib3.disable_warnings()
+          os.environ.setdefault("BD_PROXY_URL", os.environ.get("BD_PROXY_URL",""))
+          import ff_bd_api as api
+          from levelbot import run_level as rl
+          px = os.environ["BD_PROXY_URL"]
+          pool = json.load(open("guests_manager/registered_pool.json"))
+          print("pool size:", len(pool), flush=True)
+          for acc in pool[:2]:
+              uid, pw = acc["uid"], acc["pw"]
+              print(f"--- account {uid} (pw len {len(pw)}) ---", flush=True)
+              pair = api.guest_grant(uid, pw)
+              print("  guest_grant:", "OK token+oid" if pair else "None", flush=True)
+              if not pair:
+                  continue
+              at, oid = pair
+              wire = rl._full_device_wire(oid, at, uid)
+              for host in ("https://loginbp.ppmainecoonghj.com/MajorLogin",
+                           "https://loginbp.ggpolarbear.com/MajorLogin"):
+                  for label, proxy in (("phone", px), ("direct", None)):
+                      try:
+                          r = httpx.post(host, data=api._enc(wire),
+                              headers={"User-Agent": rl.FULL_UAS[0], "X-GA-SV": "1789535859",
+                                       "Authorization": f"Bearer {at}", "X-GA": "v1 1",
+                                       "ReleaseVersion": "OB55", "Content-Type": "application/octet-stream",
+                                       "X-Unity-Version": "2018.4.12f1", "Accept-Encoding": "deflate, gzip"},
+                              timeout=25, verify=False, proxy=proxy)
+                          body = r.content
+                          print(f"  {host.split('/')[2]:34} [{label}] HTTP {r.status_code} len={len(body)} jwt={'eyJ' in body.decode('latin-1')} head={body[:60]!r}", flush=True)
+                      except Exception as e:
+                          print(f"  {host.split('/')[2]:34} [{label}] {type(e).__name__}: {str(e)[:110]}", flush=True)
+          PY
       - name: Run glory engine through phone proxy
+        if: false
         env:
           BD_CREDS_B64: ${{ secrets.BD_CREDS_B64 }}
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
