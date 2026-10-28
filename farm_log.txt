@@ -1,15 +1,7 @@
 auto_phone: 0 new phone accounts to activate
-bd proxy hunt: 11 alive candidates
-bd proxy socks5://202.44.106.141:1080: BD exit but can't reach garenanow — skip
-auto_mint: no usable BD proxy (round 1/6) — retrying in 75s
-bd proxy hunt: 14 alive candidates
-auto_mint: no usable BD proxy (round 2/6) — retrying in 75s
-bd proxy hunt: 16 alive candidates
-bd proxy OK: http://160.202.146.48:8080 exit=160.202.146.49
-auto_mint: 1 usable BD proxies: ['http://160.202.146.48:8080']
-mint[t1]: EXC ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-mint[t2]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t3]: FRESH BD ACCOUNT 8358568679 (Kexin7315)
+auto_mint: using phone BD proxy socks5://100.83.141.93:1080 — hunt skipped
+auto_mint: 1 usable BD proxies: ['socks5://100.83.141.93:1080']
+mint[t1]: FRESH BD ACCOUNT 8360611155 (Kexin0474)
 auto_mint: 1 fresh BD accounts minted
 pool: 1 fresh account(s) saved to registered_pool.json
 mint-only mode (farm:false): match engine SKIPPED — minted accounts saved to the like pool
