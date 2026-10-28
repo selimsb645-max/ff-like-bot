@@ -955,6 +955,7 @@ def cmd_start(m):
         "<b>/profile</b> <code>UID</code> — full player card (level, rank, guild)\n"
         "<b>/card</b> <code>UID</code> — 🎴 shareable stat card image\n"
         "<b>/namegen</b> — ✧ stylish FF name generator\n"
+        "<b>/guild</b> <code>GUILD_ID</code> — 🏰 guild info card\n"
         "<b>/setuid</b> <code>UID</code> — save your UID (auto-used in all commands)\n"
         "<b>/myuid</b> — view / change your saved UID\n"
         "<b>/stopremind</b> — disable the reminder\n"
@@ -1527,6 +1528,51 @@ def cmd_setguild(m):
     bot.reply_to(m, f"✅ Your Guild ID (<code>{clan}</code>) saved!\n"
                     "The [🏰 My Guild] button now likes all active members of your guild.")
 
+
+
+# ============ NEW: GUILD LOOKUP CARD (/guild) ============
+@bot.message_handler(commands=["guild"])
+def cmd_guild(m):
+    parts = m.text.split()
+    clan = parts[1] if len(parts) > 1 and parts[1].isdigit() else get_saved_guild(m.from_user.id)
+    if not clan or not str(clan).isdigit():
+        bot.reply_to(m, "⚠️ Usage: <code>/guild GUILD_ID</code>\n"
+                        "Find the Guild ID in-game: Guild → Info (bottom of the page).")
+        return
+    msg = bot.reply_to(m, "🔍 Looking up guild...")
+    try:
+        g = ff_bd_api.get_guild(int(clan))
+    except Exception as e:
+        bot.edit_message_text(f"❌ Error: {str(e)[:70]}", m.chat.id, msg.message_id)
+        return
+    if not g or not g.get("name"):
+        bot.edit_message_text("❌ Guild not found. Check the Guild ID (BD server guilds only).",
+                              m.chat.id, msg.message_id)
+        return
+    mem = int(g.get("members_total") or 0)
+    cap = int(g.get("capacity") or 0)
+    free = max(cap - mem, 0)
+    pct = int(mem / cap * 100) if cap else 0
+    filled = max(0, min(10, round(pct / 10)))
+    bar = "█" * filled + "░" * (10 - filled)
+    active = len(g.get("uids") or [])
+    captain = g.get("captain")
+    card = (
+        f"🏰 <b>{(g.get('name') or '—')[:24]}</b>\n"
+        f"━━━━━━━━━━━━━━━\n"
+        f"🆔 Guild ID: <code>{g.get('clan_id')}</code>\n"
+        f"⭐ Level: <b>{g.get('level') if g.get('level') is not None else '—'}</b>\n"
+        f"🌍 Region: <b>{g.get('region') or 'BD'}</b>\n"
+        f"👥 Members: <b>{mem}/{cap}</b>  ({pct}%)\n"
+        f"<code>{bar}</code>\n"
+        f"🟢 Active tracked: <b>{active}</b>\n"
+        f"{'🔓 Open slots: <b>' + str(free) + '</b>' + chr(10) if free else '🔒 Guild is full' + chr(10)}"
+        f"{'👑 Captain UID: <code>' + str(captain) + '</code>' + chr(10) if captain else ''}"
+        f"━━━━━━━━━━━━━━━\n"
+        f"❤️ Like members: /guildlike {g.get('clan_id')}\n"
+        f"📌 Save this guild: /setguild {g.get('clan_id')}"
+    )
+    bot.edit_message_text(card, m.chat.id, msg.message_id)
 
 @bot.message_handler(commands=["guests"])
 def cmd_guests(m):
