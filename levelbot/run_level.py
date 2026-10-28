@@ -393,6 +393,9 @@ def raw_login(uid, pw):
             _ip = ""
         ml = ff_majorlogin.major_login(uid, oid, at, _ip or "223.191.51.89")
         if ml and ml.get("jwt"):
+            ml["uid"] = str(uid)
+            ml["pw"] = pw
+            ml.setdefault("region", "BD")
             print(f"    raw_login[{uid}]: modern MajorLogin OK (jwt {len(ml['jwt'])} chars)", flush=True)
             return ml
         print(f"    raw_login[{uid}]: modern MajorLogin failed -> legacy wire fallbacks", flush=True)
@@ -454,7 +457,7 @@ def raw_login(uid, pw):
 
 def get_login_data(login):
     """GetLoginData -> (whisper_ip, whisper_port, online_ip, online_port)."""
-    pair = api.guest_grant(login["uid"], login["pw"])
+    pair = _grant_direct(login["uid"], login["pw"])
     if not pair:
         return None
     at2, oid2 = pair
@@ -462,7 +465,7 @@ def get_login_data(login):
             + api._pf_str(29, at2) + api._pf_str(99, "4"))
     body = api._enc(wire)
     h = {"User-Agent": api.LOGIN_UA, "Connection": "Keep-Alive",
-         "Accept-Encoding": "gzip", "X-GA-SV": "1789638359",
+         "Accept-Encoding": "gzip", "X-GA-SV": str(int(time.time())),
          "Content-Type": "application/x-www-form-urlencoded", "Expect": "100-continue",
          "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1", "ReleaseVersion": "OB55",
          "Authorization": f"Bearer {login['jwt']}"}
