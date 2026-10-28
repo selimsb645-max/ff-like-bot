@@ -6,3 +6,4 @@ socksio
 requests
 urllib3
 python-socks
+PySocks
