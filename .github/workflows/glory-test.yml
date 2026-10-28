@@ -22,43 +22,39 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Decode MajorLogin rejection payload
+      - name: MajorLogin JSON variants probe
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
           export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
           python3 - <<'PY'
-          import os, json, httpx, binascii
+          import os, json, httpx, re
           import ff_bd_api as api
-          from levelbot import run_level as rl
-          acc = json.load(open("guests_manager/registered_pool.json"))[0]
-          pair = api.guest_grant(acc["uid"], acc["pw"])
+          px=os.environ["BD_PROXY_URL"]
+          acc=json.load(open("guests_manager/registered_pool.json"))[0]
+          pair=api.guest_grant(acc["uid"], acc["pw"])
           print("grant:", bool(pair), flush=True)
           if not pair: raise SystemExit
           at, oid = pair
-          wire = rl._full_device_wire(oid, at, acc["uid"])
-          r = httpx.post("https://loginbp.ggpolarbear.com/MajorLogin", data=api._enc(wire),
-              headers={"User-Agent": rl.FULL_UAS[0], "X-GA-SV": "1789535859",
-                       "Authorization": f"Bearer {at}", "X-GA": "v1 1",
-                       "ReleaseVersion": "OB55", "Content-Type": "application/octet-stream",
-                       "X-Unity-Version": "2018.4.12f1"}, timeout=25, verify=False)
-          body = r.content
-          print("status:", r.status_code, "len:", len(body), flush=True)
-          print("hex:", binascii.hexlify(body).decode(), flush=True)
-          print("headers:", dict(r.headers), flush=True)
-          try:
-              for f, t, v in api._walk_pb(body):
-                  print("  field", f, t, (v[:60] if isinstance(v, bytes) else v), flush=True)
-          except Exception as e:
-              print("pb walk failed:", type(e).__name__, str(e)[:120], flush=True)
-          # try treating body as utf-8 text
-          print("text:", body.decode("latin-1")[:200], flush=True)
-          # also: what does the engine's decode helper produce?
-          try:
-              from levelbot.xC4 import DecodE_HeX
-              print("xC4 decode:", str(DecodE_HeX(binascii.hexlify(body).decode()))[:200], flush=True)
-          except Exception as e:
-              print("xC4 decode failed:", type(e).__name__, str(e)[:100], flush=True)
+          variants=[
+            ("ggblueshark-json-BD","https://loginbp.ggblueshark.com/MajorLogin","BD"),
+            ("ggblueshark-json-bd","https://loginbp.ggblueshark.com/MajorLogin","bd"),
+            ("ggpolarbear-json-BD","https://loginbp.ggpolarbear.com/MajorLogin","BD"),
+            ("ppmainecoon-json-BD","https://loginbp.ppmainecoonghj.com/MajorLogin","BD"),
+          ]
+          for label,url,region in variants:
+              payload={"access_token":at,"open_id":oid,"region":region}
+              h={"Content-Type":"application/json",
+                 "User-Agent":"GarenaMSDK/4.0.39(SM-A525F;Android)",
+                 "ReleaseVersion":"OB55","X-GA":"v1 1","X-Unity-Version":"2018.4.11f1"}
+              for plabel, proxy in (("phone",px),("direct",None)):
+                  try:
+                      r=httpx.post(url, json=payload, headers=h, timeout=25, verify=False, proxy=proxy)
+                      txt=r.text
+                      jwt=bool(re.search(r"eyJ[A-Za-z0-9_\-]+\.eyJ", txt))
+                      print(f"  {label:22} [{plabel}] HTTP {r.status_code} len={len(txt)} jwt={jwt} head={txt[:90]!r}", flush=True)
+                  except Exception as e:
+                      print(f"  {label:22} [{plabel}] {type(e).__name__}: {str(e)[:90]}", flush=True)
           PY
       - name: Run glory engine through phone proxy
         if: false
