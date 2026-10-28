@@ -22,11 +22,35 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
+      - name: Endpoint diagnosis (phone proxy vs direct)
+        env:
+          PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
+        run: |
+          python3 - <<'PY'
+          import os, httpx, traceback
+          px = f"socks5://{os.environ['PHONE_PROXY_IP']}:1080"
+          import ff_bd_api as api
+          targets = [("GRANT", api.GRANT_URL), ("MAJOR_LOGIN", api.MAJOR_LOGIN_URL)]
+          for name, url in targets:
+              for label, proxy in (("phone", px), ("direct", None)):
+                  try:
+                      r = httpx.post(url, json={"client_id": 100067, "client_type": 2, "password": "x", "response_type": "token", "uid": 8330016000},
+                                     headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
+                                     timeout=25, verify=False, proxy=proxy)
+                      print(f"{name} [{label}] -> HTTP {r.status_code} | {r.text[:140]!r}", flush=True)
+                  except Exception as e:
+                      print(f"{name} [{label}] -> {type(e).__name__}: {str(e)[:200]}", flush=True)
+          for label, proxy in (("phone", px), ("direct", None)):
+              try:
+                  r = httpx.get("https://ipinfo.io/json", proxy=proxy, timeout=25)
+                  print(f"IPINFO [{label}] -> {r.json().get('ip')} {r.json().get('country')}", flush=True)
+              except Exception as e:
+                  print(f"IPINFO [{label}] -> {type(e).__name__}: {str(e)[:150]}", flush=True)
+          PY
       - name: Run glory engine through phone proxy
         env:
           BD_CREDS_B64: ${{ secrets.BD_CREDS_B64 }}
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
-          BD_CREDS_B64_1: ${{ secrets.BD_CREDS_B64 }}
         run: |
           [ -n "$BD_CREDS_B64" ] && echo "$BD_CREDS_B64" | base64 -d > bd_creds.txt || true
           export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
@@ -37,6 +61,6 @@ jobs:
           cfg = json.loads(p.read_text()) if p.exists() else {}
           cfg.update({"enabled": True, "accounts": 1, "cycles": 1, "auto_mint": 0, "farm": True, "workers": 1})
           p.write_text(json.dumps(cfg, indent=1))
-          print("test config:", cfg)
+          print("test config ready")
           PY
-          timeout 900 python3 -u -m levelbot.run_level --all 1 --cycles 1 2>&1 | tail -80
+          timeout 900 python3 -u -m levelbot.run_level --all 1 --cycles 1 2>&1 | tail -60
