@@ -26,28 +26,31 @@ jobs:
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
-          export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
           python3 - <<'PY'
           import os, json, httpx
+          px = "socks5://" + os.environ["PHONE_PROXY_IP"] + ":1080"
           import ff_bd_api as api, ff_majorlogin
-          px=os.environ["BD_PROXY_URL"]
-          # route ff_majorlogin's httpx through the phone as well
-          _post = httpx.post
-          httpx.post = lambda *a, **kw: _post(*a, **{**kw, "proxy": px})
-          try:
-              ip = httpx.get("https://ipinfo.io/json", proxy=px, timeout=20).json().get("ip")
-          except Exception:
-              ip = "223.191.51.89"
-          print("client_ip used:", ip, flush=True)
-          acc = json.load(open("guests_manager/registered_pool.json"))[0]
-          pair = api.guest_grant(acc["uid"], acc["pw"])
-          print("grant:", bool(pair), flush=True)
-          if pair:
+          pool = json.load(open("guests_manager/registered_pool.json"))
+          print("pool:", len(pool), flush=True)
+          for acc in pool[:3]:
+              uid, pw = acc["uid"], acc["pw"]
+              # guest grant is an OAuth call: direct is fine and less flaky
+              pair = api.guest_grant(uid, pw)
+              print(f"{uid} grant:", bool(pair), flush=True)
+              if not pair:
+                  continue
               at, oid = pair
-              ml = ff_majorlogin.major_login(acc["uid"], oid, at, ip)
-              print("modern major_login ->", ("OK jwt len %d" % len(ml["jwt"])) if ml else "None", flush=True)
+              _post = httpx.post
+              httpx.post = lambda *a, **kw: _post(*a, **{**kw, "proxy": px})
+              try:
+                  ip = httpx.get("https://ipinfo.io/json", proxy=px, timeout=20).json().get("ip")
+              except Exception:
+                  ip = "223.191.51.89"
+              ml = ff_majorlogin.major_login(uid, oid, at, ip)
+              print(f"{uid} major_login:", ("OK jwt=" + str(len(ml["jwt"]))) if ml else "None", "| ip:", ip, flush=True)
               if ml:
-                  print("  key/iv:", bool(ml.get("key")), bool(ml.get("iv")), "| url:", str(ml.get("url"))[:60], "| region:", ml.get("region"), flush=True)
+                  print("   key:", bool(ml.get("key")), "iv:", bool(ml.get("iv")), "url:", str(ml.get("url"))[:50], "region:", ml.get("region"), flush=True)
+                  break
           PY
       - name: Run glory engine through phone proxy
         if: false
