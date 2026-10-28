@@ -1097,6 +1097,17 @@ def cmd_recover(m):
     if extras:
         card += "━━━━━━━━━━━━━━━\n" + "\n".join(extras) + "\n"
     card += "━━━━━━━━━━━━━━━\n✅ স্ট্যাটাস: অ্যাকাউন্ট সক্রিয়"
+    # hacked-account recovery guide (official Garena process)
+    card += (
+        "\n📋 <b>রিকভারি প্রমাণ (Garena support-এ দিন):</b>\n"
+        f"UID: <code>{p.get('uid')}</code> | তৈরি: {created or '-'} | শেষ লগইন: {last or '-'} | বর্তমান নাম: {p.get('name')}\n"
+        "━━━━━━━━━━━━━━━\n"
+        "🔒 <b>হ্যাক হলে অফিসিয়াল ধাপ:</b>\n"
+        "1. গেমে: Settings → Basic → Customer Service (বা ff.support.garena.com)\n"
+        "2. 'Hacked Account / Account Recovery' ফর্ম পূরণ করুন\n"
+        "3. দিন: UID + তৈরির তারিখ + হ্যাকের আগের নাম + রিচার্জ রসিদ/ট্রানজেকশন আইডি\n"
+        "4. যত দ্রুত সম্ভব রিপোর্ট করুন — বাইন্ডিং বদলে গেলে রিকভারি কঠিন হয়"
+    )
     bot.edit_message_text(card, msg.chat.id, msg.message_id)
 
 
