@@ -144,10 +144,28 @@ def load_accounts(limit, prefer=None):
                 known.add(u)
     except Exception:
         pass
+    # 2026-10-28: Garena now hard-blocks the pre-Oct guest pool ("Protection
+    # Bypass"), so burned accounts must never be picked ahead of fresh ones.
+    try:
+        prog = load_progress()
+    except Exception:
+        prog = {}
+    BURNED = {"majorlogin_failed", "logindata_failed"}
+    usable, burned = [], []
+    for u, pw in out:
+        st = (prog.get(u) or {}).get("status")
+        if st in BURNED and not (prog.get(u) or {}).get("cycles"):
+            burned.append((u, pw))
+        else:
+            usable.append((u, pw))
+    # freshest registrations sit at the END of the pool -> newest first
+    usable.reverse()
+    out = usable + burned
     if prefer:
         pref = [(u, pw) for u, pw in out if u in prefer]
         rest = [(u, pw) for u, pw in out if u not in prefer]
         out = pref + rest
+    print(f"account pool: {len(usable)} usable, {len(burned)} burned-skip", flush=True)
     return out[:limit]
 
 
