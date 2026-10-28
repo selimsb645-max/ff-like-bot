@@ -570,7 +570,7 @@ async def run_account(uid, pw, cycles, on_done):
         await conn.close()
     except Exception:
         pass
-    lvl = profile_level_exp(login["jwt"], login["uid"])
+    lvl = profile_level_exp(login["jwt"], login["uid"], login.get("url"))
     res = {"status": "done", "cycles": stats.cycles_completed,
            "level": lvl.get("level"), "exp": lvl.get("exp"), "ts": int(time.time())}
     print(f"{tag} DONE cycles={stats.cycles_completed} level={res['level']} exp={res['exp']}", flush=True)
@@ -588,12 +588,13 @@ async def run_account(uid, pw, cycles, on_done):
     return res
 
 
-def profile_level_exp(jwt, uid):
+def profile_level_exp(jwt, uid, base_url=None):
     """Raw profile fetch: f6=level, f7=exp, f21=likes."""
     try:
         body = api._enc(b"\x08" + api._pb_varint(int(uid)))
-        r = httpx.post("https://clientbp.ggpolarbear.com/GetPlayerPersonalShow",
-            headers=api._headers(login["jwt"], "OB55"), data=body, timeout=20, verify=False)
+        host = (base_url or "https://clientbp.ggpolarbear.com").rstrip("/")
+        r = httpx.post(host + "/GetPlayerPersonalShow",
+            headers=api._headers(jwt, "OB55"), data=body, timeout=20, verify=False)
         out = {}
         for f, t, v in api._walk_pb(r.content):
             if t == "bytes" and len(v) > 4:
