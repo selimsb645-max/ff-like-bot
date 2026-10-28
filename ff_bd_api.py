@@ -63,6 +63,9 @@ def _headers(jwt: str, rv: str = "OB55") -> dict:
         "Expect": "100-continue",
         "X-Unity-Version": "2018.4.11f1",
         "X-GA": "v1 1",
+        # 2026-10-28: Garena now rejects requests whose X-GA-SV is stale; every
+        # authenticated call (profile, clan, likes) needs a live unix timestamp.
+        "X-GA-SV": str(int(__import__("time").time())),
         "ReleaseVersion": rv,
     }
 
