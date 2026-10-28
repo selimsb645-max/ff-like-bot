@@ -1,0 +1,42 @@
+name: Glory Engine Test (phone proxy)
+on:
+  workflow_dispatch:
+concurrency:
+  group: glory-test
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -q -r requirements.txt socksio
+      - name: Join Tailscale
+        env:
+          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscaled > /tmp/tailscaled.log 2>&1 &
+          sleep 5
+          sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
+      - name: Run glory engine through phone proxy
+        env:
+          BD_CREDS_B64: ${{ secrets.BD_CREDS_B64 }}
+          PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
+          BD_CREDS_B64_1: ${{ secrets.BD_CREDS_B64 }}
+        run: |
+          [ -n "$BD_CREDS_B64" ] && echo "$BD_CREDS_B64" | base64 -d > bd_creds.txt || true
+          export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
+          export PHONE_OK=1
+          python3 - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("level_config.json")
+          cfg = json.loads(p.read_text()) if p.exists() else {}
+          cfg.update({"enabled": True, "accounts": 1, "cycles": 1, "auto_mint": 0, "farm": True, "workers": 1})
+          p.write_text(json.dumps(cfg, indent=1))
+          print("test config:", cfg)
+          PY
+          timeout 900 python3 -u -m levelbot.run_level --all 1 --cycles 1 2>&1 | tail -80
