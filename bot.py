@@ -137,10 +137,10 @@ def build_menu():
     )
     kb.add(
         types.InlineKeyboardButton("👤 Profile", callback_data="menu:profile"),
-        types.InlineKeyboardButton("📜 History", callback_data="menu:history"),
+        types.InlineKeyboardButton("📦 History", callback_data="menu:history"),
     )
     kb.add(
-        types.InlineKeyboardButton("🏰 My Guild", callback_data="menu:guild"),
+        types.InlineKeyboardButton("👥 My Guild", callback_data="menu:guild"),
         types.InlineKeyboardButton("⚙️ My UID", callback_data="menu:myuid"),
     )
     kb.add(
@@ -769,53 +769,40 @@ def build_welcome_kb():
 
 @bot.message_handler(commands=["start", "help", "menu"])
 def cmd_start(m):
-    # welcome message for new vs returning users
+    """Clean Bengali welcome: only the 7 menu buttons, no command list."""
     is_new = getattr(m, "_ff_new_user", False)
-    if is_new:
-        u = m.from_user
-        reg_date = _bd_date(time.time())
-        bot.reply_to(m,
-            f"👋 Welcome, <b>{u.first_name or 'Player'}!</b>\n\n"
-            f"🎉 Your account has been created!\n"
-            f"🆔 Account ID: <code>{u.id}</code>\n"
-            f"📅 Registration Date: {reg_date}\n"
-            f"❤️ Free likes: <b>Unlimited</b>\n\n"
-            f"💡 To get started, set your Free Fire UID "
-            f"or tap a button below 👇",
-            reply_markup=build_welcome_kb())
-        return
     # referral payload: /start ref<referrer_id>
     ref_greet = ""
     parts = m.text.split(maxsplit=1)
     if len(parts) > 1 and parts[1].startswith("ref") and parts[1][3:].isdigit():
         try:
             record_referral(int(parts[1][3:]))
-            ref_greet = "\n🎁 Welcome — you joined via a referral!"
+            ref_greet = "\n🎁 রেফারেলের মাধ্যমে জয়েন করেছেন — ধন্যবাদ!"
         except Exception:
             pass
-    bot.reply_to(m,
-        "<b>🔥 FF BD Bot</b>\n\n"
-        "Everything works with one tap of the buttons below:\n\n"
-        "<b>/stats</b> <code>UID</code> — player profile (name, likes)\n"
-        "<b>/like</b> <code>UID [count]</code> — send likes\n"
-        "<b>/profile</b> <code>UID</code> — full player card (level, rank, guild)\n"
-        "<b>/setuid</b> <code>UID</code> — save your UID (auto-used in all commands)\n"
-        "<b>/myuid</b> — view / change your saved UID\n"
-        "<b>/stopremind</b> — disable the reminder\n"
-        "<b>/history</b> — your like history\n"
-        "<b>/referrals</b> — your referral count\n"
-        "<b>/myid</b> — your ID and cooldown status\n"
-        "<b>/guildlike</b> <code>GUILD_ID [count]</code> — like guild members\n"
-        "<b>/setguild</b> <code>GUILD_ID</code> — save your guild"
-        + ("\n\n👑 <b>Admin Commands</b>\n"
-           "<b>/pool</b> — like pool status\n"
-           "<b>/guests</b> — guest account status\n"
-           "<b>/admin</b> — 📊 user analytics dashboard\n"
-           "<b>/broadcast</b> <code>msg</code> — message everyone\n"
-           "<b>/export_users</b> — user list export"
-           if is_admin(m.from_user.id if m.from_user else 0) else "")
-        + ref_greet,
-        reply_markup=build_menu())
+
+    welcome = (
+        "🔥 <b>স্বাগতম!</b> FF • FREE LIKE BOT-এ আপনাকে স্বাগতম। 🎮\n\n"
+        "এখানে আপনি পাবেন এক ক্লিকে লাইক বৃদ্ধি, প্লেয়ার প্রোফাইল চেক, "
+        "গিল্ড গ্লোরি ও ইউআইডি ম্যানেজমেন্টের সুব্যবস্থা। "
+        "আপনার ফ্রি ফায়ার অভিজ্ঞতাকে করুন আরও দারুণ! 🚀\n\n"
+        "নিচের বাটনগুলোতে ক্লিক করে আপনার প্রয়োজনীয় ফিচারটি ব্যবহার করুন 👇"
+    )
+
+    if is_new:
+        u = m.from_user
+        info = (
+            f"\n\n━━━━━━━━━━━━━━━\n"
+            f"🎉 আপনার অ্যাকাউন্ট তৈরি হয়েছে!\n"
+            f"🆔 আইডি: <code>{u.id}</code>\n"
+            f"📅 রেজিস্ট্রেশন: {_bd_date(time.time())}\n"
+            f"❤️ ফ্রি লাইক: <b>আনলিমিটেড</b>"
+        )
+        bot.reply_to(m, info.lstrip("\n") + "\n\n" + welcome + ref_greet,
+                     reply_markup=build_menu())
+        return
+
+    bot.reply_to(m, welcome + ref_greet, reply_markup=build_menu())
 
 
 @bot.callback_query_handler(func=lambda c: c.data and c.data.startswith("uid:"))
