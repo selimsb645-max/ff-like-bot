@@ -22,21 +22,54 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Fresh mint + engine (join test)
+      - name: Level data probe
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
           export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
-          export PHONE_OK=1
           python3 - <<'PY'
-          import json, pathlib
-          p = pathlib.Path("level_config.json")
-          cfg = json.loads(p.read_text())
-          cfg.update({"enabled": True, "accounts": 1, "cycles": 2, "auto_mint": 1, "farm": True, "workers": 1})
-          p.write_text(json.dumps(cfg, indent=1))
-          print("config ok", flush=True)
+          import os, json, httpx
+          import ff_bd_api as api
+          from levelbot import run_level as rl
+          pool = json.load(open("guests_manager/registered_pool.json"))
+          acc = pool[-1]                      # newest minted = logs in fine
+          print("account:", acc["uid"], flush=True)
+          login = rl.raw_login(acc["uid"], acc["pw"])
+          print("login ok:", bool(login), flush=True)
+          if not login: raise SystemExit
+          # --- GetLoginData raw fields ---
+          pair = api.guest_grant(acc["uid"], acc["pw"])
+          at, oid = pair
+          wire = api._pf_str(22, oid) + api._pf_str(23, "4") + api._pf_str(29, at) + api._pf_str(99, "4")
+          h = {"User-Agent": api.LOGIN_UA, "X-GA-SV": str(int(__import__("time").time())),
+               "Content-Type": "application/x-www-form-urlencoded", "X-Unity-Version": "2018.4.12f1",
+               "X-GA": "v1 1", "ReleaseVersion": "OB55", "Authorization": f"Bearer {login['jwt']}"}
+          url = (login.get("url") or "https://clientbp.ggpolarbear.com").rstrip("/") + "/GetLoginData"
+          r = httpx.post(url, headers=h, data=api._enc(wire), timeout=25, verify=False)
+          print("LoginData:", r.status_code, "len", len(r.content), flush=True)
+          for f, wt, v in api._walk_pb(r.content):
+              if wt == 0:
+                  print(f"  f{f}=int {v}", flush=True)
+              elif wt == 2 and len(v) <= 40:
+                  try: print(f"  f{f}=str {v.decode()!r}", flush=True)
+                  except Exception: print(f"  f{f}=bytes({len(v)}) {v[:16].hex()}", flush=True)
+              elif wt == 2:
+                  print(f"  f{f}=msg({len(v)})", flush=True)
+                  for sf, swt, sv in api._walk_pb(v):
+                      if swt == 0 and 0 < sv < 100:
+                          print(f"     .f{sf}=int {sv}", flush=True)
+          # --- profile card fields ---
+          for host in ("https://clientbp.ggpolarbear.com", "https://clientbp.ppmainecoonghj.com"):
+              try:
+                  body = api._enc(b"\x08" + api._pb_varint(int(acc["uid"])))
+                  pr = httpx.post(host + "/GetPlayerPersonalShow", headers=api._headers(login["jwt"], "OB55"),
+                                  data=body, timeout=20, verify=False)
+                  ints = [(f, v) for f, wt, v in api._walk_pb(pr.content) if wt == 0]
+                  subs = [(f, len(v)) for f, wt, v in api._walk_pb(pr.content) if wt == 2]
+                  print(f"profile {host.split('//')[1]}: {pr.status_code} ints={ints[:8]} msgs={subs[:6]}", flush=True)
+              except Exception as e:
+                  print("profile err:", type(e).__name__, str(e)[:60], flush=True)
           PY
-          timeout 1200 python3 -u -m levelbot.run_level --all 1 --cycles 2 2>&1 | tail -60
       - name: Run glory engine through phone proxy
         if: false
         env:
