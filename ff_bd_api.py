@@ -63,9 +63,6 @@ def _headers(jwt: str, rv: str = "OB55") -> dict:
         "Expect": "100-continue",
         "X-Unity-Version": "2018.4.11f1",
         "X-GA": "v1 1",
-        # 2026-10-28: Garena now rejects requests whose X-GA-SV is stale; every
-        # authenticated call (profile, clan, likes) needs a live unix timestamp.
-        "X-GA-SV": str(int(__import__("time").time())),
         "ReleaseVersion": rv,
     }
 
@@ -601,37 +598,12 @@ def load_registered_bd():
 
 
 def refresh_pool() -> list:
-    """Mint fresh JWTs for pool accounts — PARALLEL + INCREMENTAL.
-    Keeps still-valid cached tokens (no re-login), drops blacklisted dead ones,
-    and mints the rest with a 12-worker thread pool. Fixes the multi-minute
-    sequential rebuild that made /like requests crawl."""
-    from concurrent.futures import ThreadPoolExecutor
-    dead = {str(a) for a in load_dead()}
-    creds = load_creds() + load_registered_bd()
-    keep = {}
-    try:
-        cached = json.loads(POOL_FILE.read_text())
-    except Exception:
-        cached = []
-    for t in cached:
-        if (isinstance(t, dict) and t.get("uid")
-                and (t.get("exp") or 0) > time.time() + 300
-                and str(t.get("account_id")) not in dead):
-            keep[str(t["uid"])] = t
-    todo = [(u, pw) for u, pw in creds if str(u) not in keep]
-    pool = list(keep.values())
-
-    def _safe_mint(up):
-        try:
-            return mint_jwt(up[0], up[1])
-        except Exception:
-            return None
-
-    if todo:
-        with ThreadPoolExecutor(max_workers=12) as ex:
-            for t in ex.map(_safe_mint, todo):
-                if t and str(t.get("account_id")) not in dead:
-                    pool.append(t)
+    """Mint fresh JWTs for all pool accounts."""
+    pool = []
+    for uid, pw in load_creds() + load_registered_bd():
+        t = mint_jwt(uid, pw)
+        if t:
+            pool.append(t)
     POOL_FILE.write_text(json.dumps(pool, indent=1))
     return pool
 
@@ -790,57 +762,30 @@ def send_like(account_id: int, count: int = 1, used: set = None) -> int:
     """Send likes to a target. Each pool account can like once per target.
     Only ACTIVATED accounts (with a live game profile) are used - unactivated
     ones return HTTP 200 but the like never lands."""
-    from concurrent.futures import ThreadPoolExecutor
     cache = ready_uids()
-    base_pool = get_pool()
-
-    def _check(t):
-        try:
-            return t, is_activated(t, cache)
-        except Exception:
-            return t, False
-
-    pool = []
-    with ThreadPoolExecutor(max_workers=10) as ex:
-        for t, ok in ex.map(_check, base_pool):
-            if ok:
-                pool.append(t)
+    pool = [t for t in get_pool() if is_activated(t, cache)]
     try:
         READY_FILE.write_text(json.dumps(cache, indent=1))
     except Exception:
         pass
     used = used if used is not None else set()
-    # build the work list, skipping already-used pairs
-    todo = [t for t in pool if (t["account_id"], account_id) not in used]
-    todo = todo[:max(0, count)]
-    if not todo:
-        return 0
-    import threading
-    import like_pb2 as lpb
-    lock = threading.Lock()
-    sent = [0]
-
-    def _fire(t):
-        try:
-            m = lpb.like()
-            m.uid = int(account_id)
-            m.region = "BD"
-            payload = _enc(m.SerializeToString())
-            r = httpx.post(LIKE_URL, headers=_headers(t["token"], "OB55"),
-                           data=payload, timeout=12, verify=False)
-            if r.status_code == 200:
-                with lock:
-                    used.add((t["account_id"], account_id))
-                    sent[0] += 1
-        except Exception:
-            pass
-
-    # PARALLEL like delivery: 12 accounts fire at once instead of one-by-one,
-    # cutting a ~350-like batch from 8-9 minutes down to well under a minute.
-    workers = min(12, max(1, len(todo)))
-    with ThreadPoolExecutor(max_workers=workers) as ex:
-        list(ex.map(_fire, todo))
-    return sent[0]
+    sent = 0
+    for t in pool:
+        if sent >= count:
+            break
+        key = (t["account_id"], account_id)
+        if key in used:
+            continue
+        import like_pb2 as lpb
+        m = lpb.like()
+        m.uid = int(account_id)
+        m.region = "BD"
+        payload = _enc(m.SerializeToString())
+        r = httpx.post(LIKE_URL, headers=_headers(t["token"], "OB55"), data=payload, timeout=25, verify=False)
+        if r.status_code == 200:
+            used.add(key)
+            sent += 1
+    return sent
 
 
 if __name__ == "__main__":
@@ -850,30 +795,26 @@ if __name__ == "__main__":
         s = get_stats(t["account_id"], t["token"])
         print(f"  {t['account_id']} lvl={s.get('level')} likes={s.get('likes')} name={s.get('name')}")
 
-# ── Guild (clan) join ───────────────────────────────────────────────
-JOIN_CANDIDATES = ("/JoinClan", "/ApplyClan", "/JoinClanByClanID", "/JoinGuild")
 
-
-def request_join_clan(clan_id: int, jwt: str = None, verbose: bool = False):
-    """Ask the guild to take this account. Returns (ok, message).
-
-    Garena has moved clan actions around before, so every known HTTP path is
-    tried and the first clean 200 wins. Verbose mode returns every attempt so the
-    caller can log what the server actually answered.
-    """
-    import re as _re
-    results = []
-    body = _enc(b"\x08" + _pb_varint(int(clan_id)))
-    for path in JOIN_CANDIDATES:
-        try:
-            r = httpx.post("https://clientbp.ggpolarbear.com" + path,
-                           headers=_headers(jwt, "OB55"), data=body,
-                           timeout=20, verify=False)
-            txt = r.content.decode("latin-1")
-            strings = [x for x in _re.findall(r"[ -~]{4,}", txt)][:3]
-            results.append(f"{path}->{r.status_code}{strings}")
-            if r.status_code == 200 and not strings:
-                return (True, f"{path} 200 (clean)")
-        except Exception as e:
-            results.append(f"{path}->ERR {str(e)[:40]}")
-    return (False, " | ".join(results)[:400])
+def get_full_profile(account_id: int, jwt: str = None) -> dict:
+    """Public profile: name, level, exp, likes (GetPlayerPersonalShow). Read-only."""
+    if not jwt:
+        pool = get_pool()
+        jwt = pool[0]["token"] if pool else None
+    if not jwt:
+        return {}
+    try:
+        body = _enc(b"\x08" + _pb_varint(int(account_id)))
+        r = httpx.post("https://clientbp.ggpolarbear.com/GetPlayerPersonalShow",
+                       headers=_headers(jwt, "OB55"), data=body, timeout=20, verify=False)
+        if r.status_code != 200:
+            return {}
+        out = {}
+        for f, t, v in _walk_pb(r.content):
+            if t == "bytes" and len(v) > 4:
+                for sf, st, sv in _walk_pb(v):
+                    if sf in (6, 7, 21) and st == "int":
+                        out[sf] = sv
+        return {"level": out.get(6), "exp": out.get(7), "likes": out.get(21)}
+    except Exception:
+        return {}
