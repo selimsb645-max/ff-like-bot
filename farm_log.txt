@@ -1,32 +1,34 @@
 auto_phone: 0 new phone accounts to activate
-bd proxy hunt: 19 alive candidates
-bd proxy OK: http://103.199.86.82:8080 exit=157.119.186.253
+bd proxy hunt: 10 alive candidates
 bd proxy OK: socks5://202.44.106.141:1080 exit=202.44.105.31
-bd proxy socks5://119.148.20.109:22122: BD exit but can't reach garenanow — skip
-auto_mint: 2 usable BD proxies: ['http://103.199.86.82:8080', 'socks5://202.44.106.141:1080']
-mint[t1]: major_register 8362392681: HTTPSConnectionPool(host='loginbp.ppmain
-mint[t2]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
-mint[t3]: FRESH BD ACCOUNT 8362397991 (Kexin3748)
-mint[t4]: FRESH BD ACCOUNT 8362403458 (Kexin8757)
+auto_mint: 1 usable BD proxies: ['socks5://202.44.106.141:1080']
+mint[t1]: FRESH BD ACCOUNT 8365596326 (Kexin8575)
+mint[t2]: FRESH BD ACCOUNT 8365597935 (Kexin7875)
 auto_mint: 2 fresh BD accounts minted
 pool: 2 fresh account(s) saved to registered_pool.json
-account pool: 469 usable, 0 burned-skip
-candidates: 11 accounts, want=3, cycles=40, first=[8362397991, 8362403458, '8362403458', '8362397991', '8360611155', '8360101392', '8358568679', '8358135285']
+account pool: 481 usable, 0 burned-skip
+candidates: 11 accounts, want=3, cycles=40, first=[8365596326, 8365597935, '8365597935', '8365596326', '8365529524', '8365528241', '8365218771', '8365128786']
 BULK MODE: 11 candidates, 3 parallel workers, cycles=40
-[8362397991] authenticating...
-    raw_login[8362397991]: modern MajorLogin OK (jwt 735 chars)
-[8362397991] online=202.81.106.90:39699 whisper=202.81.106.98:39801
-[8362403458] authenticating...
-    raw_login[8362403458]: modern MajorLogin OK (jwt 735 chars)
-[8362403458] authenticating...
-    raw_login[8362403458]: modern MajorLogin OK (jwt 735 chars)
-[8362397991] authenticating...
-    raw_login[8362397991]: modern MajorLogin OK (jwt 735 chars)
-[8362397991] online=202.81.106.90:39699 whisper=202.81.106.98:39801
-[8360611155] authenticating...
-    raw_login[8360611155]: modern MajorLogin OK (jwt 735 chars)
-[8360611155] online=148.222.66.153:39699 whisper=202.81.106.97:39801
-socks connect failed (Connection closed unexpectedly) — falling back to direct
+[8365596326] authenticating...
+    raw_login[8365596326]: modern MajorLogin OK (jwt 735 chars)
+[8365596326] online=148.222.66.152:39699 whisper=202.81.106.44:39801
+[8365597935] authenticating...
+    raw_login[8365597935]: modern MajorLogin OK (jwt 735 chars)
+[8365597935] online=148.222.66.130:39699 whisper=202.81.106.98:39801
+[8365597935] authenticating...
+    raw_login[8365597935]: modern MajorLogin failed -> legacy wire fallbacks
+[8365596326] authenticating...
+    raw_login[8365596326]: modern MajorLogin failed -> legacy wire fallbacks
+    raw_login[8365596326]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
+    raw_login[8365596326]: gr path status=200 len=97 prot=True
+[8365596326] LOGIN FAILED (majorlogin_failed)
+[8365596326] TCP CONNECT FAILED: 
+progress push failed: [Errno 104] Connection reset by peer
+[8365597935] TCP CONNECT FAILED: 
+progress push failed: [Errno 104] Connection reset by peer
+[8365596326] -> login_failed | done=0
+[8365596326] -> tcp_failed | done=0
+[8365597935] -> tcp_failed | done=0
 Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
     yield
@@ -77,12 +79,12 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
     return fut.result()
            ^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 554, in run_account
-    servers = get_login_data(login)
-              ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 491, in get_login_data
-    r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 542, in run_account
+    login = raw_login(uid, pw)
+            ^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 439, in raw_login
+    r = httpx.post(ML_URL, headers=h2, data=api._enc(wire), timeout=25, verify=False)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 39, in <lambda>
     httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
