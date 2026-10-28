@@ -794,3 +794,31 @@ if __name__ == "__main__":
     for t in pool[:5]:
         s = get_stats(t["account_id"], t["token"])
         print(f"  {t['account_id']} lvl={s.get('level')} likes={s.get('likes')} name={s.get('name')}")
+
+# ── Guild (clan) join ───────────────────────────────────────────────
+JOIN_CANDIDATES = ("/JoinClan", "/ApplyClan", "/JoinClanByClanID", "/JoinGuild")
+
+
+def request_join_clan(clan_id: int, jwt: str = None, verbose: bool = False):
+    """Ask the guild to take this account. Returns (ok, message).
+
+    Garena has moved clan actions around before, so every known HTTP path is
+    tried and the first clean 200 wins. Verbose mode returns every attempt so the
+    caller can log what the server actually answered.
+    """
+    import re as _re
+    results = []
+    body = _enc(b"\x08" + _pb_varint(int(clan_id)))
+    for path in JOIN_CANDIDATES:
+        try:
+            r = httpx.post("https://clientbp.ggpolarbear.com" + path,
+                           headers=_headers(jwt, "OB55"), data=body,
+                           timeout=20, verify=False)
+            txt = r.content.decode("latin-1")
+            strings = [x for x in _re.findall(r"[ -~]{4,}", txt)][:3]
+            results.append(f"{path}->{r.status_code}{strings}")
+            if r.status_code == 200 and not strings:
+                return (True, f"{path} 200 (clean)")
+        except Exception as e:
+            results.append(f"{path}->ERR {str(e)[:40]}")
+    return (False, " | ".join(results)[:400])
