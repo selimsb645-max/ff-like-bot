@@ -1515,5 +1515,14 @@
   "status": "tcp_failed",
   "err": "",
   "cycles": 0
+ },
+ "8365529524": {
+  "status": "logindata_failed",
+  "cycles": 0
+ },
+ "8365218771": {
+  "status": "login_failed",
+  "stage": "majorlogin_failed",
+  "cycles": 0
  }
 }
