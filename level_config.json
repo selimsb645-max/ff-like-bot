@@ -1,13 +1,13 @@
 {
  "enabled": true,
- "accounts": 1,
- "cycles": 60,
+ "accounts": 3,
+ "cycles": 25,
  "clan_id": 3106233034,
  "external": false,
  "team_code": "0",
  "prefer": [],
  "auto_phone": true,
- "workers": 1,
- "auto_mint": 1,
- "farm": false
+ "workers": 2,
+ "auto_mint": 2,
+ "farm": true
 }
