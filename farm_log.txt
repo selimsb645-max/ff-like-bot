@@ -1,7 +1,116 @@
 auto_phone: 0 new phone accounts to activate
-auto_mint: using phone BD proxy socks5://100.83.141.93:1080 — hunt skipped
-auto_mint: 1 usable BD proxies: ['socks5://100.83.141.93:1080']
-mint[t1]: FRESH BD ACCOUNT 8360611155 (Kexin0474)
-auto_mint: 1 fresh BD accounts minted
-pool: 1 fresh account(s) saved to registered_pool.json
-mint-only mode (farm:false): match engine SKIPPED — minted accounts saved to the like pool
+bd proxy hunt: 19 alive candidates
+bd proxy OK: http://103.199.86.82:8080 exit=157.119.186.253
+bd proxy OK: socks5://202.44.106.141:1080 exit=202.44.105.31
+bd proxy socks5://119.148.20.109:22122: BD exit but can't reach garenanow — skip
+auto_mint: 2 usable BD proxies: ['http://103.199.86.82:8080', 'socks5://202.44.106.141:1080']
+mint[t1]: major_register 8362392681: HTTPSConnectionPool(host='loginbp.ppmain
+mint[t2]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t3]: FRESH BD ACCOUNT 8362397991 (Kexin3748)
+mint[t4]: FRESH BD ACCOUNT 8362403458 (Kexin8757)
+auto_mint: 2 fresh BD accounts minted
+pool: 2 fresh account(s) saved to registered_pool.json
+account pool: 469 usable, 0 burned-skip
+candidates: 11 accounts, want=3, cycles=40, first=[8362397991, 8362403458, '8362403458', '8362397991', '8360611155', '8360101392', '8358568679', '8358135285']
+BULK MODE: 11 candidates, 3 parallel workers, cycles=40
+[8362397991] authenticating...
+    raw_login[8362397991]: modern MajorLogin OK (jwt 735 chars)
+[8362397991] online=202.81.106.90:39699 whisper=202.81.106.98:39801
+[8362403458] authenticating...
+    raw_login[8362403458]: modern MajorLogin OK (jwt 735 chars)
+[8362403458] authenticating...
+    raw_login[8362403458]: modern MajorLogin OK (jwt 735 chars)
+[8362397991] authenticating...
+    raw_login[8362397991]: modern MajorLogin OK (jwt 735 chars)
+[8362397991] online=202.81.106.90:39699 whisper=202.81.106.98:39801
+[8360611155] authenticating...
+    raw_login[8360611155]: modern MajorLogin OK (jwt 735 chars)
+[8360611155] online=148.222.66.153:39699 whisper=202.81.106.97:39801
+socks connect failed (Connection closed unexpectedly) — falling back to direct
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 295, in handle_request
+    raise exc
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 244, in handle_request
+    _init_socks5_connection(**kwargs)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 62, in _init_socks5_connection
+    incoming_bytes = stream.read(max_bytes=4096)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 126, in read
+    with map_exceptions(exc_map):
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ReadError: [Errno 104] Connection reset by peer
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 980, in <module>
+    asyncio.run(main())
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 935, in main
+    await asyncio.gather(*[_worker(u, p) for u, p in accounts])
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 926, in _worker
+    res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=420)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 554, in run_account
+    servers = get_login_data(login)
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 491, in get_login_data
+    r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 39, in <lambda>
+    httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_api.py", line 304, in post
+    return request(
+           ^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_api.py", line 109, in request
+    return client.request(
+           ^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ReadError: [Errno 104] Connection reset by peer
