@@ -22,21 +22,27 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Fresh mint + full engine run
+      - name: Guild join diagnosis
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
           export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
-          export PHONE_OK=1
           python3 - <<'PY'
-          import json, pathlib
-          p = pathlib.Path("level_config.json")
-          cfg = json.loads(p.read_text())
-          cfg.update({"enabled": True, "accounts": 1, "cycles": 2, "auto_mint": 1, "farm": True, "workers": 1})
-          p.write_text(json.dumps(cfg, indent=1))
-          print("config:", {k: cfg[k] for k in ("accounts","cycles","auto_mint","farm")}, flush=True)
+          import os, json
+          import ff_bd_api as api, ff_majorlogin as fm
+          from levelbot import run_level as rl
+          acc = json.load(open("guests_manager/registered_pool.json"))[0]
+          pw = acc["pw"]
+          login = rl.raw_login(acc["uid"], pw)
+          print("login:", bool(login), flush=True)
+          if not login: raise SystemExit
+          lvl = rl.profile_level_exp(login["jwt"], login["uid"], login.get("url"))
+          print("LEVEL/EXP:", lvl, flush=True)
+          ok, msg = api.request_join_clan(3106233034, login["jwt"], verbose=True)
+          print("JOIN RESULT:", ok, "|", msg, flush=True)
+          g = api.get_guild(3106233034, login["jwt"])
+          print("GUILD:", json.dumps(g)[:300] if g else None, flush=True)
           PY
-          timeout 1200 python3 -u -m levelbot.run_level --all 1 --cycles 2 2>&1 | tail -120
       - name: Run glory engine through phone proxy
         if: false
         env:
