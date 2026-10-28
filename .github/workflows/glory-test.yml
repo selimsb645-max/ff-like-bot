@@ -22,35 +22,37 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Modern MajorLogin test
+      - name: Modern MajorLogin RAW debug
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
           python3 - <<'PY'
-          import os, json, httpx
+          import os, json, httpx, re
           px = "socks5://" + os.environ["PHONE_PROXY_IP"] + ":1080"
-          import ff_bd_api as api, ff_majorlogin
-          pool = json.load(open("guests_manager/registered_pool.json"))
-          print("pool:", len(pool), flush=True)
-          for acc in pool[:3]:
-              uid, pw = acc["uid"], acc["pw"]
-              # guest grant is an OAuth call: direct is fine and less flaky
-              pair = api.guest_grant(uid, pw)
-              print(f"{uid} grant:", bool(pair), flush=True)
-              if not pair:
-                  continue
-              at, oid = pair
-              _post = httpx.post
-              httpx.post = lambda *a, **kw: _post(*a, **{**kw, "proxy": px})
+          import ff_bd_api as api, ff_majorlogin as fm
+          acc = json.load(open("guests_manager/registered_pool.json"))[0]
+          pair = api.guest_grant(acc["uid"], acc["pw"])
+          print("grant:", bool(pair), flush=True)
+          if not pair: raise SystemExit
+          at, oid = pair
+          try:
+              ip = httpx.get("https://ipinfo.io/json", proxy=px, timeout=20).json().get("ip")
+          except Exception:
+              ip = "223.191.51.89"
+          payload = fm.build_payload(acc["uid"], oid, at, ip)
+          print("payload bytes:", len(payload), "| client_ip:", ip, flush=True)
+          body = fm.encrypt(payload)
+          for label, proxy in (("phone", px), ("direct", None)):
               try:
-                  ip = httpx.get("https://ipinfo.io/json", proxy=px, timeout=20).json().get("ip")
-              except Exception:
-                  ip = "223.191.51.89"
-              ml = ff_majorlogin.major_login(uid, oid, at, ip)
-              print(f"{uid} major_login:", ("OK jwt=" + str(len(ml["jwt"]))) if ml else "None", "| ip:", ip, flush=True)
-              if ml:
-                  print("   key:", bool(ml.get("key")), "iv:", bool(ml.get("iv")), "url:", str(ml.get("url"))[:50], "region:", ml.get("region"), flush=True)
-                  break
+                  r = httpx.post(fm.ML_URL, data=body, headers=fm.HEADERS, timeout=25, verify=False, proxy=proxy)
+                  raw = r.content
+                  txt = raw.decode("latin-1")
+                  strings = re.findall(r"[ -~]{6,}", txt)
+                  print(f"[{label}] status={r.status_code} len={len(raw)} jwt={'eyJ' in txt}", flush=True)
+                  print(f"  strings: {strings[:4]}", flush=True)
+                  print(f"  fields: {[(f,wt) for f,wt,v in fm._walk(raw)][:8]}", flush=True)
+              except Exception as e:
+                  print(f"[{label}] {type(e).__name__}: {str(e)[:120]}", flush=True)
           PY
       - name: Run glory engine through phone proxy
         if: false
