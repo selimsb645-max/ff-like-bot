@@ -22,53 +22,13 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Level decrypt probe
+      - name: Level read + farm run
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
           export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
-          python3 - <<'PY'
-          import os, json, time, httpx
-          from Crypto.Cipher import AES
-          from Crypto.Util.Padding import unpad
-          import ff_bd_api as api
-          from levelbot import run_level as rl
-          acc = json.load(open("guests_manager/registered_pool.json"))[-1]
-          login = rl.raw_login(acc["uid"], acc["pw"])
-          print("account", acc["uid"], "login", bool(login), flush=True)
-          if not login: raise SystemExit
-          key = login["key"] if isinstance(login["key"], bytes) else bytes.fromhex(login["key"])
-          iv  = login["iv"]  if isinstance(login["iv"],  bytes) else bytes.fromhex(login["iv"])
-          print("key/iv lens:", len(key), len(iv), flush=True)
-          at, oid = api.guest_grant(acc["uid"], acc["pw"])
-          wire = api._pf_str(22, oid) + api._pf_str(23, "4") + api._pf_str(29, at) + api._pf_str(99, "4")
-          h = {"User-Agent": api.LOGIN_UA, "X-GA-SV": str(int(time.time())),
-               "Content-Type": "application/x-www-form-urlencoded", "X-Unity-Version": "2018.4.12f1",
-               "X-GA": "v1 1", "ReleaseVersion": "OB55", "Authorization": f"Bearer {login['jwt']}"}
-          url = (login.get("url") or "https://clientbp.ggpolarbear.com").rstrip("/") + "/GetLoginData"
-          r = httpx.post(url, headers=h, data=api._enc(wire), timeout=25, verify=False)
-          raw = r.content
-          plain = raw
-          for attempt in ("unpad", "raw"):
-              try:
-                  plain = unpad(AES.new(key, AES.MODE_CBC, iv).decrypt(raw), 16) if attempt=="unpad" else AES.new(key, AES.MODE_CBC, iv).decrypt(raw)
-                  break
-              except Exception:
-                  plain = raw
-          print("LoginData:", r.status_code, "raw", len(raw), "plain", len(plain), flush=True)
-          def dump(buf, depth=0):
-              for f, wt, v in api._walk_pb(buf):
-                  pad = "  " * depth
-                  if wt == 0:
-                      print(f"{pad}f{f}=int {v}", flush=True)
-                  elif wt == 2 and (len(v) <= 30):
-                      try: print(f"{pad}f{f}='{v.decode()}'", flush=True)
-                      except Exception: print(f"{pad}f{f}=b({len(v)}) {v[:12].hex()}", flush=True)
-                  elif wt == 2:
-                      print(f"{pad}f{f}=msg({len(v)})", flush=True)
-                      if depth < 1: dump(v, depth+1)
-          dump(plain)
-          PY
+          export PHONE_OK=1
+          timeout 1500 python3 -u -m levelbot.run_level --all 2 --cycles 6 2>&1 | tail -50
       - name: Run glory engine through phone proxy
         if: false
         env:
