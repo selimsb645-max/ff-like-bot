@@ -158,8 +158,9 @@ def load_accounts(limit, prefer=None):
             burned.append((u, pw))
         else:
             usable.append((u, pw))
-    # freshest registrations sit at the END of the pool -> newest first
-    usable.reverse()
+    # Garena only accepts the newest guest registrations, so order strictly by
+    # UID (monotonically increasing at registration) - newest first.
+    usable.sort(key=lambda x: int(x[0]) if str(x[0]).isdigit() else 0, reverse=True)
     out = usable + burned
     if prefer:
         pref = [(u, pw) for u, pw in out if u in prefer]
