@@ -22,39 +22,32 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: MajorLogin JSON variants probe
+      - name: Modern MajorLogin test
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
           export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
           python3 - <<'PY'
-          import os, json, httpx, re
-          import ff_bd_api as api
+          import os, json, httpx
+          import ff_bd_api as api, ff_majorlogin
           px=os.environ["BD_PROXY_URL"]
-          acc=json.load(open("guests_manager/registered_pool.json"))[0]
-          pair=api.guest_grant(acc["uid"], acc["pw"])
+          # route ff_majorlogin's httpx through the phone as well
+          _post = httpx.post
+          httpx.post = lambda *a, **kw: _post(*a, **{**kw, "proxy": px})
+          try:
+              ip = httpx.get("https://ipinfo.io/json", proxy=px, timeout=20).json().get("ip")
+          except Exception:
+              ip = "223.191.51.89"
+          print("client_ip used:", ip, flush=True)
+          acc = json.load(open("guests_manager/registered_pool.json"))[0]
+          pair = api.guest_grant(acc["uid"], acc["pw"])
           print("grant:", bool(pair), flush=True)
-          if not pair: raise SystemExit
-          at, oid = pair
-          variants=[
-            ("ggblueshark-json-BD","https://loginbp.ggblueshark.com/MajorLogin","BD"),
-            ("ggblueshark-json-bd","https://loginbp.ggblueshark.com/MajorLogin","bd"),
-            ("ggpolarbear-json-BD","https://loginbp.ggpolarbear.com/MajorLogin","BD"),
-            ("ppmainecoon-json-BD","https://loginbp.ppmainecoonghj.com/MajorLogin","BD"),
-          ]
-          for label,url,region in variants:
-              payload={"access_token":at,"open_id":oid,"region":region}
-              h={"Content-Type":"application/json",
-                 "User-Agent":"GarenaMSDK/4.0.39(SM-A525F;Android)",
-                 "ReleaseVersion":"OB55","X-GA":"v1 1","X-Unity-Version":"2018.4.11f1"}
-              for plabel, proxy in (("phone",px),("direct",None)):
-                  try:
-                      r=httpx.post(url, json=payload, headers=h, timeout=25, verify=False, proxy=proxy)
-                      txt=r.text
-                      jwt=bool(re.search(r"eyJ[A-Za-z0-9_\-]+\.eyJ", txt))
-                      print(f"  {label:22} [{plabel}] HTTP {r.status_code} len={len(txt)} jwt={jwt} head={txt[:90]!r}", flush=True)
-                  except Exception as e:
-                      print(f"  {label:22} [{plabel}] {type(e).__name__}: {str(e)[:90]}", flush=True)
+          if pair:
+              at, oid = pair
+              ml = ff_majorlogin.major_login(acc["uid"], oid, at, ip)
+              print("modern major_login ->", ("OK jwt len %d" % len(ml["jwt"])) if ml else "None", flush=True)
+              if ml:
+                  print("  key/iv:", bool(ml.get("key")), bool(ml.get("iv")), "| url:", str(ml.get("url"))[:60], "| region:", ml.get("region"), flush=True)
           PY
       - name: Run glory engine through phone proxy
         if: false
