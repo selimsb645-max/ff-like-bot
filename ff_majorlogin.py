@@ -250,8 +250,9 @@ def major_login(uid, open_id: str, access_token: str, client_ip: str = "223.191.
 def _shape(resp: dict, uid) -> dict:
     return {
             "jwt": resp["jwt"],
-            "key": resp.get("key", b"").hex() if isinstance(resp.get("key"), bytes) else resp.get("key"),
-            "iv": resp.get("iv", b"").hex() if isinstance(resp.get("iv"), bytes) else resp.get("iv"),
+            # raw bytes: PacketBuilder/GameConnection feed these straight into AES
+            "key": resp.get("key") if isinstance(resp.get("key"), (bytes, bytearray)) else b"",
+            "iv": resp.get("iv") if isinstance(resp.get("iv"), (bytes, bytearray)) else b"",
             "ts": resp.get("ts"),
             "url": resp.get("url"),
             "region": resp.get("region", "bd"),
