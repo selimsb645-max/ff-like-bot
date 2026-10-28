@@ -22,13 +22,57 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Level read + farm run
+      - name: LoginData decrypt + level hunt
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
           export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
-          export PHONE_OK=1
-          timeout 1500 python3 -u -m levelbot.run_level --all 2 --cycles 6 2>&1 | tail -50
+          python3 - <<'PY'
+          import os, json, time, asyncio, httpx
+          import ff_bd_api as api
+          from levelbot import run_level as rl
+          from levelbot.xC4 import DEc_PacKeT
+          pool = json.load(open("guests_manager/registered_pool.json"))
+          pool.sort(key=lambda r: int(r["uid"]) if str(r["uid"]).isdigit() else 0, reverse=True)
+          acc = pool[0]
+          login = rl.raw_login(acc["uid"], acc["pw"])
+          print("account", acc["uid"], "login", bool(login), flush=True)
+          if not login: raise SystemExit
+          key = login["key"] if isinstance(login["key"], bytes) else bytes.fromhex(login["key"])
+          iv  = login["iv"]  if isinstance(login["iv"],  bytes) else bytes.fromhex(login["iv"])
+          at, oid = api.guest_grant(acc["uid"], acc["pw"])
+          wire = api._pf_str(22, oid) + api._pf_str(23, "4") + api._pf_str(29, at) + api._pf_str(99, "4")
+          h = {"User-Agent": api.LOGIN_UA, "X-GA-SV": str(int(time.time())),
+               "Content-Type": "application/x-www-form-urlencoded", "X-Unity-Version": "2018.4.12f1",
+               "X-GA": "v1 1", "ReleaseVersion": "OB55", "Authorization": f"Bearer {login['jwt']}"}
+          url = (login.get("url") or "https://clientbp.ggpolarbear.com").rstrip("/") + "/GetLoginData"
+          r = httpx.post(url, headers=h, data=api._enc(wire), timeout=25, verify=False)
+          raw = r.content
+          print("LoginData:", r.status_code, "len", len(raw), flush=True)
+          plain = None
+          try:
+              dec_hex = asyncio.get_event_loop().run_until_complete(DEc_PacKeT(raw.hex(), key, iv))
+              plain = bytes.fromhex(dec_hex)
+              print("decrypted with login key/iv:", len(plain), "bytes", flush=True)
+          except Exception as e:
+              print("decrypt failed:", type(e).__name__, str(e)[:70], flush=True)
+          def dump(buf, depth=0, maxd=2):
+              for f, wt, v in api._walk_pb(buf):
+                  pad = "  " * depth
+                  if wt == 0:
+                      print(f"{pad}f{f}=int {v}", flush=True)
+                  elif wt == 2 and len(v) <= 32:
+                      try: print(f"{pad}f{f}='{v.decode()}'", flush=True)
+                      except Exception: print(f"{pad}f{f}=b({len(v)})", flush=True)
+                  elif wt == 2:
+                      print(f"{pad}f{f}=msg({len(v)})", flush=True)
+                      if depth < maxd: dump(v, depth+1, maxd)
+          if plain:
+              print("---- decrypted fields ----", flush=True)
+              dump(plain)
+          print("---- raw fields ----", flush=True)
+          dump(raw[:2000])
+          PY
       - name: Run glory engine through phone proxy
         if: false
         env:
