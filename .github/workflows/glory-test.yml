@@ -22,30 +22,34 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Endpoint diagnosis (phone proxy vs direct)
+      - name: OAuth host probe (schemes + hosts)
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
           python3 - <<'PY'
-          import os, httpx, traceback
-          px = f"socks5://{os.environ['PHONE_PROXY_IP']}:1080"
-          import ff_bd_api as api
-          targets = [("GRANT", api.GRANT_URL), ("MAJOR_LOGIN", api.MAJOR_LOGIN_URL)]
-          for name, url in targets:
-              for label, proxy in (("phone", px), ("direct", None)):
+          import os, httpx, socket, ssl
+          ip=os.environ["PHONE_PROXY_IP"]
+          for sch in (f"socks5://{ip}:1080", f"socks5h://{ip}:1080"):
+              print("==== scheme", sch.split("://")[0], flush=True)
+              for h in ["https://100067.connect.garena.com/api/v2/oauth/guest/token:grant",
+                        "https://100067.connect.garena.com/",
+                        "https://loginbp.ggpolarbear.com/MajorLogin",
+                        "https://ffmconnect.live.gop.garenanow.com/"]:
                   try:
-                      r = httpx.post(url, json={"client_id": 100067, "client_type": 2, "password": "x", "response_type": "token", "uid": 8330016000},
-                                     headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
-                                     timeout=25, verify=False, proxy=proxy)
-                      print(f"{name} [{label}] -> HTTP {r.status_code} | {r.text[:140]!r}", flush=True)
+                      r=httpx.request("POST" if ("MajorLogin" in h or "token:grant" in h) else "GET", h,
+                                      json={"client_id":100067,"client_type":2,"password":"x","response_type":"token","uid":8330016000},
+                                      timeout=20, verify=False, proxy=sch)
+                      print(f"  {h.split('/')[2]:40} HTTP {r.status_code} {r.text[:70]!r}", flush=True)
                   except Exception as e:
-                      print(f"{name} [{label}] -> {type(e).__name__}: {str(e)[:200]}", flush=True)
-          for label, proxy in (("phone", px), ("direct", None)):
+                      print(f"  {h.split('/')[2]:40} {type(e).__name__}: {str(e)[:110]}", flush=True)
+          for host in ("100067.connect.garena.com","loginbp.ggpolarbear.com"):
               try:
-                  r = httpx.get("https://ipinfo.io/json", proxy=proxy, timeout=25)
-                  print(f"IPINFO [{label}] -> {r.json().get('ip')} {r.json().get('country')}", flush=True)
+                  ctx=ssl.create_default_context(); ctx.check_hostname=False; ctx.verify_mode=ssl.CERT_NONE
+                  with socket.create_connection((host,443),timeout=15) as s:
+                      with ctx.wrap_socket(s, server_hostname=host) as ss:
+                          print(f"  TLS {host}: OK {ss.version()}", flush=True)
               except Exception as e:
-                  print(f"IPINFO [{label}] -> {type(e).__name__}: {str(e)[:150]}", flush=True)
+                  print(f"  TLS {host}: {type(e).__name__}: {str(e)[:110]}", flush=True)
           PY
       - name: Run glory engine through phone proxy
         env:
