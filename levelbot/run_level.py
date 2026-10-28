@@ -589,7 +589,18 @@ async def run_account(uid, pw, cycles, on_done):
         await conn.close()
     except Exception:
         pass
-    lvl = profile_level_exp(login["jwt"], login["uid"], login.get("url"))
+    # hard cap: a hanging profile/clan call must never stall the match loop
+    import signal as _sig
+    def _alarm(_s, _f):
+        raise TimeoutError("level read")
+    try:
+        _sig.signal(_sig.SIGALRM, _alarm)
+        _sig.alarm(25)
+        lvl = profile_level_exp(login["jwt"], login["uid"], login.get("url"))
+    except Exception as _e:
+        lvl = {"level": None, "exp": None, "likes": None, "err": type(_e).__name__}
+    finally:
+        _sig.alarm(0)
     res = {"status": "done", "cycles": stats.cycles_completed,
            "level": lvl.get("level"), "exp": lvl.get("exp"), "ts": int(time.time())}
     print(f"{tag} DONE cycles={stats.cycles_completed} level={res['level']} exp={res['exp']}", flush=True)
@@ -600,7 +611,9 @@ async def run_account(uid, pw, cycles, on_done):
         if clan:
             # guild membership is what turns these matches into GUILD GLORY, so we
             # always try to join and log the server's exact answer.
+            _sig.alarm(30)
             ok, msg = api.request_join_clan(int(clan), login["jwt"], verbose=True)
+            _sig.alarm(0)
             res["join"] = "OK" if ok else str(msg)[:200]
             print(f"{tag} guild join ({clan}) level={res.get('level')}: {res['join']}", flush=True)
     except Exception as e:
