@@ -21,16 +21,22 @@ from Crypto.Util.Padding import pad
 ML_URL = "https://loginbp.ppmainecoonghj.com/MajorLogin"
 AES_KEY = b"Yg&tc%DEuh6%Zc^8"
 AES_IV = b"6oyZDr22E3ychjM%"
-HEADERS = {
-    "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 11; ASUS_Z01QD Build/PI)",
-    "Connection": "Keep-Alive",
-    "Accept-Encoding": "gzip",
-    "Content-Type": "application/x-www-form-urlencoded",
-    "Expect": "100-continue",
-    "X-Unity-Version": "2018.4.11f1",
-    "X-GA": "v1 1",
-    "ReleaseVersion": "OB55",
-}
+# 2026-10-28: X-GA-SV must be the CURRENT unix timestamp (verified against a live
+# implementation). A stale fixed value makes Garena answer 400 SignError1 /
+# encrypted "Protection Bypass" no matter how complete the payload is.
+def headers() -> dict:
+    return {
+        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 11; ASUS_Z01QD Build/PI)",
+        "X-Unity-Version": "2018.4.11f1",
+        "X-GA": "v1 1",
+        "X-GA-SV": str(int(time.time())),
+        "ReleaseVersion": "OB55",
+        "Authorization": "Bearer",
+        "Content-Type": "application/octet-stream",
+    }
+
+
+HEADERS = headers()  # kept for backwards compatibility
 
 
 # ---------- protobuf wire helpers ----------
@@ -188,24 +194,66 @@ def parse_response(buf: bytes) -> dict:
     return d
 
 
+def build_min_payload(open_id: str, access_token: str) -> bytes:
+    """The minimal wire Garena accepts today: 22=open_id, 23="4", 29=token, 99="4"."""
+    return (_f_str(22, open_id) + _f_str(23, "4")
+            + _f_str(29, access_token) + _f_str(99, "4"))
+
+
+ML_HOSTS = ("https://loginbp.ggblueshark.com/MajorLogin",
+            "https://loginbp.ppmainecoonghj.com/MajorLogin",
+            "https://loginbp.ggpolarbear.com/MajorLogin")
+
+
+def _parse_any(buf: bytes) -> dict:
+    """Response starts with a 64-byte non-protobuf block; try both offsets."""
+    for blob in (buf, buf[64:] if len(buf) > 64 else b""):
+        if not blob:
+            continue
+        try:
+            resp = parse_response(blob)
+        except Exception:
+            continue
+        if resp.get("jwt"):
+            return resp
+    return {}
+
+
 def major_login(uid, open_id: str, access_token: str, client_ip: str = "223.191.51.89") -> dict | None:
-    """Returns {jwt, key, iv, ts, url, region, account_id} or None."""
-    try:
-        body = encrypt(build_payload(uid, open_id, access_token, client_ip))
-        r = httpx.post(ML_URL, data=body, headers=HEADERS, timeout=25, verify=False)
-        if r.status_code != 200:
-            return None
-        resp = parse_response(r.content)
-        if not resp.get("jwt"):
-            return None
-        return {
+    """Returns {jwt, key, iv, ts, url, region, account_id} or None.
+
+    Tries the minimal wire first (what a live Oct-2026 implementation uses), then
+    the full device payload, over all known login hosts, always with a fresh
+    X-GA-SV timestamp.
+    """
+    payloads = [build_min_payload(open_id, access_token),
+                build_payload(uid, open_id, access_token, client_ip)]
+    for payload in payloads:
+        try:
+            body = encrypt(payload)
+        except Exception:
+            continue
+        for host in ML_HOSTS:
+            try:
+                r = httpx.post(host, data=body, headers=headers(), timeout=25, verify=False)
+                if r.status_code != 200:
+                    continue
+                resp = _parse_any(r.content)
+                if not resp.get("jwt"):
+                    continue
+                return _shape(resp, uid)
+            except Exception:
+                continue
+    return None
+
+
+def _shape(resp: dict, uid) -> dict:
+    return {
             "jwt": resp["jwt"],
             "key": resp.get("key", b"").hex() if isinstance(resp.get("key"), bytes) else resp.get("key"),
             "iv": resp.get("iv", b"").hex() if isinstance(resp.get("iv"), bytes) else resp.get("iv"),
             "ts": resp.get("ts"),
             "url": resp.get("url"),
             "region": resp.get("region", "bd"),
-            "account_id": resp.get("account_uid") or int(uid),
-        }
-    except Exception:
-        return None
+        "account_id": resp.get("account_uid") or int(uid),
+    }
