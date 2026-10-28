@@ -957,6 +957,7 @@ def cmd_start(m):
         "<b>/namegen</b> — ✧ stylish FF name generator\n"
         "<b>/guild</b> <code>GUILD_ID</code> — 🏰 guild info card\n"
         "<b>/rank</b> — 📊 track your level/EXP/likes daily\n"
+        "<b>/redeem</b> — 🎁 official redeem codes\n"
         "<b>/setuid</b> <code>UID</code> — save your UID (auto-used in all commands)\n"
         "<b>/myuid</b> — view / change your saved UID\n"
         "<b>/stopremind</b> — disable the reminder\n"
@@ -970,6 +971,8 @@ def cmd_start(m):
            "<b>/guests</b> — guest account status\n"
            "<b>/admin</b> — 📊 user analytics dashboard\n"
            "<b>/broadcast</b> <code>msg</code> — message everyone\n"
+           "<b>/addcode</b> — add a redeem code\n"
+           "<b>/delcode</b> — remove a redeem code\n"
            "<b>/export_users</b> — user list export"
            if is_admin(m.from_user.id if m.from_user else 0) else "")
         + ref_greet,
@@ -1674,6 +1677,109 @@ def cmd_rank(m):
                      f"First snapshot runs within a few hours, then daily.\n"
                      f"You will get a message when level, EXP or likes change.\n"
                      f"Now tracking {total} player(s).")
+
+
+# ============ NEW: REDEEM CODE HUB (/redeem) ============
+CODES_FILE = Path(__file__).parent / "codes.json"
+REDEEM_PORTAL = "https://reward.ff.garena.com"
+
+
+def load_codes() -> dict:
+    return _load_json(CODES_FILE) or {}
+
+
+def active_codes() -> list:
+    now = time.time()
+    out = []
+    for code, rec in load_codes().items():
+        if not isinstance(rec, dict):
+            continue
+        exp = rec.get("expiry")
+        if exp and float(exp) < now:
+            continue
+        out.append((code, rec))
+    out.sort(key=lambda x: float(x[1].get("added_ts") or 0), reverse=True)
+    return out
+
+
+@bot.message_handler(commands=["redeem", "codes"])
+def cmd_redeem(m):
+    codes = active_codes()
+    parts = [f"🎁 <b>FREE FIRE REDEEM CODES</b>",
+             "━━━━━━━━━━━━━━━",
+             f"🌐 Official portal: {REDEEM_PORTAL}",
+             "",
+             "<b>How to redeem:</b>",
+             "1. Open the portal link above",
+             "2. Log in with the same account you play on",
+             "3. Paste a code and confirm",
+             "4. Reward arrives in your in-game mail",
+             "",
+             "⚠️ Only BD-server accounts. Each code works once per account."]
+    if codes:
+        parts.append("")
+        parts.append(f"<b>Active codes ({len(codes)}):</b>")
+        for code, rec in codes[:10]:
+            rw = (rec.get("reward") or "reward").strip()
+            parts.append(f"`{code}` — {rw[:40]}")
+    else:
+        parts.append("")
+        parts.append("📭 No verified codes right now. New codes are added here as soon "
+                     "as they are confirmed official.")
+    parts.append("")
+    parts.append("🛡️ Scam guard: never enter your password or UID on any site other than "
+                 "the official portal above.")
+    bot.reply_to(m, "\n".join(parts))
+
+
+@bot.message_handler(commands=["addcode"])
+def cmd_addcode(m):
+    if not is_admin(m.from_user.id):
+        bot.reply_to(m, "⛔ Admin-only command.")
+        return
+    raw = m.text.split(maxsplit=1)
+    if len(raw) < 2 or "|" not in raw[1]:
+        bot.reply_to(m, "⚠️ Usage: <code>/addcode CODE | reward | days</code>\n"
+                        "Example: <code>/addcode FFIC2026 | 1x Diamond Royale | 7</code>")
+        return
+    parts = [p.strip() for p in raw[1].split("|")]
+    code = parts[0].upper()
+    reward = parts[1] if len(parts) > 1 and parts[1] else "reward"
+    days = 7
+    if len(parts) > 2 and parts[2].isdigit():
+        days = int(parts[2])
+    if not code.isalnum() or len(code) < 4:
+        bot.reply_to(m, "⚠️ Code must be letters/numbers, at least 4 characters.")
+        return
+    codes = load_codes()
+    codes[code] = {"reward": reward[:60], "added_by": m.from_user.id,
+                   "added_ts": time.time(), "expiry": time.time() + days * 86400}
+    _save_json(CODES_FILE, codes)
+    threading.Thread(target=_github_commit_file, args=(CODES_FILE.name, "update redeem codes"),
+                     daemon=True).start()
+    bot.reply_to(m, f"✅ Code <code>{code}</code> added for {days} day(s).\n"
+                    f"Users can see it via /redeem.")
+
+
+@bot.message_handler(commands=["delcode"])
+def cmd_delcode(m):
+    if not is_admin(m.from_user.id):
+        bot.reply_to(m, "⛔ Admin-only command.")
+        return
+    parts = m.text.split()
+    if len(parts) < 2:
+        bot.reply_to(m, "⚠️ Usage: <code>/delcode CODE</code>")
+        return
+    code = parts[1].upper()
+    codes = load_codes()
+    if code not in codes:
+        bot.reply_to(m, f"⚠️ <code>{code}</code> is not in the list.")
+        return
+    codes.pop(code, None)
+    _save_json(CODES_FILE, codes)
+    threading.Thread(target=_github_commit_file, args=(CODES_FILE.name, "remove redeem code"),
+                     daemon=True).start()
+    bot.reply_to(m, f"🗑️ Code <code>{code}</code> removed.")
 
 @bot.message_handler(commands=["guild"])
 def cmd_guild(m):
