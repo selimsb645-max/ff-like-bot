@@ -22,42 +22,21 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: MajorLogin matrix debug
+      - name: Fresh mint + full engine run
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
+          export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
+          export PHONE_OK=1
           python3 - <<'PY'
-          import os, json, time, httpx, re
-          px = "socks5://" + os.environ["PHONE_PROXY_IP"] + ":1080"
-          import ff_bd_api as api, ff_majorlogin as fm
-          acc = json.load(open("guests_manager/registered_pool.json"))[0]
-          pair = api.guest_grant(acc["uid"], acc["pw"])
-          print("grant:", bool(pair), flush=True)
-          if not pair: raise SystemExit
-          at, oid = pair
-          body = fm.encrypt(fm.build_min_payload(oid, at))
-          hosts = ["https://loginbp.ggblueshark.com/MajorLogin",
-                   "https://loginbp.ppmainecoonghj.com/MajorLogin",
-                   "https://loginbp.ggpolarbear.com/MajorLogin"]
-          variants = [
-            ("ts+bearer+octet", {"X-GA-SV": str(int(time.time())), "Authorization": "Bearer", "Content-Type": "application/octet-stream"}),
-            ("ts+token+octet",  {"X-GA-SV": str(int(time.time())), "Authorization": f"Bearer {at}", "Content-Type": "application/octet-stream"}),
-            ("ts+bearer+urlenc",{"X-GA-SV": str(int(time.time())), "Authorization": "Bearer", "Content-Type": "application/x-www-form-urlencoded"}),
-            ("nots+bearer+octet",{"Authorization": "Bearer", "Content-Type": "application/octet-stream"}),
-          ]
-          for host in hosts:
-              for label, extra in variants:
-                  h = {"User-Agent": "Dalvik/2.1.0 (Linux; U; Android 11; ASUS_Z01QD Build/PI)",
-                       "X-Unity-Version": "2018.4.11f1", "X-GA": "v1 1", "ReleaseVersion": "OB55"}
-                  h.update(extra)
-                  try:
-                      r = httpx.post(host, data=body, headers=h, timeout=20, verify=False, proxy=px)
-                      txt = r.content.decode("latin-1")
-                      strs = [s for s in re.findall(r"[ -~]{5,}", txt)][:3]
-                      print(f"{host.split('/')[2]:28} {label:18} -> {r.status_code} len={len(r.content)} strs={strs}", flush=True)
-                  except Exception as e:
-                      print(f"{host.split('/')[2]:28} {label:18} -> {type(e).__name__}: {str(e)[:70]}", flush=True)
+          import json, pathlib
+          p = pathlib.Path("level_config.json")
+          cfg = json.loads(p.read_text())
+          cfg.update({"enabled": True, "accounts": 1, "cycles": 2, "auto_mint": 1, "farm": True, "workers": 1})
+          p.write_text(json.dumps(cfg, indent=1))
+          print("config:", {k: cfg[k] for k in ("accounts","cycles","auto_mint","farm")}, flush=True)
           PY
+          timeout 1200 python3 -u -m levelbot.run_level --all 1 --cycles 2 2>&1 | tail -120
       - name: Run glory engine through phone proxy
         if: false
         env:
