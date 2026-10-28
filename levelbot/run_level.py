@@ -368,6 +368,21 @@ def raw_login(uid, pw):
     at, oid = pair if pair else (None, None)
     if not at:
         return None
+    # ATTEMPT 0 (2026-10-28): modern full-device MajorLogin. The old minimal wire
+    # is answered with an encrypted "Protection Bypass" instead of a JWT.
+    try:
+        import ff_majorlogin
+        try:
+            _ip = os.environ.get("PUBLIC_IP", "").strip()
+        except Exception:
+            _ip = ""
+        ml = ff_majorlogin.major_login(uid, oid, at, _ip or "223.191.51.89")
+        if ml and ml.get("jwt"):
+            print(f"    raw_login[{uid}]: modern MajorLogin OK (jwt {len(ml['jwt'])} chars)", flush=True)
+            return ml
+        print(f"    raw_login[{uid}]: modern MajorLogin failed -> legacy wire fallbacks", flush=True)
+    except Exception as _e:
+        print(f"    raw_login[{uid}]: modern MajorLogin EXC {type(_e).__name__}: {str(_e)[:90]}", flush=True)
     wire = _full_device_wire(oid, at, uid)
     body = api._enc(wire)
     h = {"User-Agent": random.choice(FULL_UAS), "Accept-Encoding": "deflate, gzip",
