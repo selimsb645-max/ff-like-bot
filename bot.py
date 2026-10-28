@@ -44,6 +44,7 @@ def persist_usage_github():
     _github_commit_file(HISTORY_FILE.name, "update like history")
     _github_commit_file(REMINDERS_FILE.name, "update reminders")
     _github_commit_file("dead_tokens.json", "update dead token blacklist")
+    _github_commit_file("like_ready.json", "update like readiness cache")
 
 
 def _dhaka_day() -> str:
