@@ -536,10 +536,73 @@ async def build_conn_token(login):
     return f"0115{hdr}{uid_hex}{ts_hex}00000{enc_len}{enc}"
 
 
+# ── JWT cache ────────────────────────────────────────────────────────
+# Garena accepts the FIRST login for an account and then starts rejecting
+# repeated logins from the same environment (Protection Bypass). A minted
+# JWT stays valid for about an hour, so we reuse it instead of re-authing.
+JWT_CACHE = ROOT / "jwt_cache.json"
+JWT_TTL_S = 45 * 60
+
+
+def _jwt_cache_load():
+    try:
+        return json.loads(JWT_CACHE.read_text())
+    except Exception:
+        return {}
+
+
+def _jwt_cache_get(uid):
+    entry = _jwt_cache_load().get(str(uid))
+    if not entry or time.time() - entry.get("ts", 0) > JWT_TTL_S:
+        return None
+    login = dict(entry.get("login") or {})
+    if not login.get("jwt"):
+        return None
+    for k in ("key", "iv"):
+        v = login.get(k)
+        if isinstance(v, str):
+            try:
+                login[k] = bytes.fromhex(v)
+            except Exception:
+                return None
+    return login
+
+
+def _jwt_cache_put(uid, login):
+    try:
+        cache = _jwt_cache_load()
+        safe = dict(login)
+        for k in ("key", "iv"):
+            if isinstance(safe.get(k), (bytes, bytearray)):
+                safe[k] = bytes(safe[k]).hex()
+        cache[str(uid)] = {"ts": time.time(), "login": safe}
+        # drop expired entries so the file stays small
+        now = time.time()
+        cache = {k: v for k, v in cache.items() if now - v.get("ts", 0) <= JWT_TTL_S * 2}
+        JWT_CACHE.write_text(json.dumps(cache, indent=1))
+    except Exception as e:
+        print(f"jwt cache save EXC: {str(e)[:60]}", flush=True)
+
+
+def _jwt_cache_drop(uid):
+    try:
+        cache = _jwt_cache_load()
+        if cache.pop(str(uid), None):
+            JWT_CACHE.write_text(json.dumps(cache, indent=1))
+    except Exception:
+        pass
+
+
 async def run_account(uid, pw, cycles, on_done):
     tag = f"[{uid}]"
     print(f"{tag} authenticating...", flush=True)
-    login = raw_login(uid, pw)
+    login = _jwt_cache_get(uid)
+    if login:
+        print(f"{tag} reusing cached JWT (no re-login -> no Protection Bypass)", flush=True)
+    else:
+        login = raw_login(uid, pw)
+        if login:
+            _jwt_cache_put(uid, login)
     if not login:
         stage = "unknown"
         try:
@@ -553,7 +616,8 @@ async def run_account(uid, pw, cycles, on_done):
         return res
     servers = get_login_data(login)
     if not servers:
-        print(f"{tag} GetLoginData FAILED", flush=True)
+        _jwt_cache_drop(uid)
+        print(f"{tag} GetLoginData FAILED (cached JWT dropped)", flush=True)
         on_done(uid, {"status": "logindata_failed", "cycles": 0})
         return {"status": "logindata_failed", "cycles": 0}
     w_ip, w_port, o_ip, o_port = servers
