@@ -22,46 +22,28 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Guild member account check
+      - name: Run matches on the guild-member account
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
           GUEST_CREDS_JSON: ${{ secrets.GUEST_CREDS_JSON }}
         run: |
           python3 - <<'PY'
-          import os, json, httpx
-          import ff_bd_api as api, ff_majorlogin as fm
-          from levelbot import run_level as rl
+          import os, json, base64
           cred = json.loads(os.environ["GUEST_CREDS_JSON"])
-          uid, pw = str(cred["uid"]), cred["pw"]
-          phone = "socks5://" + os.environ["PHONE_PROXY_IP"] + ":1080"
-          print("uid:", uid, flush=True)
-          pair = rl._grant_direct(uid, pw)
-          print("grant:", bool(pair), flush=True)
-          if not pair:
-              raise SystemExit(0)
-          at, oid = pair
-          original = httpx.post
-          for label, proxy in (("direct", None), ("phone", phone)):
-              if proxy:
-                  httpx.post = lambda *a, **kw: original(*a, **{**kw, "proxy": proxy})
-              else:
-                  httpx.post = original
-              ml = fm.major_login(uid, oid, at)
-              print(f"major_login[{label}]:", ("OK jwt=" + str(len(ml["jwt"]))) if ml else "None", flush=True)
-              if not ml:
-                  continue
-              print("  region:", ml.get("region"), "url:", str(ml.get("url"))[:45], flush=True)
-              lvl = rl.profile_level_exp(ml["jwt"], uid, ml.get("url"))
-              print("  level:", lvl, flush=True)
-              httpx.post = original
-              h = api._headers(ml["jwt"], "OB55")
-              for path in ("/GetClanInfoByClanID", "/GetClanMainPageInfo"):
-                  try:
-                      r = original("https://clientbp.ggpolarbear.com" + path, headers=h,
-                                   data=api._enc(b"\x08" + api._pb_varint(3106233034)),
-                                   timeout=18, verify=False)
-                      print(f"  {path}: {r.status_code} len={len(r.content)} head={r.content[:100]!r}", flush=True)
-                  except Exception as e:
-                      print(f"  {path}: {type(e).__name__} {str(e)[:60]}", flush=True)
-              break
+          line = f'{cred["uid"]}:{cred["pw"]}'
+          with open("/tmp/creds.env", "w") as f:
+              f.write("BD_CREDS_B64=" + base64.b64encode(line.encode()).decode() + "\n")
+          print("account:", cred["uid"], flush=True)
           PY
+          set -a; . /tmp/creds.env; set +a
+          export PHONE_OK=1
+          export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
+          python3 - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("level_config.json")
+          cfg = json.loads(p.read_text())
+          cfg.update({"enabled": True, "accounts": 1, "cycles": 4, "auto_mint": 0, "farm": True, "workers": 1})
+          p.write_text(json.dumps(cfg, indent=1))
+          print("config set", flush=True)
+          PY
+          timeout 1500 python3 -u -m levelbot.run_level --all 1 --cycles 4 2>&1 | tail -60
