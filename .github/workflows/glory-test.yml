@@ -22,40 +22,47 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Uploaded guest account test
+      - name: Guild member account: login + level + guild check
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
           GUEST_CREDS_JSON: ${{ secrets.GUEST_CREDS_JSON }}
         run: |
           python3 - <<'PY'
-          import os, json, httpx
+          import os, json, httpx, time
           import ff_bd_api as api, ff_majorlogin as fm
           from levelbot import run_level as rl
           cred = json.loads(os.environ["GUEST_CREDS_JSON"])
-          uid, pw = cred["uid"], cred["pw"]
+          uid, pw = str(cred["uid"]), cred["pw"]
           print("uid:", uid, flush=True)
           pair = rl._grant_direct(uid, pw)
           print("grant:", bool(pair), flush=True)
           if not pair: raise SystemExit
           at, oid = pair
-          px = "socks5://" + os.environ["PHONE_PROXY_IP"] + ":1080"
-          _post = httpx.post
-          httpx.post = lambda *a, **kw: _post(*a, **{**kw, "proxy": px})
-          ml = fm.major_login(uid, oid, at)
-          print("major_login:", ("OK jwt=" + str(len(ml["jwt"]))) if ml else "None", flush=True)
-          if ml:
-              print("region:", ml.get("region"), "| url:", str(ml.get("url"))[:40], flush=True)
-              print("level:", rl.profile_level_exp(ml["jwt"], uid, ml.get("url")), flush=True)
-              for label, proxy2 in (("phone", px), ("direct", None)):
+          # try modern major login BOTH direct and via phone, print every host result
+          for label, proxy in (("direct", None), ("phone", "socks5://" + os.environ["PHONE_PROXY_IP"] + ":1080")):
+              _post = httpx.post
+              if proxy:
+                  httpx.post = lambda *a, **kw: _post(*a, **{**kw, "proxy": proxy})
+              else:
+                  httpx.post = _post
+              ml = fm.major_login(uid, oid, at)
+              print(f"major_login[{label}]:", ("OK jwt=" + str(len(ml["jwt"]))) if ml else "None", flush=True)
+              if ml:
+                  print("  region:", ml.get("region"), "url:", str(ml.get("url"))[:45], flush=True)
+                  lvl = rl.profile_level_exp(ml["jwt"], uid, ml.get("url"))
+                  print("  level:", lvl, flush=True)
                   h = api._headers(ml["jwt"], "OB55")
-                  try:
-                      r = httpx.post("https://clientbp.ggpolarbear.com/GetPlayerPersonalShow",
-                                     headers=h, data=api._enc(b"\x08" + api._pb_varint(int(uid))),
-                                     timeout=15, verify=False, proxy=proxy2)
-                      ints = [(f, v) for f, wt, v in api._walk_pb(r.content) if wt == 0][:8]
-                      print(f"profile[{label}]: {r.status_code} len={len(r.content)} ints={ints}", flush=True)
-                  except Exception as e:
-                      print(f"profile[{label}]: {type(e).__name__} {str(e)[:60]}", flush=True)
+                  for path in ("/GetClanInfoByClanID", "/GetClanMainPageInfo"):
+                      try:
+                          r = httpx.post("https://clientbp.ggpolarbear.com" + path, headers=h,
+                                         data=api._enc(b"\x08" + api._pb_varint(3106233034)),
+                                         timeout=18, verify=False)
+                          txt = r.content.decode("latin-1")
+                          print(f"  {path}: {r.status_code} len={len(r.content)} head={txt[:120]!r}", flush=True)
+                      except Exception as e:
+                          print(f"  {path}: {type(e).__name__} {str(e)[:60]}", flush=True)
+                  break
+              httpx.post = _post
           PY
       - name: Run glory engine through phone proxy
         if: false
