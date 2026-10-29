@@ -36,8 +36,7 @@ jobs:
           print("account:", cred["uid"], flush=True)
           PY
           set -a; . /tmp/creds.env; set +a
-          export PHONE_OK=1
-          export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
+          # this account logs in DIRECT (verified), so no phone proxy is needed
           python3 - <<'PY'
           import json, pathlib
           p = pathlib.Path("level_config.json")
