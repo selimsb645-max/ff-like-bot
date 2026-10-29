@@ -1547,12 +1547,13 @@
   "cycles": 0
  },
  "8371740426": {
-  "status": "logindata_failed",
-  "cycles": 0
- },
- "8371740426": {
   "status": "tcp_failed",
   "err": "",
+  "cycles": 0
+ },
+ "8367158430": {
+  "status": "login_failed",
+  "stage": "majorlogin_failed",
   "cycles": 0
  }
 }
