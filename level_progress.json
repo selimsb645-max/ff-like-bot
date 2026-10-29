@@ -1532,8 +1532,8 @@
   "cycles": 0
  },
  "8370184893": {
-  "status": "tcp_failed",
-  "err": "",
+  "status": "login_failed",
+  "stage": "err:cannot unpack non-iterable NoneType obje",
   "cycles": 0
  },
  "8370181666": {
@@ -1544,6 +1544,10 @@
  "8368439981": {
   "status": "login_failed",
   "stage": "err:cannot unpack non-iterable NoneType obje",
+  "cycles": 0
+ },
+ "8371740426": {
+  "status": "logindata_failed",
   "cycles": 0
  }
 }
