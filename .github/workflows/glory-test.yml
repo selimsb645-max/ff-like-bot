@@ -22,7 +22,7 @@ jobs:
           sudo tailscaled > /tmp/tailscaled.log 2>&1 &
           sleep 5
           sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Profile level test (post X-GA-SV fix)
+      - name: Guild apply path enumeration
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
@@ -37,20 +37,21 @@ jobs:
           login = rl.raw_login(acc["uid"], acc["pw"])
           print("account", acc["uid"], "login", bool(login), flush=True)
           if not login: raise SystemExit
-          print("level via profile_level_exp:", rl.profile_level_exp(login["jwt"], acc["uid"], login.get("url")), flush=True)
-          body = api._enc(b"\x08" + api._pb_varint(int(acc["uid"])))
-          for host in ("https://clientbp.ggpolarbear.com", "https://clientbp.ppmainecoonghj.com"):
-              for ct in ("application/x-www-form-urlencoded", "application/octet-stream"):
-                  h = api._headers(login["jwt"], "OB55"); h["Content-Type"] = ct
+          body = api._enc(b"\x08" + api._pb_varint(3106233034))
+          paths = ["/JoinClan","/ApplyClan","/ApplyGuild","/RequestJoinClan","/ApplyClanReq",
+                   "/JoinClanReq","/ClanApply","/GuildApply","/ApplyinGuild","/JoinGuildReq",
+                   "/Clan/Apply","/Guild/Join","/ApplyToClan","/ClanApplyReq"]
+          for host in ("https://clientbp.ggpolarbear.com","https://clientbp.ppmainecoonghj.com"):
+              for p in paths:
                   try:
-                      r = httpx.post(host + "/GetPlayerPersonalShow", headers=h, data=body, timeout=20, verify=False)
-                      ints = [(f, v) for f, wt, v in api._walk_pb(r.content) if wt == 0][:6]
-                      print(f"  {host.split('//')[1]:32} {ct:32} -> {r.status_code} ints={ints}", flush=True)
+                      h = api._headers(login["jwt"], "OB55")
+                      r = httpx.post(host+p, headers=h, data=body, timeout=12, verify=False)
+                      if r.status_code != 404:
+                          txt = r.content.decode("latin-1")[:60]
+                          print(f"  {host.split('//')[1]:32}{p:18} -> {r.status_code} {txt!r}", flush=True)
                   except Exception as e:
-                      print(f"  {host.split('//')[1]} {ct} -> {type(e).__name__}", flush=True)
-          # clan info (proves authenticated reads work at all)
-          g = api.get_guild(3106233034, login["jwt"])
-          print("guild read:", json.dumps(g)[:220] if g else None, flush=True)
+                      print(f"  {host.split('//')[1]:32}{p:18} -> {type(e).__name__}", flush=True)
+          print("enumeration done (silent = 404)", flush=True)
           PY
       - name: Run glory engine through phone proxy
         if: false
