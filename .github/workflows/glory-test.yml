@@ -25,13 +25,13 @@ jobs:
       - name: Uploaded guest account test
         env:
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
-          GUEST_CREDS_B64: ${{ secrets.GUEST_CREDS_B64 }}
+          GUEST_CREDS_JSON: ${{ secrets.GUEST_CREDS_JSON }}
         run: |
           python3 - <<'PY'
           import os, json, httpx
           import ff_bd_api as api, ff_majorlogin as fm
           from levelbot import run_level as rl
-          cred = json.loads(__import__("base64").b64decode(os.environ["GUEST_CREDS_B64"]))
+          cred = json.loads(os.environ["GUEST_CREDS_JSON"])
           uid, pw = cred["uid"], cred["pw"]
           print("uid:", uid, flush=True)
           pair = rl._grant_direct(uid, pw)
