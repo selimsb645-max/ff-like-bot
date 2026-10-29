@@ -16,9 +16,18 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -q -r requirements.txt socksio
+      - name: Join Tailscale
+        env:
+          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscaled > /tmp/tailscaled.log 2>&1 &
+          sleep 5
+          sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-farm" --accept-routes --reset || true
       - name: Farm glory cycles
         env:
           GUEST_CREDS_JSON: ${{ secrets.GUEST_CREDS_JSON }}
+          PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
         run: |
           export GUEST_PW="$(python3 -c "import json,os;print(json.loads(os.environ['GUEST_CREDS_JSON'])['pw'])")"
           export UID_FF="$(python3 -c "import json,os;print(json.loads(os.environ['GUEST_CREDS_JSON'])['uid'])")"
@@ -30,5 +39,24 @@ jobs:
           p.write_text(json.dumps(cfg, indent=1))
           print("config: farm on, no mint", flush=True)
           PY
-          echo "farming uid $UID_FF with 30 cycles (direct, no proxy)"
-          timeout 6600 python3 -u -m levelbot.run_level --uid "$UID_FF" --cycles 30 2>&1 | tail -80
+          # prefer the phone's BD residential IP (datacenter IPs get throttled fast)
+          PROXY="socks5://$PHONE_PROXY_IP:1080"
+          if python3 -c "
+import socket,sys
+ip=__import__('os').environ['PHONE_PROXY_IP']
+s=socket.socket(); s.settimeout(10)
+sys.exit(0 if s.connect_ex((ip,1080))==0 else 1)"; then
+            export BD_PROXY_URL="$PROXY"; export PHONE_OK=1
+            echo "proxy: phone BD (reachable)"
+          else
+            echo "proxy: phone unreachable -> direct"
+          fi
+          for attempt in 1 2 3; do
+            echo "=== attempt $attempt ($(date -u +%H:%M:%S)) ==="
+            timeout 2100 python3 -u -m levelbot.run_level --uid "$UID_FF" --cycles 12 2>&1 | tee /tmp/run_$attempt.log | tail -25
+            if grep -q "TCP CONNECTED" /tmp/run_$attempt.log; then
+              echo "connected on attempt $attempt - continuing with remaining cycles"
+            fi
+            if grep -q "DONE cycles" /tmp/run_$attempt.log; then break; fi
+            sleep 45
+          done
