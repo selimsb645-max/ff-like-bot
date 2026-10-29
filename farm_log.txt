@@ -1,34 +1,40 @@
 auto_phone: 0 new phone accounts to activate
-bd proxy hunt: 10 alive candidates
-bd proxy OK: socks5://202.44.106.141:1080 exit=202.44.105.31
-auto_mint: 1 usable BD proxies: ['socks5://202.44.106.141:1080']
-mint[t1]: FRESH BD ACCOUNT 8365596326 (Kexin8575)
-mint[t2]: FRESH BD ACCOUNT 8365597935 (Kexin7875)
+bd proxy hunt: 12 alive candidates
+bd proxy socks5://119.148.7.10:22122: BD exit but can't reach garenanow — skip
+auto_mint: no usable BD proxy (round 1/6) — retrying in 75s
+bd proxy hunt: 17 alive candidates
+bd proxy socks5://103.136.106.5:1081: BD exit but can't reach garenanow — skip
+bd proxy OK: socks5://203.76.123.6:1080 exit=203.76.123.6
+auto_mint: 1 usable BD proxies: ['socks5://203.76.123.6:1080']
+mint[t1]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t2]: major_register 8367153702: SOCKSHTTPSConnectionPool(host='loginbp.p
+mint[t3]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t4]: major_login failed 8367155399
+mint[t5]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t6]: FRESH BD ACCOUNT 8367156690 (Kexin8215)
+mint[t7]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t8]: FRESH BD ACCOUNT 8367158430 (Kexin0042)
 auto_mint: 2 fresh BD accounts minted
 pool: 2 fresh account(s) saved to registered_pool.json
-account pool: 481 usable, 0 burned-skip
-candidates: 11 accounts, want=3, cycles=40, first=[8365596326, 8365597935, '8365597935', '8365596326', '8365529524', '8365528241', '8365218771', '8365128786']
+account pool: 483 usable, 0 burned-skip
+candidates: 11 accounts, want=3, cycles=40, first=[8367156690, 8367158430, '8367158430', '8367156690', '8365597935', '8365596326', '8365529524', '8365528241']
 BULK MODE: 11 candidates, 3 parallel workers, cycles=40
-[8365596326] authenticating...
-    raw_login[8365596326]: modern MajorLogin OK (jwt 735 chars)
-[8365596326] online=148.222.66.152:39699 whisper=202.81.106.44:39801
-[8365597935] authenticating...
-    raw_login[8365597935]: modern MajorLogin OK (jwt 735 chars)
-[8365597935] online=148.222.66.130:39699 whisper=202.81.106.98:39801
+[8367156690] authenticating...
+    raw_login[8367156690]: modern MajorLogin OK (jwt 735 chars)
+[8367158430] authenticating...
+    raw_login[8367158430]: modern MajorLogin OK (jwt 735 chars)
+[8367158430] authenticating...
+    raw_login[8367158430]: modern MajorLogin OK (jwt 735 chars)
+[8367158430] online=202.81.106.76:39699 whisper=202.81.106.81:39801
+[8367156690] authenticating...
+    raw_login[8367156690]: modern MajorLogin failed -> legacy wire fallbacks
+[8367156690] online=202.81.106.103:39699 whisper=202.81.106.98:39801
 [8365597935] authenticating...
     raw_login[8365597935]: modern MajorLogin failed -> legacy wire fallbacks
-[8365596326] authenticating...
-    raw_login[8365596326]: modern MajorLogin failed -> legacy wire fallbacks
-    raw_login[8365596326]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
-    raw_login[8365596326]: gr path status=200 len=97 prot=True
-[8365596326] LOGIN FAILED (majorlogin_failed)
-[8365596326] TCP CONNECT FAILED: 
-progress push failed: [Errno 104] Connection reset by peer
-[8365597935] TCP CONNECT FAILED: 
-progress push failed: [Errno 104] Connection reset by peer
-[8365596326] -> login_failed | done=0
-[8365596326] -> tcp_failed | done=0
-[8365597935] -> tcp_failed | done=0
+    raw_login[8365597935]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
+    raw_login[8365597935]: gr path EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries 
+[8365597935] LOGIN FAILED (majorlogin_failed)
+[8365597935] -> login_failed | done=0
 Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
     yield
@@ -42,18 +48,16 @@ Traceback (most recent call last):
                ^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 295, in handle_request
     raise exc
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 244, in handle_request
-    _init_socks5_connection(**kwargs)
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 62, in _init_socks5_connection
-    incoming_bytes = stream.read(max_bytes=4096)
-                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 126, in read
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 231, in handle_request
+    stream = self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
     with map_exceptions(exc_map):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
     self.gen.throw(typ, value, traceback)
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
     raise to_exc(exc) from exc
-httpcore.ReadError: [Errno 104] Connection reset by peer
+httpcore.ConnectTimeout: timed out
 
 The above exception was the direct cause of the following exception:
 
@@ -79,12 +83,12 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
     return fut.result()
            ^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 542, in run_account
-    login = raw_login(uid, pw)
-            ^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 439, in raw_login
-    r = httpx.post(ML_URL, headers=h2, data=api._enc(wire), timeout=25, verify=False)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 554, in run_account
+    servers = get_login_data(login)
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 491, in get_login_data
+    r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 39, in <lambda>
     httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -115,4 +119,4 @@ Traceback (most recent call last):
     self.gen.throw(typ, value, traceback)
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
     raise mapped_exc(message) from exc
-httpx.ReadError: [Errno 104] Connection reset by peer
+httpx.ConnectTimeout: timed out
