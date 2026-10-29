@@ -45,4 +45,5 @@ jobs:
           p.write_text(json.dumps(cfg, indent=1))
           print("config set", flush=True)
           PY
-          timeout 1500 python3 -u -m levelbot.run_level --all 1 --cycles 4 2>&1 | tail -60
+          export GUEST_PW="$(python3 -c "import json,os;print(json.loads(os.environ['GUEST_CREDS_JSON'])['pw'])")"
+          timeout 1500 python3 -u -m levelbot.run_level --uid 4393784377 --cycles 4 2>&1 | tail -60
