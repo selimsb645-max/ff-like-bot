@@ -1,8 +1,6 @@
 name: Glory Farm (guild account)
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '15 */3 * * *'
 concurrency:
   group: glory-farm
   cancel-in-progress: false
