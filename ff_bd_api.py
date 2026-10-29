@@ -608,7 +608,35 @@ def refresh_pool() -> list:
     return pool
 
 
+
+# ── SPEED: shared keep-alive client + parallel workers ──────────────
+import threading as _th
+from concurrent.futures import ThreadPoolExecutor as _TPE
+
+_CLIENT = None
+_CLIENT_LOCK = _th.Lock()
+
+
+def _client():
+    """One keep-alive HTTP client for all Garena calls (TLS setup reused)."""
+    global _CLIENT
+    if _CLIENT is None:
+        with _CLIENT_LOCK:
+            if _CLIENT is None:
+                _CLIENT = httpx.Client(
+                    verify=False, timeout=12,
+                    limits=httpx.Limits(max_connections=60, max_keepalive_connections=30),
+                    headers={"Connection": "keep-alive"},
+                )
+    return _CLIENT
+
+
+_POOL_CACHE = {"ts": 0.0, "data": []}
+_POOL_TTL = 300  # 5 min in-memory pool cache (avoids re-fetching 290 tokens per call)
+
 def get_pool(force: bool = False) -> list:
+    if not force and _POOL_CACHE["data"] and time.time() - _POOL_CACHE["ts"] < _POOL_TTL:
+        return _POOL_CACHE["data"]
     if force or not POOL_FILE.exists():
         base = refresh_pool()
     else:
@@ -630,6 +658,8 @@ def get_pool(force: bool = False) -> list:
     dead = load_dead()
     if dead:
         merged = [t for t in merged if str(t.get("account_id")) not in dead]
+    _POOL_CACHE["ts"] = time.time()
+    _POOL_CACHE["data"] = merged
     return merged
 
 
@@ -758,34 +788,67 @@ def phone_accounts() -> list:
         return []
 
 
-def send_like(account_id: int, count: int = 1, used: set = None) -> int:
-    """Send likes to a target. Each pool account can like once per target.
-    Only ACTIVATED accounts (with a live game profile) are used - unactivated
-    ones return HTTP 200 but the like never lands."""
+def _filter_activated(pool, cache, workers=32):
+    """Check activation in PARALLEL (was the main slowdown: 1 profile call each)."""
+    def chk(t):
+        try:
+            return t if is_activated(t, cache) else None
+        except Exception:
+            return None
+    if not pool:
+        return []
+    with _TPE(max_workers=min(workers, len(pool))) as ex:
+        return [t for t in ex.map(chk, pool) if t]
+
+
+def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> int:
+    """Send likes to a target - PARALLEL version (fast).
+    Only ACTIVATED accounts (with a live game profile) are used."""
+    import like_pb2 as lpb
+    import random as _rnd
     cache = ready_uids()
-    pool = [t for t in get_pool() if is_activated(t, cache)]
+    pool = _filter_activated(get_pool(), cache)
     try:
         READY_FILE.write_text(json.dumps(cache, indent=1))
     except Exception:
         pass
     used = used if used is not None else set()
-    sent = 0
+    todo = []
     for t in pool:
-        if sent >= count:
-            break
         key = (t["account_id"], account_id)
         if key in used:
             continue
-        import like_pb2 as lpb
-        m = lpb.like()
-        m.uid = int(account_id)
-        m.region = "BD"
-        payload = _enc(m.SerializeToString())
-        r = httpx.post(LIKE_URL, headers=_headers(t["token"], "OB55"), data=payload, timeout=25, verify=False)
-        if r.status_code == 200:
-            used.add(key)
-            sent += 1
-    return sent
+        todo.append((t, key))
+        if len(todo) >= max(count * 2, count + 10):
+            break
+    if not todo:
+        return 0
+    m = lpb.like()
+    m.uid = int(account_id)
+    m.region = "BD"
+    payload = _enc(m.SerializeToString())
+    cli = _client()
+    done = {"sent": 0}
+    lock = _th.Lock()
+
+    def fire(item):
+        t, key = item
+        with lock:
+            if done["sent"] >= count:
+                return
+        try:
+            time.sleep(_rnd.uniform(0, 0.3))  # jitter: avoid burst signature
+            r = cli.post(LIKE_URL, headers=_headers(t["token"], "OB55"), data=payload)
+            if r.status_code == 200:
+                with lock:
+                    used.add(key)
+                    done["sent"] += 1
+        except Exception:
+            pass
+
+    with _TPE(max_workers=min(workers, len(todo))) as ex:
+        list(ex.map(fire, todo))
+    return done["sent"]
 
 
 if __name__ == "__main__":
