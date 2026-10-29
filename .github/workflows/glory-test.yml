@@ -7,43 +7,36 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - run: pip install -q -r requirements.txt socksio
-      - name: Join Tailscale
+      - name: Token field diagnosis
         env:
-          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
-        run: |
-          curl -fsSL https://tailscale.com/install.sh | sh
-          sudo tailscaled > /tmp/tailscaled.log 2>&1 &
-          sleep 5
-          sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-glory-test" --accept-routes --reset
-      - name: Run matches on the guild-member account
-        env:
-          PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
           GUEST_CREDS_JSON: ${{ secrets.GUEST_CREDS_JSON }}
         run: |
           python3 - <<'PY'
-          import os, json, base64
-          cred = json.loads(os.environ["GUEST_CREDS_JSON"])
-          line = f'{cred["uid"]}:{cred["pw"]}'
-          with open("/tmp/creds.env", "w") as f:
-              f.write("BD_CREDS_B64=" + base64.b64encode(line.encode()).decode() + "\n")
-          print("account:", cred["uid"], flush=True)
+          import os, json, time, asyncio
+          import ff_bd_api as api
+          from levelbot import run_level as rl
+          pool = json.load(open("guests_manager/registered_pool.json"))
+          pool.sort(key=lambda r: int(r["uid"]) if str(r["uid"]).isdigit() else 0, reverse=True)
+          acc = pool[0]
+          print("uid", acc["uid"], flush=True)
+          login = rl.raw_login(acc["uid"], acc["pw"])
+          print("login:", bool(login), flush=True)
+          if login:
+              now = int(time.time())
+              print("ts field      :", login["ts"], "| now:", now, "| diff(s):", now - login["ts"], flush=True)
+              print("account_id    :", login["account_id"], "| uid:", acc["uid"], "| equal:", str(login["account_id"]) == str(acc["uid"]), flush=True)
+              print("key/iv types  :", type(login["key"]).__name__, len(login["key"]), type(login["iv"]).__name__, len(login["iv"]), flush=True)
+              tok = asyncio.run(rl.build_conn_token(login))
+              print("token len     :", len(tok), "| head:", tok[:60], flush=True)
+              print("token structure -> prefix 0115 | hdr | uid_hex | ts_hex | len | enc", flush=True)
+              uid_hex = hex(login["account_id"])[2:]
+              print("uid_hex       :", uid_hex, len(uid_hex), flush=True)
+              print("ts_hex        :", hex(login["ts"])[2:], flush=True)
           PY
-          set -a; . /tmp/creds.env; set +a
-          # this account logs in DIRECT (verified), so no phone proxy is needed
-          python3 - <<'PY'
-          import json, pathlib
-          p = pathlib.Path("level_config.json")
-          cfg = json.loads(p.read_text())
-          cfg.update({"enabled": True, "accounts": 1, "cycles": 4, "auto_mint": 0, "farm": True, "workers": 1})
-          p.write_text(json.dumps(cfg, indent=1))
-          print("config set", flush=True)
-          PY
-          export GUEST_PW="$(python3 -c "import json,os;print(json.loads(os.environ['GUEST_CREDS_JSON'])['pw'])")"
-          timeout 1500 python3 -u -m levelbot.run_level --uid 4393784377 --cycles 4 2>&1 | tail -60
