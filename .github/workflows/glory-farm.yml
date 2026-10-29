@@ -9,7 +9,7 @@ concurrency:
 jobs:
   farm:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -31,32 +31,19 @@ jobs:
         run: |
           export GUEST_PW="$(python3 -c "import json,os;print(json.loads(os.environ['GUEST_CREDS_JSON'])['pw'])")"
           export UID_FF="$(python3 -c "import json,os;print(json.loads(os.environ['GUEST_CREDS_JSON'])['uid'])")"
-          python3 - <<'PY'
-          import json, pathlib
-          p = pathlib.Path("level_config.json")
-          cfg = json.loads(p.read_text())
-          cfg.update({"enabled": True, "auto_mint": 0, "farm": True, "workers": 1})
-          p.write_text(json.dumps(cfg, indent=1))
-          print("config: farm on, no mint", flush=True)
-          PY
-          # prefer the phone's BD residential IP (datacenter IPs get throttled fast)
-          PROXY="socks5://$PHONE_PROXY_IP:1080"
-          if python3 -c "
-import socket,sys
-ip=__import__('os').environ['PHONE_PROXY_IP']
-s=socket.socket(); s.settimeout(10)
-sys.exit(0 if s.connect_ex((ip,1080))==0 else 1)"; then
-            export BD_PROXY_URL="$PROXY"; export PHONE_OK=1
-            echo "proxy: phone BD (reachable)"
+          python3 -c "import json,pathlib;p=pathlib.Path('level_config.json');c=json.loads(p.read_text());c.update({'enabled':True,'auto_mint':0,'farm':True,'workers':1});p.write_text(json.dumps(c,indent=1));print('config ok')"
+          if timeout 10 bash -c "</dev/tcp/$PHONE_PROXY_IP/1080" 2>/dev/null; then
+            export BD_PROXY_URL="socks5://$PHONE_PROXY_IP:1080"
+            export PHONE_OK=1
+            echo "proxy: phone BD reachable"
           else
-            echo "proxy: phone unreachable -> direct"
+            echo "proxy: phone unreachable, running direct"
           fi
           for attempt in 1 2 3; do
-            echo "=== attempt $attempt ($(date -u +%H:%M:%S)) ==="
-            timeout 2100 python3 -u -m levelbot.run_level --uid "$UID_FF" --cycles 12 2>&1 | tee /tmp/run_$attempt.log | tail -25
-            if grep -q "TCP CONNECTED" /tmp/run_$attempt.log; then
-              echo "connected on attempt $attempt - continuing with remaining cycles"
-            fi
-            if grep -q "DONE cycles" /tmp/run_$attempt.log; then break; fi
-            sleep 45
+            echo "=== attempt $attempt at $(date -u +%H:%M:%S) ==="
+            timeout 2400 python3 -u -m levelbot.run_level --uid "$UID_FF" --cycles 12 > /tmp/run_$attempt.log 2>&1 || true
+            tail -20 /tmp/run_$attempt.log
+            if grep -q "TCP CONNECTED" /tmp/run_$attempt.log; then echo "CONNECTED on attempt $attempt"; fi
+            if grep -q "DONE cycles" /tmp/run_$attempt.log; then echo "cycles completed"; break; fi
+            sleep 40
           done
