@@ -1,61 +1,40 @@
 auto_phone: 0 new phone accounts to activate
-bd proxy hunt: 28 alive candidates
-bd proxy socks5://123.0.24.154:9090: BD exit but can't reach garenanow — skip
-bd proxy http://182.160.127.29:12331: BD exit but can't reach garenanow — skip
-bd proxy http://182.252.89.130:8080: BD exit but can't reach garenanow — skip
-bd proxy http://202.5.47.60:1080: BD exit but can't reach garenanow — skip
-bd proxy http://103.76.44.175:8090: BD exit but can't reach garenanow — skip
-bd proxy OK: http://103.79.183.109:8080 exit=103.79.183.109
-auto_mint: 1 usable BD proxies: ['http://103.79.183.109:8080']
-mint[t1]: EXC ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-mint[t2]: FRESH BD ACCOUNT 8375310319 (Kexin0665)
-mint[t3]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t4]: FRESH BD ACCOUNT 8375313710 (Kexin4900)
+bd proxy hunt: 14 alive candidates
+bd proxy OK: socks5://202.44.106.141:1080 exit=202.44.105.31
+auto_mint: 1 usable BD proxies: ['socks5://202.44.106.141:1080']
+mint[t1]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t2]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries 
+mint[t3]: major_register 8376817883: SOCKSHTTPSConnectionPool(host='loginbp.p
+mint[t4]: FRESH BD ACCOUNT 8376818235 (Kexin9086)
+mint[t5]: FRESH BD ACCOUNT 8376818983 (Kexin0601)
 auto_mint: 2 fresh BD accounts minted
 pool: 2 fresh account(s) saved to registered_pool.json
-account pool: 493 usable, 0 burned-skip
-candidates: 11 accounts, want=3, cycles=40, first=[8375310319, 8375313710, '8375313710', '8375310319', '8373962466', '8372937915', '8372936259', '8371740426']
+account pool: 493 usable, 2 burned-skip
+candidates: 11 accounts, want=3, cycles=40, first=[8376818235, 8376818983, '8376818983', '8376818235', '8373962466', '8372937915', '8372936259', '8371740426']
 BULK MODE: 11 candidates, 3 parallel workers, cycles=40
-[8375310319] authenticating...
-    gr_login[8375310319]: status=200 len=1173 has_jwt=True
-    raw_login[8375310319]: mint-style login OK (jwt 736 chars)
+[8376818235] authenticating...
+    gr_login[8376818235]: status=200 len=1172 has_jwt=True
+    raw_login[8376818235]: mint-style login OK (jwt 736 chars)
+[8376818983] authenticating...
+    gr_login[8376818983]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Ma
+    raw_login[8376818983]: modern MajorLogin OK (jwt 735 chars)
+[8376818983] authenticating...
+[8376818983] reusing cached JWT (no re-login -> no Protection Bypass)
+[8376818983] online=148.222.66.130:39699 whisper=202.81.106.98:39801
+[8376818235] authenticating...
+[8376818235] reusing cached JWT (no re-login -> no Protection Bypass)
     GetLoginData httpx failed (status=401) — requests fallback
-    GetLoginData requests fallback: status=401 len=21
-[8375310319] GetLoginData FAILED (cached JWT dropped)
-progress push failed: Server disconnected without sending a response.
-[8375313710] authenticating...
-    gr_login[8375313710]: status=200 len=1173 has_jwt=True
-    raw_login[8375313710]: mint-style login OK (jwt 736 chars)
-[8375313710] authenticating...
-[8375313710] reusing cached JWT (no re-login -> no Protection Bypass)
-    GetLoginData httpx failed (status=401) — requests fallback
-    GetLoginData requests fallback: status=401 len=21
-[8375313710] GetLoginData FAILED (cached JWT dropped)
-progress push failed: timed out
-[8375310319] -> logindata_failed | done=0
-[8375313710] -> logindata_failed | done=0
-[8375310319] authenticating...
-    gr_login[8375310319]: status=200 len=1173 has_jwt=True
-    raw_login[8375310319]: mint-style login OK (jwt 736 chars)
-    GetLoginData httpx failed (status=401) — requests fallback
-    GetLoginData requests fallback EXC: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
-[8375310319] GetLoginData FAILED (cached JWT dropped)
+    GetLoginData requests fallback EXC: SOCKSHTTPSConnectionPool(host='clientbp.ppmainecoonghj.com', port=443): Max retr
+[8376818235] GetLoginData FAILED (cached JWT dropped)
 [8373962466] authenticating...
     gr_login[8373962466]: status=200 len=97 has_jwt=False
     raw_login[8373962466]: modern MajorLogin failed -> legacy wire fallbacks
     raw_login[8373962466]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
     raw_login[8373962466]: gr path status=200 len=97 prot=True
 [8373962466] LOGIN FAILED (majorlogin_failed)
-progress push failed: timed out
-[8372937915] authenticating...
-    gr_login[8372937915]: status=200 len=97 has_jwt=False
-    raw_login[8372937915]: modern MajorLogin failed -> legacy wire fallbacks
-    raw_login[8372937915]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
-    raw_login[8372937915]: gr path status=200 len=97 prot=True
-[8372937915] LOGIN FAILED (majorlogin_failed)
-[8375310319] -> logindata_failed | done=0
+socks connect failed (Connection closed unexpectedly) — falling back to direct
+[8376818235] -> logindata_failed | done=0
 [8373962466] -> login_failed | done=0
-[8372937915] -> login_failed | done=0
 Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
     yield
@@ -67,23 +46,13 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
     response = connection.handle_request(
                ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http_proxy.py", line 288, in handle_request
-    connect_response = self._connection.handle_request(
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 103, in handle_request
-    return self._connection.handle_request(request)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 136, in handle_request
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 295, in handle_request
     raise exc
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 106, in handle_request
-    ) = self._receive_response_headers(**kwargs)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 177, in _receive_response_headers
-    event = self._receive_event(timeout=timeout)
-            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 217, in _receive_event
-    data = self._network_stream.read(
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 244, in handle_request
+    _init_socks5_connection(**kwargs)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 62, in _init_socks5_connection
+    incoming_bytes = stream.read(max_bytes=4096)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 126, in read
     with map_exceptions(exc_map):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
