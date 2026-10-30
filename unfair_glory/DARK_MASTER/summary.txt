@@ -1,0 +1,24 @@
+============================================================
+       DARK MASTER - GENERATION SUMMARY
+============================================================
+
+Session    : 2026-10-30_07-49-16
+Folder     : DARK_MASTER
+Server     : Bangladesh (BD)
+Total Gen  : 20
+UID Files  : 20
+JWT Files  : 20
+Prefix     : UNFAIR
+Created    : 2026-10-30 07:52:04
+
+============================================================
+FILES IN THIS FOLDER:
+============================================================
+  > DARK_MASTER.json  ->  UID + Password list
+  > jwt_tokens.json    ->  JWT + Access Token list
+  > summary.txt        ->  This file
+
+============================================================
+CREATOR : DARK MASTER
+BUILD   : DARK_MASTER
+============================================================
