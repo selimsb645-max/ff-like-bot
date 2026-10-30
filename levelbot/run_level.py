@@ -443,6 +443,10 @@ def raw_login(uid, pw):
         # third attempt: game_register-style login via requests through the BD proxy
         # session (this exact flow works for mint, so reuse it for farming too)
         try:
+            import sys as _sys
+            _gm = str(ROOT / "guests_manager")
+            if _gm not in _sys.path:
+                _sys.path.insert(0, _gm)
             import game_register as gr
             wire3 = (gr.pf(22, oid) + gr.pf(23, "4") + gr.pf(29, at) + gr.pf(99, "4"))
             h3 = {"User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
