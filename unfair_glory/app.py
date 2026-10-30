@@ -827,24 +827,61 @@ def get_app_version():
     try: return play_scraper('com.dts.freefireth').get('version')
     except Exception: return "1.132.9"
 
+VERCONFIG_CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verconfig_cache.json")
+
+# Fallbacks known to work for BD (used only when the version endpoint is down)
+VERCONFIG_DEFAULTS = {
+    "latest_release_version": "OB55",
+    "remote_version": "1.132.15",
+    "server_url": "https://loginbp.ppmainecoonghj.com",
+    "gop_1": "https://ffmconnect.ppmainecoonghj.com",
+}
+
+
 async def version_config(region="ME"):
+    """Fetch the version config, but NEVER let its failure block logins.
+
+    The endpoint (version.ggwhitehawk.com) regularly drops requests; every login
+    needs this call, so a single failure used to abort the whole bot with an
+    empty "[VERCONFIG]" error and burn a retry cycle. Now: live -> cache -> defaults.
+    """
     app_version = get_app_version()
     lang = REGION_LANG.get(region.upper(), "en")
     url = (f"https://version.ggwhitehawk.com/live/ver.php?version={app_version}"
            f"&lang={lang}&device=android&channel=android&appstore=googleplay"
            f"&region={region.upper()}&whitelist_version=1.3.0&whitelist_sp_version=1.0.0")
     try:
-        r = await client.get(url)
+        r = await client.get(url, timeout=12)
         j = r.json()
         server_url = j.get("server_url")
         remote_version = j.get("remote_version")
         latest_release_version = j.get("latest_release_version")
-        gops = [u.strip() for u in j.get("gop_url","").split(";") if u.strip()]
-        gop_1 = gops[0] if gops else "https://ffmconnect.ppmainecoonghj.com"
-        if not server_url: return None
-        return latest_release_version, remote_version, server_url, gop_1, app_version
+        gops = [u.strip() for u in j.get("gop_url", "").split(";") if u.strip()]
+        gop_1 = gops[0] if gops else VERCONFIG_DEFAULTS["gop_1"]
+        if server_url:
+            cfg = {"latest_release_version": latest_release_version,
+                   "remote_version": remote_version or app_version,
+                   "server_url": server_url, "gop_1": gop_1}
+            try:
+                with open(VERCONFIG_CACHE, "w", encoding="utf-8") as f:
+                    json.dump(cfg, f, indent=1)
+            except Exception:
+                pass
+            return (cfg["latest_release_version"], cfg["remote_version"],
+                    cfg["server_url"], cfg["gop_1"], app_version)
+        print_warning("[VERCONFIG] empty reply - using cached values")
     except Exception as e:
-        print_error(f"[VERCONFIG] {e}"); return None
+        print_warning(f"[VERCONFIG] {type(e).__name__} - using cached values")
+
+    cfg = dict(VERCONFIG_DEFAULTS)
+    try:
+        with open(VERCONFIG_CACHE, "r", encoding="utf-8") as f:
+            cfg.update(json.load(f))
+    except Exception:
+        pass
+    return (cfg["latest_release_version"], cfg["remote_version"],
+            cfg["server_url"], cfg["gop_1"], app_version)
+
 
 async def get_access_token(uid, password):
     url = "https://100067.connect.garena.com/oauth/guest/token/grant"
