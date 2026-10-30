@@ -1666,7 +1666,7 @@ async def GeNeRaTeAccEss(uid , password):
         "client_id": "100067"}
     async with aiohttp.ClientSession() as session:
         async with session.post(url, headers=Hr, data=data) as response:
-            if response.status != 200: return "Failed to get access token"
+            if response.status != 200: return (None, None)   # caller unpacks 2 values
             data = await response.json()
             open_id = data.get("open_id")
             access_token = data.get("access_token")
@@ -3789,7 +3789,23 @@ async def TcPChaT(ip, port, AutHToKen, key, iv, LoGinDaTaUncRypTinG, ready_event
 
 
 async def MaiiiinE():
-    Uid , Pw = '4395389733','7C0E5CE272A2CA70347433F90734E22677537639DAF964716A66127679ADF4C5'
+    # Account selection: FF_UID / FF_PW env vars first, else the newest entry in
+    # accounts.json (the original hardcoded account is banned and cannot log in).
+    Uid = os.environ.get("FF_UID", "").strip()
+    Pw = os.environ.get("FF_PW", "").strip()
+    if not (Uid and Pw):
+        try:
+            with open("accounts.json", "r", encoding="utf-8") as f:
+                _accs = json.load(f) or []
+            _accs = [a for a in _accs if str(a.get("uid", "")).isdigit()]
+            _accs.sort(key=lambda a: int(a["uid"]), reverse=True)
+            if _accs:
+                Uid, Pw = str(_accs[0]["uid"]), str(_accs[0]["password"])
+        except Exception as e:
+            print("accounts.json read failed:", e)
+    if not (Uid and Pw):
+        print("No account: set FF_UID and FF_PW"); return None
+    print(f"Using account {Uid}")
     
 
     open_id , access_token = await GeNeRaTeAccEss(Uid , Pw)
