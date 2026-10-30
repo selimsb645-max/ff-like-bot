@@ -62,7 +62,11 @@ NO_MATCH_RESTART_GRACE    = 60.0       # beri waktu bot login & cari match perta
 _accept_friend_request = True
 DEBUG_ALL_PACKETS = False
 
-TEAM_MODE = True
+# Solo mode: the squad invite/accept path is unreliable (members never receive the
+# invite, then fall back to solo search anyway), while solo search DOES find matches
+# ('[⚔] Match Found' -> 'Playing in-game!'). Each bot plays its own match, which also
+# levels accounts faster toward level 5 (where BR/CS glory unlocks).
+TEAM_MODE = False
 TEAM_SIZE = 4
 _TEAM_JOINED = {}   # uid -> ts when this bot accepted the leader's team invite
 TEAM_READY_DELAY = 5.0
