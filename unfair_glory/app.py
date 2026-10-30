@@ -2244,7 +2244,17 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
             except asyncio.CancelledError: raise
             except Exception as e:
                 if "Cache expired" in str(e):
-                    print_warning(f"[!] Token expired {uid_str}"); break
+                    print_warning(f"[!] Token expired {uid_str}")
+                    # Guest tokens cannot be re-logged-in once expired, so mint a
+                    # replacement instead of leaving the slot dead.
+                    try:
+                        if not globals().get("_REMINT_BUSY"):
+                            globals()["_REMINT_BUSY"] = True
+                            print_warning(f"[MINT] {uid_str} died - minting a replacement account")
+                            asyncio.create_task(_auto_remint(1))
+                    except Exception as _e:
+                        print_warning(f"[MINT] remint trigger failed: {_e}")
+                    break
                 reconnects += 1
                 if reconnects > max_reconnects:
                     if current_account_data:
@@ -2325,6 +2335,15 @@ async def informational(addrs, starter_packet, key, iv, region="ID",
                 try: data = await asyncio.wait_for(reader.read(8192), timeout=1.0)
                 except asyncio.TimeoutError: continue
                 if not data: raise ConnectionError("closed")
+                # The invite packet is NOT ascii ("TeamInvite" style); it is an
+                # encrypted/protobuf frame. Log its real bytes so the accept
+                # packet can be built from actual data instead of guesswork.
+                try:
+                    hx = data.hex()
+                    if len(data) < 600:
+                        print_info(f"[CHAT-RX {uid_str}] {len(data)}B head={hx[:80]}")
+                except Exception:
+                    pass
         except asyncio.CancelledError:
             if ping_task: ping_task.cancel()
             if uid_str: bot_state.unregister_writer(uid_str, writer)
@@ -2628,6 +2647,30 @@ async def major_register(release_v, access_token, open_id, name, game_version,
         print_error(f"[MAJOR-REG] {e}")
         traceback.print_exc()
         return None
+
+_REMINT_BUSY = False
+
+
+async def _auto_remint(count=1):
+    """Mint a replacement batch when a guest token expires."""
+    global _REMINT_BUSY
+    try:
+        while bot_state.creating:
+            await asyncio.sleep(2)
+        region = "BD"
+        try:
+            with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+                accs = json.load(f) or []
+            if accs and accs[-1].get("region"):
+                region = accs[-1]["region"]
+        except Exception:
+            pass
+        await create_four_accounts(region, str(CLAN_ID_DEFAULT), max(1, min(4, count)), "ANON")
+    except Exception as e:
+        print_error(f"[MINT] auto remint failed: {e}")
+    finally:
+        _REMINT_BUSY = False
+
 
 async def create_four_accounts(region: str, clan_id: str, count: int = 4, password: str = "ANON"):
     bot_state.creating = True
