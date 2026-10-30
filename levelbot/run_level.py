@@ -396,8 +396,76 @@ def _grant_direct(uid, pw):
     return api.guest_grant(uid, pw)
 
 
+def _gr_login(uid, pw):
+    """Login EXACTLY like the mint pipeline (game_register), then parse the reply.
+
+    The mint path is proven to return 200 + JWT from the phone, while our own
+    httpx header set gets "Protection Bypass". Same endpoint, different headers,
+    so the mint headers are the ones that actually work.
+    """
+    try:
+        import sys as _sys
+        _gm = str(ROOT / "guests_manager")
+        if _gm not in _sys.path:
+            _sys.path.insert(0, _gm)
+        import game_register as gr
+
+        pair = _grant_direct(uid, pw)
+        if not pair:
+            print(f"    gr_login[{uid}]: grant failed", flush=True)
+            return None
+        at, oid = pair
+
+        wire = (gr.pf(22, oid) + gr.pf(23, "4") + gr.pf(29, at) + gr.pf(99, "4"))
+        headers = {
+            "User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
+            "Accept-Encoding": "gzip", "X-GA-SV": "1789638359",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1", "ReleaseVersion": "OB55",
+        }
+        sess = gr.new_session()
+        r = sess.post(gr.MAJOR_LOGIN, headers=headers, data=gr.encrypt_payload(wire),
+                      timeout=20, verify=False)
+        print(f"    gr_login[{uid}]: status={r.status_code} len={len(r.content)} "
+              f"has_jwt={b'eyJ' in r.content}", flush=True)
+        if r.status_code != 200 or b"eyJ" not in r.content:
+            return None
+
+        jwt = gr.re_jwt(r.content)
+        if not jwt:
+            return None
+
+        fields = {}
+        for off in (64, 0):
+            try:
+                for f, k, v in api._walk_pb(r.content[off:]):
+                    fields.setdefault(f, []).append(v)
+            except Exception:
+                continue
+            if 22 in fields and 23 in fields:
+                break
+        key = fields[22][0] if 22 in fields else None
+        iv = fields[23][0] if 23 in fields else None
+        if not (isinstance(key, (bytes, bytearray)) and isinstance(iv, (bytes, bytearray))):
+            print(f"    gr_login[{uid}]: no key/iv in reply", flush=True)
+            return None
+        return {"jwt": jwt, "key": bytes(key), "iv": bytes(iv),
+                "ts": fields[21][0] if 21 in fields else int(time.time()),
+                "url": (fields[10][0].decode(errors="replace") if 10 in fields
+                        else "https://clientbp.ggpolarbear.com"),
+                "region": "BD", "uid": str(uid), "pw": pw,
+                "account_id": fields[1][0] if 1 in fields else int(uid)}
+    except Exception as e:
+        print(f"    gr_login[{uid}]: EXC {str(e)[:70]}", flush=True)
+        return None
+
+
 def raw_login(uid, pw):
     """guest grant + raw MajorLogin -> dict(jwt, key, iv, ts, url, region, account_id) or None."""
+    mint_style = _gr_login(uid, pw)
+    if mint_style:
+        print(f"    raw_login[{uid}]: mint-style login OK (jwt {len(mint_style['jwt'])} chars)", flush=True)
+        return mint_style
     pair = _grant_direct(uid, pw)
     at, oid = pair if pair else (None, None)
     if not at:
