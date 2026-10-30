@@ -52,7 +52,7 @@ NEW_MATCH_DELAY = 2.0
 MAX_MATCH_DURATION = 1500      # 25 min (real BR is 15-20 min)
 
 # --- Match idle: nilai di atas 10-20s agar tidak salah deteksi match end ---
-MATCH_IDLE_TIMEOUT  = 35.0     # 35s idle tanpa paket UDP → match dianggap selesai
+MATCH_IDLE_TIMEOUT  = 90.0     # tunggu 90s paket UDP; 35s terlalu cepat (match asli 15-19 mnt)
 
 # --- Auto-restart kalau tidak dapat match ---
 NO_MATCH_RESTART_ENABLED  = True       # set False untuk mematikan
@@ -1598,8 +1598,13 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                         print_warning(f"[MATCH #{match_index}] Handshake timeout"); break
                 elif ack_state == "thunder_sharma_sent":
                     if (time.time() - last_activity) > MATCH_IDLE_TIMEOUT:
-                        print_warning(f"[MATCH #{match_index}] Idle for {MATCH_IDLE_TIMEOUT:.0f}s — treating as ended")
-                        completed_cleanly = True; break
+                        # No UDP packets from the match server: the match never really
+                        # started. Counting it as "completed" made the dashboard show
+                        # matches>0 while EXP/glory stayed 0. Abort and retry instead.
+                        print_warning(f"[MATCH #{match_index}] idle {MATCH_IDLE_TIMEOUT:.0f}s with no server packets — ABORTED (not counted)")
+                        completed_cleanly = False
+                        local_closed = True
+                        break
             except (BlockingIOError, OSError):
                 await asyncio.sleep(0.5); continue
             except Exception:
