@@ -1,35 +1,61 @@
 auto_phone: 0 new phone accounts to activate
-bd proxy hunt: 20 alive candidates
-bd proxy OK: socks5://203.76.123.6:1080 exit=203.76.123.6
-auto_mint: 1 usable BD proxies: ['socks5://203.76.123.6:1080']
-mint[t1]: FRESH BD ACCOUNT 8373962466 (Kexin0730)
-mint[t2]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
-mint[t3]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries 
-mint[t4]: major_register 8373967383: SOCKSHTTPSConnectionPool(host='loginbp.p
-mint[t5]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
-mint[t6]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
-mint[t7]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
-mint[t8]: major_register 8373971942: SOCKSHTTPSConnectionPool(host='loginbp.p
-auto_mint: 1 fresh BD accounts minted
-pool: 1 fresh account(s) saved to registered_pool.json
-account pool: 491 usable, 0 burned-skip
-candidates: 10 accounts, want=3, cycles=40, first=[8373962466, '8373962466', '8372937915', '8372936259', '8371740426', '8370184893', '8370181666', '8368439981']
-BULK MODE: 10 candidates, 3 parallel workers, cycles=40
-[8373962466] authenticating...
-    raw_login[8373962466]: modern MajorLogin OK (jwt 735 chars)
-[8373962466] online=202.81.106.63:39699 whisper=202.81.106.96:39801
-[8373962466] authenticating...
-[8373962466] reusing cached JWT (no re-login -> no Protection Bypass)
-[8372937915] authenticating...
-    raw_login[8372937915]: modern MajorLogin OK (jwt 735 chars)
-[8372937915] online=202.81.106.90:39699 whisper=202.81.106.81:39801
-[8372936259] authenticating...
-    raw_login[8372936259]: modern MajorLogin failed -> legacy wire fallbacks
-[8373962466] TCP CONNECT FAILED: 
+bd proxy hunt: 28 alive candidates
+bd proxy socks5://123.0.24.154:9090: BD exit but can't reach garenanow — skip
+bd proxy http://182.160.127.29:12331: BD exit but can't reach garenanow — skip
+bd proxy http://182.252.89.130:8080: BD exit but can't reach garenanow — skip
+bd proxy http://202.5.47.60:1080: BD exit but can't reach garenanow — skip
+bd proxy http://103.76.44.175:8090: BD exit but can't reach garenanow — skip
+bd proxy OK: http://103.79.183.109:8080 exit=103.79.183.109
+auto_mint: 1 usable BD proxies: ['http://103.79.183.109:8080']
+mint[t1]: EXC ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
+mint[t2]: FRESH BD ACCOUNT 8375310319 (Kexin0665)
+mint[t3]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
+mint[t4]: FRESH BD ACCOUNT 8375313710 (Kexin4900)
+auto_mint: 2 fresh BD accounts minted
+pool: 2 fresh account(s) saved to registered_pool.json
+account pool: 493 usable, 0 burned-skip
+candidates: 11 accounts, want=3, cycles=40, first=[8375310319, 8375313710, '8375313710', '8375310319', '8373962466', '8372937915', '8372936259', '8371740426']
+BULK MODE: 11 candidates, 3 parallel workers, cycles=40
+[8375310319] authenticating...
+    gr_login[8375310319]: status=200 len=1173 has_jwt=True
+    raw_login[8375310319]: mint-style login OK (jwt 736 chars)
+    GetLoginData httpx failed (status=401) — requests fallback
+    GetLoginData requests fallback: status=401 len=21
+[8375310319] GetLoginData FAILED (cached JWT dropped)
+progress push failed: Server disconnected without sending a response.
+[8375313710] authenticating...
+    gr_login[8375313710]: status=200 len=1173 has_jwt=True
+    raw_login[8375313710]: mint-style login OK (jwt 736 chars)
+[8375313710] authenticating...
+[8375313710] reusing cached JWT (no re-login -> no Protection Bypass)
+    GetLoginData httpx failed (status=401) — requests fallback
+    GetLoginData requests fallback: status=401 len=21
+[8375313710] GetLoginData FAILED (cached JWT dropped)
 progress push failed: timed out
-[8373962466] -> tcp_failed | done=0
-unhandled exception during asyncio.run() shutdown
-task: <Task finished name='Task-5' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:979> exception=ConnectTimeout('timed out')>
+[8375310319] -> logindata_failed | done=0
+[8375313710] -> logindata_failed | done=0
+[8375310319] authenticating...
+    gr_login[8375310319]: status=200 len=1173 has_jwt=True
+    raw_login[8375310319]: mint-style login OK (jwt 736 chars)
+    GetLoginData httpx failed (status=401) — requests fallback
+    GetLoginData requests fallback EXC: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
+[8375310319] GetLoginData FAILED (cached JWT dropped)
+[8373962466] authenticating...
+    gr_login[8373962466]: status=200 len=97 has_jwt=False
+    raw_login[8373962466]: modern MajorLogin failed -> legacy wire fallbacks
+    raw_login[8373962466]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
+    raw_login[8373962466]: gr path status=200 len=97 prot=True
+[8373962466] LOGIN FAILED (majorlogin_failed)
+progress push failed: timed out
+[8372937915] authenticating...
+    gr_login[8372937915]: status=200 len=97 has_jwt=False
+    raw_login[8372937915]: modern MajorLogin failed -> legacy wire fallbacks
+    raw_login[8372937915]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
+    raw_login[8372937915]: gr path status=200 len=97 prot=True
+[8372937915] LOGIN FAILED (majorlogin_failed)
+[8375310319] -> logindata_failed | done=0
+[8373962466] -> login_failed | done=0
+[8372937915] -> login_failed | done=0
 Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
     yield
@@ -41,95 +67,37 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
     response = connection.handle_request(
                ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 295, in handle_request
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http_proxy.py", line 288, in handle_request
+    connect_response = self._connection.handle_request(
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 103, in handle_request
+    return self._connection.handle_request(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 136, in handle_request
     raise exc
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 231, in handle_request
-    stream = self._network_backend.connect_tcp(**kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 106, in handle_request
+    ) = self._receive_response_headers(**kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 177, in _receive_response_headers
+    event = self._receive_event(timeout=timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http11.py", line 217, in _receive_event
+    data = self._network_stream.read(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 126, in read
     with map_exceptions(exc_map):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
     self.gen.throw(typ, value, traceback)
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
     raise to_exc(exc) from exc
-httpcore.ConnectTimeout: timed out
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 990, in _worker
-    res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=420)
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/tasks.py", line 479, in wait_for
-    return fut.result()
-           ^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 603, in run_account
-    login = raw_login(uid, pw)
-            ^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 430, in raw_login
-    r = httpx.post(FULL_ML_URL, headers=h, data=body, timeout=25, verify=False)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 39, in <lambda>
-    httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
-                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_api.py", line 304, in post
-    return request(
-           ^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_api.py", line 109, in request
-    return client.request(
-           ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 825, in request
-    return self.send(request, auth=auth, follow_redirects=follow_redirects)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 914, in send
-    response = self._send_handling_auth(
-               ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 942, in _send_handling_auth
-    response = self._send_handling_redirects(
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
-    response = self._send_single_request(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 1014, in _send_single_request
-    response = transport.handle_request(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 249, in handle_request
-    with map_httpcore_exceptions():
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
-    self.gen.throw(typ, value, traceback)
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
-    raise mapped_exc(message) from exc
-httpx.ConnectTimeout: timed out
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
-    yield
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 250, in handle_request
-    resp = self._pool.handle_request(req)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
-    raise exc from None
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
-    response = connection.handle_request(
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 295, in handle_request
-    raise exc
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 231, in handle_request
-    stream = self._network_backend.connect_tcp(**kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
-    with map_exceptions(exc_map):
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
-    self.gen.throw(typ, value, traceback)
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
-    raise to_exc(exc) from exc
-httpcore.ConnectTimeout: timed out
+httpcore.ReadError: [Errno 104] Connection reset by peer
 
 The above exception was the direct cause of the following exception:
 
 Traceback (most recent call last):
   File "<frozen runpy>", line 198, in _run_module_as_main
   File "<frozen runpy>", line 88, in _run_code
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1044, in <module>
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1120, in <module>
     asyncio.run(main())
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/runners.py", line 190, in run
     return runner.run(main)
@@ -140,18 +108,18 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
     return future.result()
            ^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 999, in main
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1075, in main
     await asyncio.gather(*[_worker(u, p) for u, p in accounts])
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 990, in _worker
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1066, in _worker
     res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=420)
           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
     return fut.result()
            ^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 617, in run_account
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 692, in run_account
     servers = get_login_data(login)
               ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 491, in get_login_data
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 563, in get_login_data
     r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 39, in <lambda>
@@ -184,4 +152,4 @@ Traceback (most recent call last):
     self.gen.throw(typ, value, traceback)
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
     raise mapped_exc(message) from exc
-httpx.ConnectTimeout: timed out
+httpx.ReadError: [Errno 104] Connection reset by peer
