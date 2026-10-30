@@ -64,6 +64,7 @@ DEBUG_ALL_PACKETS = False
 
 TEAM_MODE = True
 TEAM_SIZE = 4
+_TEAM_JOINED = {}   # uid -> ts when this bot accepted the leader's team invite
 TEAM_READY_DELAY = 5.0
 TEAM_INVITE_WAIT = 2.5
 CLAN_ID_DEFAULT = "3105331459"
@@ -1908,9 +1909,22 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
     async def _member_match_trigger():
         try:
-            await asyncio.sleep(TEAM_READY_DELAY + 18.0)
+            await asyncio.sleep(TEAM_READY_DELAY + 5.0)
             async with _team_state["lock"]:
                 if _team_state["leader_uid"] == uid_str: return
+            # Wait for the leader's team invite before searching. Starting the
+            # search early is what put 1 bot "IN_MATCH (TEAM)" while the other 3
+            # sat in their own lobbies in "SEARCHING", so no lobby ever filled.
+            _wait_from = time.time()
+            while time.time() - _wait_from < 60:
+                if _TEAM_JOINED.get(str(uid_str)):
+                    print_success(f"[TEAM] 🤝 {uid_str} joined the squad - starting search with the team")
+                    break
+                async with _team_state["lock"]:
+                    if _team_state["leader_uid"] == uid_str: return
+                await asyncio.sleep(2.0)
+            else:
+                print_warning(f"[TEAM] {uid_str} got no invite in 60s - falling back to solo search")
             print_success(f"[TEAM] 🚀 Member {uid_str} loop: ready → 1s → start (every 5s)")
             try:
                 bot_state.update_status(uid_str, "SEARCHING", 0)
@@ -2111,6 +2125,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                         acc = accept_team_invite(int(inviter), group_id, current_key, current_iv)
                                         if writer and not writer.is_closing():
                                             writer.write(acc); await writer.drain()
+                                            _TEAM_JOINED[str(uid_str)] = time.time()
                                             print_success(f"[TEAM] ✅ accept sent ({len(acc)}B)")
                                     except Exception as e:
                                         print_warning(f"[TEAM] accept err: {e}")
