@@ -66,7 +66,7 @@ DEBUG_ALL_PACKETS = False
 # invite, then fall back to solo search anyway), while solo search DOES find matches
 # ('[⚔] Match Found' -> 'Playing in-game!'). Each bot plays its own match, which also
 # levels accounts faster toward level 5 (where BR/CS glory unlocks).
-TEAM_MODE = False
+TEAM_MODE = True
 TEAM_SIZE = 4
 _TEAM_JOINED = {}   # uid -> ts when this bot accepted the leader's team invite
 TEAM_READY_DELAY = 5.0
@@ -1919,16 +1919,32 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
             # Wait for the leader's team invite before searching. Starting the
             # search early is what put 1 bot "IN_MATCH (TEAM)" while the other 3
             # sat in their own lobbies in "SEARCHING", so no lobby ever filled.
-            _wait_from = time.time()
-            while time.time() - _wait_from < 60:
-                if _TEAM_JOINED.get(str(uid_str)):
-                    print_success(f"[TEAM] 🤝 {uid_str} joined the squad - starting search with the team")
-                    break
+            # Squad join WITHOUT the invite packet: the leader stores its team code
+            # in _team_state (same process), so each member can join by code.
+            # The invite path was dead because informational() (chat channel) reads
+            # packets and throws them away, so members never saw an invite.
+            tc = ldr = None
+            for _ in range(25):
                 async with _team_state["lock"]:
-                    if _team_state["leader_uid"] == uid_str: return
-                await asyncio.sleep(2.0)
-            else:
-                print_warning(f"[TEAM] {uid_str} got no invite in 60s - falling back to solo search")
+                    tc = _team_state.get("team_code")
+                    ldr = _team_state.get("leader_uid")
+                    peer = _team_state["peers"].get(str(ldr)) if ldr else None
+                if tc and ldr and ldr != uid_str:
+                    leader_acc = (peer or {}).get("data", {}).get("account_id") or ldr
+                    try:
+                        pkt = accept_team_invite(int(leader_acc), str(tc),
+                                                 current_key, current_iv)
+                        if _writer_ref["w"] and not _writer_ref["w"].is_closing():
+                            _writer_ref["w"].write(pkt)
+                            await _writer_ref["w"].drain()
+                            _TEAM_JOINED[str(uid_str)] = time.time()
+                            print_success(f"[TEAM] 🔗 {uid_str} joined squad by code {tc}")
+                            break
+                    except Exception as e:
+                        print_warning(f"[TEAM] join-by-code err: {e}")
+                await asyncio.sleep(1.0)
+            if not _TEAM_JOINED.get(str(uid_str)):
+                print_warning(f"[TEAM] {uid_str} could not join by code - solo search")
             print_success(f"[TEAM] 🚀 Member {uid_str} loop: ready → 1s → start (every 5s)")
             try:
                 bot_state.update_status(uid_str, "SEARCHING", 0)
