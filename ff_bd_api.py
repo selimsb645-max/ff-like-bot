@@ -881,3 +881,46 @@ def get_full_profile(account_id: int, jwt: str = None) -> dict:
         return {"level": out.get(6), "exp": out.get(7), "likes": out.get(21)}
     except Exception:
         return {}
+
+# ── Guild (clan) join ────────────────────────────────────────────────
+# Verified against the UNFAIR glory bot: endpoint is /RequestJoinClan and the
+# body is an AES-CBC encrypted `MyMessage{field_1: clan_id}` (octet-stream),
+# NOT a wire proto. All the /JoinClan,/ApplyClan style paths return 404.
+CLAN_JOIN_URL = "https://clientbp.ggpolarbear.com/RequestJoinClan"
+CLAN_KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
+CLAN_IV = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
+
+
+def _clan_payload(clan_id: int) -> bytes:
+    """MyMessage { field_1: int64 clan_id } -> AES-CBC + PKCS7."""
+    from Crypto.Cipher import AES
+    from Crypto.Util.Padding import pad
+    val, out = int(clan_id), b""
+    while True:
+        b7 = val & 0x7F
+        val >>= 7
+        if val:
+            out += bytes([b7 | 0x80])
+        else:
+            out += bytes([b7])
+            break
+    return AES.new(CLAN_KEY, AES.MODE_CBC, CLAN_IV).encrypt(pad(b"\x08" + out, 16))
+
+
+def request_join_clan(clan_id: int, jwt: str = None, verbose: bool = False):
+    """Ask the guild to accept this account. Returns (ok, message)."""
+    try:
+        r = httpx.post(CLAN_JOIN_URL,
+                       headers={"Authorization": f"Bearer {jwt}",
+                                "X-Unity-Version": "2018.4.11f1", "X-GA": "v1 1",
+                                "ReleaseVersion": "OB55",
+                                "Content-Type": "application/octet-stream",
+                                "Connection": "Keep-Alive", "Accept-Encoding": "gzip"},
+                       data=_clan_payload(clan_id), timeout=20, verify=False)
+        ok = r.status_code == 200
+        msg = f"RequestJoinClan -> {r.status_code}"
+        if verbose or not ok:
+            msg += f" len={len(r.content)} body={r.content[:60]!r}"
+        return (ok, msg)
+    except Exception as e:
+        return (False, f"RequestJoinClan EXC {str(e)[:80]}")
