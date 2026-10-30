@@ -1562,8 +1562,8 @@
   "cycles": 0
  },
  "8373962466": {
-  "status": "tcp_failed",
-  "err": "",
+  "status": "login_failed",
+  "stage": "majorlogin_failed",
   "cycles": 0
  },
  "8375310319": {
@@ -1572,6 +1572,11 @@
  },
  "8375313710": {
   "status": "logindata_failed",
+  "cycles": 0
+ },
+ "8372937915": {
+  "status": "login_failed",
+  "stage": "majorlogin_failed",
   "cycles": 0
  }
 }
