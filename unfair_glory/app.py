@@ -735,6 +735,47 @@ def accept_team_invite(target_uid, group_id, key, iv):
         27:{1:2, 2:4}}}
     return create_packet(create_proto(fields).hex(), "0515", key, iv)
 
+
+
+# ── Multi-squad manager ──────────────────────────────────────────────────────
+# Every group of TEAM_SIZE (=4) online bots forms its OWN squad. Extra bots form
+# the next squad, so 12 bots = 3 squads, 6 bots = one full squad + one of 2.
+_SQUADS = {}          # squad_no -> {"leader": uid, "members": [uid...], "code": str|None}
+_SQUAD_OF = {}        # uid -> squad_no
+_SQUAD_LOCK = None
+
+
+def _squad_assign(uid):
+    """Give this bot a squad slot (first free seat). Returns (squad_no, is_leader)."""
+    uid = str(uid)
+    if uid in _SQUAD_OF:
+        n = _SQUAD_OF[uid]
+        return n, _SQUADS[n]["leader"] == uid
+    n = 0
+    while True:
+        sq = _SQUADS.setdefault(n, {"leader": None, "members": [], "code": None})
+        if len(sq["members"]) < TEAM_SIZE:
+            sq["members"].append(uid)
+            if sq["leader"] is None:
+                sq["leader"] = uid
+            _SQUAD_OF[uid] = n
+            return n, sq["leader"] == uid
+        n += 1
+
+def join_squad_by_code(code, key, iv):
+    """Join a squad by its team code. Field layout copied from the working engine
+    (GenJoinSquadsPacket in the reference xC4): the code lives in field 5 of the
+    inner message. The old accept_team_invite put it in field 10 with dozens of
+    extra fields and the server ignored it (screenshot: leader stuck at 1/4)."""
+    fields = {1: 4, 2: {
+        4: bytes.fromhex("01090a0b121920"),
+        5: str(code),
+        6: 6,
+        8: 1,
+        9: {2: 800, 6: 11, 8: "1.111.1", 9: 5, 10: 1},
+    }}
+    return create_packet(create_proto(fields).hex(), "0515", key, iv)
+
 def start_match_team(account_id, key, iv, region="ME"):
     fields = {1:9, 2:{1:int(account_id), 7:{1:"IDC3", 2:410, 3:region}}}
     return create_packet(create_proto(fields).hex(), "0515", key, iv)
@@ -1801,21 +1842,25 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
     async def _team_coordinator():
         try:
+            # wait (max 40s) for this bot's squad to fill, then go with whoever is seated
+            _t0 = time.time()
             while True:
-                async with _team_state["lock"]:
-                    n = len(_team_state["peers"])
-                if n >= TEAM_SIZE: break
+                _no = _SQUAD_OF.get(str(uid_str))
+                _have = len(_SQUADS[_no]["members"]) if _no is not None else 0
+                if _have >= TEAM_SIZE or time.time() - _t0 > 40: break
                 if bot_state.is_paused(uid_str): return
                 await asyncio.sleep(0.5)
 
             await asyncio.sleep(TEAM_READY_DELAY)
 
+            _no = _SQUAD_OF.get(str(uid_str))
+            is_leader = _no is not None and _SQUADS[_no]["leader"] == str(uid_str)
             async with _team_state["lock"]:
-                is_leader = (_team_state["leader_uid"] == uid_str)
-                peers_snapshot = dict(_team_state["peers"])
+                peers_snapshot = {u: p for u, p in _team_state["peers"].items()
+                                  if _no is not None and u in _SQUADS[_no]["members"]}
 
             if not is_leader:
-                print_info(f"[TEAM] {uid_str} waiting as member..."); return
+                print_info(f"[SQUAD {(_no or 0) + 1}] {uid_str} waiting as member..."); return
 
             print_success(f"[TEAM] 👑 {uid_str} — creating team...")
 
@@ -1923,28 +1968,24 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
             # in _team_state (same process), so each member can join by code.
             # The invite path was dead because informational() (chat channel) reads
             # packets and throws them away, so members never saw an invite.
-            tc = ldr = None
-            for _ in range(25):
-                async with _team_state["lock"]:
-                    tc = _team_state.get("team_code")
-                    ldr = _team_state.get("leader_uid")
-                    peer = _team_state["peers"].get(str(ldr)) if ldr else None
-                if tc and ldr and ldr != uid_str:
-                    leader_acc = (peer or {}).get("data", {}).get("account_id") or ldr
+            _no = _SQUAD_OF.get(str(uid_str))
+            tc = None
+            for _ in range(40):
+                tc = _SQUADS[_no]["code"] if _no is not None else None
+                if tc and _SQUADS[_no]["leader"] != str(uid_str):
                     try:
-                        pkt = accept_team_invite(int(leader_acc), str(tc),
-                                                 current_key, current_iv)
+                        pkt = join_squad_by_code(str(tc), current_key, current_iv)
                         if _writer_ref["w"] and not _writer_ref["w"].is_closing():
                             _writer_ref["w"].write(pkt)
                             await _writer_ref["w"].drain()
                             _TEAM_JOINED[str(uid_str)] = time.time()
-                            print_success(f"[TEAM] 🔗 {uid_str} joined squad by code {tc}")
+                            print_success(f"[SQUAD {_no + 1}] {uid_str} joined code {tc}")
                             break
                     except Exception as e:
-                        print_warning(f"[TEAM] join-by-code err: {e}")
+                        print_warning(f"[SQUAD] join err: {e}")
                 await asyncio.sleep(1.0)
             if not _TEAM_JOINED.get(str(uid_str)):
-                print_warning(f"[TEAM] {uid_str} could not join by code - solo search")
+                print_warning(f"[SQUAD] {uid_str} could not join - solo search")
             print_success(f"[TEAM] 🚀 Member {uid_str} loop: ready → 1s → start (every 5s)")
             try:
                 bot_state.update_status(uid_str, "SEARCHING", 0)
@@ -2031,9 +2072,12 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     _team_state["peers"][uid_str] = {
                         "writer": writer, "data": current_account_data,
                         "key": current_key, "iv": current_iv}
+                    _sq_no, _sq_lead = _squad_assign(uid_str)
                     if _team_state["leader_uid"] is None:
                         _team_state["leader_uid"] = uid_str
-                        print_success(f"[TEAM] 👑 {uid_str} is first peer (leader)")
+                    print_success(f"[SQUAD {_sq_no + 1}] {uid_str} seated"
+                                  f"{' (LEADER)' if _sq_lead else ''} "
+                                  f"[{len(_SQUADS[_sq_no]['members'])}/{TEAM_SIZE}]")
 
                 async def send_solo_start_match():
                     nonlocal search_attempts
@@ -2125,7 +2169,11 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                             if tc:
                                 async with _team_state["lock"]:
                                     _team_state["team_code"] = tc
-                                print_success(f"[TEAM] 📢 Team Code captured: {tc}")
+                                    _mine = _SQUAD_OF.get(str(uid_str))
+                                    if (_mine is not None and _SQUADS[_mine]["leader"] == str(uid_str)
+                                            and not _SQUADS[_mine]["code"]):
+                                        _SQUADS[_mine]["code"] = tc
+                                print_success(f"[SQUAD {(_mine or 0) + 1}] code captured: {tc}")
                             group_id = _f5g(8)
                             if group_id and isinstance(group_id, str) and 20 <= len(group_id) <= 40:
                                 pass
@@ -2274,6 +2322,9 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     if _team_state["leader_uid"] == uid_str:
                         _team_state["leader_uid"] = None
                         _team_state["team_code"] = None
+                    _lq = _SQUAD_OF.get(str(uid_str))
+                    if _lq is not None and _SQUADS[_lq]["leader"] == str(uid_str):
+                        _SQUADS[_lq]["code"] = None
                 for tk in (team_coord_task, member_trigger_task):
                     if tk and not tk.done():
                         tk.cancel()
