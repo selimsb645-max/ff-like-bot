@@ -55,6 +55,7 @@ class GameConnection:
         online_ip: str,
         online_port: int,
         token_hex: str,
+        chat_token_hex: str = None,
     ):
         """Connect to both servers, send auth token, start keepalive."""
         self.whisper_ip = whisper_ip
@@ -63,6 +64,7 @@ class GameConnection:
         self.online_port = int(online_port)
 
         auth_bytes = bytes.fromhex(token_hex)
+        chat_bytes = bytes.fromhex(chat_token_hex) if chat_token_hex else auth_bytes
 
         async def _open(host, port):
             """Open TCP stream — through BD socks proxy when BD_PROXY_URL is set,
@@ -100,7 +102,7 @@ class GameConnection:
         # Send auth token to both sockets
         self.online_writer.write(auth_bytes)
         await self.online_writer.drain()
-        self.whisper_writer.write(auth_bytes)
+        self.whisper_writer.write(chat_bytes)
         await self.whisper_writer.drain()
 
         logger.info("TCP connected + auth token sent")

@@ -596,16 +596,19 @@ def get_login_data(login):
     return (w_ip, w_port, o_ip, o_port)
 
 
-async def build_conn_token(login):
-    """Token sent raw on both TCP sockets: 0115{hdr}{uid_hex}{ts_hex}00000{len}{enc}."""
-    jwt_hex = login["jwt"].encode().hex()
-    enc = await EnC_PacKeT(jwt_hex, login["key"], login["iv"])
-    uid_hex = hex(login["account_id"])[2:]
-    L = len(uid_hex)
-    hdr = {9: "0000000", 8: "00000000", 10: "000000", 7: "000000000"}.get(L, "0000000")
-    ts_hex = await DecodE_HeX(login["ts"])
-    enc_len = hex(len(enc) // 2)[2:]
-    return f"0115{hdr}{uid_hex}{ts_hex}00000{enc_len}{enc}"
+async def build_conn_token(login, chat=False):
+    """TCP auth token. Verified against the UNFAIR glory bot: BD uses prefix 7219
+    on the online channel and 8119 on the chat channel, and every field is
+    fixed-width (uid 16 hex, ts 8 hex, 8-hex length). Our old 0115 + variable
+    widths was silently rejected by the server (9-byte error + socket close).
+    """
+    enc = await EnC_PacKeT(login["jwt"].encode().hex(), login["key"], login["iv"])
+    uid_hex = f"{int(login['account_id']):016x}"
+    ts_hex = f"{int(login['ts']):08x}"
+    enc_len = f"{len(enc) // 2:08x}"
+    if chat:
+        return f"8119{uid_hex}{ts_hex}{enc_len}{enc}"
+    return f"7219{uid_hex}{ts_hex}00000000{enc_len}{enc}"
 
 
 # ── JWT cache ────────────────────────────────────────────────────────
@@ -694,13 +697,14 @@ async def run_account(uid, pw, cycles, on_done):
         return {"status": "logindata_failed", "cycles": 0}
     w_ip, w_port, o_ip, o_port = servers
     token = await build_conn_token(login)
+    chat_token = await build_conn_token(login, chat=True)
     print(f"{tag} online={o_ip}:{o_port} whisper={w_ip}:{w_port}", flush=True)
 
     conn = GameConnection()
     conn.set_crypto(login["key"], login["iv"], region="bd")
     pb = PacketBuilder(login["key"], login["iv"], region="bd")
     try:
-        await conn.connect(w_ip, w_port, o_ip, o_port, token)
+        await conn.connect(w_ip, w_port, o_ip, o_port, token, chat_token)
     except Exception as e:
         print(f"{tag} TCP CONNECT FAILED: {e}", flush=True)
         on_done(uid, {"status": "tcp_failed", "err": str(e)[:100], "cycles": 0})
