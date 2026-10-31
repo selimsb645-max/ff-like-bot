@@ -31,6 +31,28 @@ WEB_PORT = 20333
 ACCOUNTS_FILE = "accounts.json"
 TOKEN_CACHE_FILE = "token_cache.json"
 DEVICES_FILE = "devices.json"
+# Accounts that failed every login are remembered here and never retried again.
+# Without this, every restart re-tried 20 dead accounts at once and the login
+# storm killed the fresh ones too (farm.log 21:06:08 - 12 logins in one second).
+DEAD_ACCOUNTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "accounts_dead.json")
+
+
+def _dead_load():
+    try:
+        with open(DEAD_ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+            return set(str(x) for x in json.load(f))
+    except Exception:
+        return set()
+
+
+def _dead_add(uid):
+    d = _dead_load()
+    d.add(str(uid))
+    try:
+        with open(DEAD_ACCOUNTS_FILE, "w", encoding="utf-8") as f:
+            json.dump(sorted(d), f, indent=1)
+    except Exception:
+        pass
 # Was 4500s (75 min): the local expiry check killed healthy workers in the middle
 # of a match ("Cache expired" -> re-login -> guest accounts cannot re-login, so the
 # session was lost for good). The server rejects a stale JWT on its own, so keep
@@ -2599,18 +2621,20 @@ async def _replace_dead_account(uid):
                 accs = json.load(f) or []
         except Exception:
             return False
-        fresh = [a for a in accs if str(a.get("uid")) not in bot_state.account_workers]
-        started = False
-        for a in fresh:
-            u, pw = str(a.get("uid")), a.get("password")
-            if not (u and pw):
-                continue
-            _login_fails.pop(u, None)
-            t = asyncio.create_task(account_loop_guest(u, pw))
-            bot_state.account_workers[u] = t
-            print_success(f"[MINT] ✅ replacement live: {u}")
-            started = True
-        return started
+        dead = _dead_load()
+        fresh = [a for a in accs
+                 if a.get("uid") and a.get("password")
+                 and str(a.get("uid")) not in bot_state.account_workers
+                 and str(a.get("uid")) not in dead]
+        if not fresh:
+            return False
+        a = max(fresh, key=lambda x: int(str(x["uid"])) if str(x["uid"]).isdigit() else 0)
+        u = str(a["uid"])
+        _login_fails.pop(u, None)
+        t = asyncio.create_task(account_loop_guest(u, a["password"]))
+        bot_state.account_workers[u] = t
+        print_success(f"[MINT] ✅ replacement live: {u}")
+        return True
 
 
 
@@ -2634,15 +2658,21 @@ async def _mint_one_and_start():
             accs = json.load(f) or []
     except Exception:
         return False
-    for a in accs:
-        u, pw = str(a.get("uid")), a.get("password")
-        if u and pw and u not in bot_state.account_workers:
-            _login_fails.pop(u, None)
-            t = asyncio.create_task(account_loop_guest(u, pw))
-            bot_state.account_workers[u] = t
-            print_success(f"[POOL] ✅ new account live: {u}")
-            return True
-    return False
+    dead = _dead_load()
+    fresh = [a for a in accs
+             if a.get("uid") and a.get("password")
+             and str(a.get("uid")) not in bot_state.account_workers
+             and str(a.get("uid")) not in dead]
+    if not fresh:
+        return False
+    # newest mint only - starting all of them is what caused the 12-login burst
+    a = max(fresh, key=lambda x: int(str(x["uid"])) if str(x["uid"]).isdigit() else 0)
+    u = str(a["uid"])
+    _login_fails.pop(u, None)
+    t = asyncio.create_task(account_loop_guest(u, a["password"]))
+    bot_state.account_workers[u] = t
+    print_success(f"[POOL] ✅ new account live: {u}")
+    return True
 
 
 async def _pool_guardian():
@@ -2696,6 +2726,7 @@ async def account_loop_guest(uid, password):
                 try: bot_state.update_status(str(uid), "ERROR")
                 except Exception: pass
                 if n >= _REPLACE_AFTER:
+                    _dead_add(uid)
                     if await _replace_dead_account(uid):
                         return          # a new worker took this slot
                     _login_fails[str(uid)] = 0
@@ -2740,6 +2771,12 @@ def load_accounts():
                 data = json.load(f)
                 if isinstance(data, list): accounts = data
         except Exception as e: print_error(f"load: {e}")
+    dead = _dead_load()
+    if dead:
+        before = len(accounts)
+        accounts = [a for a in accounts if str(a.get("uid")) not in dead]
+        if before != len(accounts):
+            print_info(f"[POOL] skipped {before - len(accounts)} dead account(s) from accounts_dead.json")
     if not accounts and FALLBACK_UID and FALLBACK_PASSWORD:
         accounts.append({"uid": FALLBACK_UID, "password": FALLBACK_PASSWORD})
     return accounts
