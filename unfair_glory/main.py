@@ -2493,6 +2493,62 @@ async def run_account_worker(ad, label):
                 try: await t
                 except Exception: pass
 
+
+# ── self-healing account pool ────────────────────────────────────────────────
+# A guest account can be logged in only once, so every bot eventually dies with
+# "Login failed" and the 24/7 farm goes silent. After _REPLACE_AFTER failures the
+# dead uid is dropped from accounts.json and a fresh one is minted in its place.
+_REPLACE_AFTER = int(os.environ.get("FF_REPLACE_AFTER", "3"))
+_login_fails = {}
+_remint_lock = asyncio.Lock()
+
+
+def _drop_account(uid):
+    try:
+        with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+            accs = json.load(f) or []
+        keep = [a for a in accs if str(a.get("uid")) != str(uid)]
+        if len(keep) != len(accs):
+            with open(ACCOUNTS_FILE, "w", encoding="utf-8") as f:
+                json.dump(keep, f, indent=2)
+        return len(accs) - len(keep)
+    except Exception as e:
+        print_warning(f"[MINT] drop {uid}: {e}")
+        return 0
+
+
+async def _replace_dead_account(uid):
+    """Mint one fresh account and start its worker."""
+    async with _remint_lock:
+        print_warning(f"[MINT] {uid} is dead - replacing it with a fresh account")
+        _drop_account(uid)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "mint_accounts.py", "1", "--gap", "0",
+                stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.STDOUT)
+            await asyncio.wait_for(proc.wait(), timeout=180)
+        except Exception as e:
+            print_error(f"[MINT] mint failed: {e}")
+            return False
+        try:
+            with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+                accs = json.load(f) or []
+        except Exception:
+            return False
+        fresh = [a for a in accs if str(a.get("uid")) not in bot_state.account_workers]
+        started = False
+        for a in fresh:
+            u, pw = str(a.get("uid")), a.get("password")
+            if not (u and pw):
+                continue
+            _login_fails.pop(u, None)
+            t = asyncio.create_task(account_loop_guest(u, pw))
+            bot_state.account_workers[u] = t
+            print_success(f"[MINT] ✅ replacement live: {u}")
+            started = True
+        return started
+
+
 async def account_loop_guest(uid, password):
     while True:
         try:
@@ -2501,9 +2557,15 @@ async def account_loop_guest(uid, password):
             except Exception: pass
             ad = await process_account_uid_pass(uid, password)
             if not ad:
-                print_error(f"Login failed {uid}, retry 15s")
+                n = _login_fails.get(str(uid), 0) + 1
+                _login_fails[str(uid)] = n
+                print_error(f"Login failed {uid} ({n}/{_REPLACE_AFTER}), retry 15s")
                 try: bot_state.update_status(str(uid), "ERROR")
                 except Exception: pass
+                if n >= _REPLACE_AFTER:
+                    if await _replace_dead_account(uid):
+                        return          # a new worker took this slot
+                    _login_fails[str(uid)] = 0
                 await asyncio.sleep(15); continue
             await run_account_worker(ad, uid)
             print_warning(f"Session end {uid}, reconnect 3s")
