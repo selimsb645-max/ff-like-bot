@@ -1,0 +1,61 @@
+name: Mint Like Accounts (daily)
+
+# Keeps the like pool stocked: registers fresh BD guest accounts every day so
+# /like has working accounts to send from. Registration only - the login is left
+# for the bot, because a guest account can be logged in exactly once.
+
+on:
+  schedule:
+    - cron: "20 18 * * *"        # 00:20 Dhaka (UTC+6) daily
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "accounts to add today"
+        default: "300"
+      gap:
+        description: "seconds between registrations"
+        default: "6"
+
+concurrency:
+  group: mint-likes
+  cancel-in-progress: false
+
+jobs:
+  mint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests httpx aiohttp pycryptodome protobuf protobuf-decoder \
+                      google-play-scraper PyJWT pytz
+
+      - name: Mint accounts into the like pool
+        env:
+          COUNT: ${{ github.event.inputs.count || '300' }}
+          GAP: ${{ github.event.inputs.gap || '6' }}
+        run: |
+          cd unfair_glory
+          python mint_likes_pool.py --count "$COUNT" --gap "$GAP"
+
+      - name: Commit pool
+        if: always()
+        run: |
+          git config user.name "ff-like-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add phone_accounts.json unfair_glory/.mint_likes_state.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "no new accounts this run"
+          else
+            git commit -m "like pool: auto-minted accounts $(date -u +%Y-%m-%d)"
+            git push
+          fi
