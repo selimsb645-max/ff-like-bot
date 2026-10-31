@@ -1,66 +1,32 @@
 auto_phone: 0 new phone accounts to activate
-bd proxy hunt: 16 alive candidates
-bd proxy OK: http://103.79.183.109:8080 exit=103.79.183.109
-bd proxy OK: socks5://119.148.7.10:22122 exit=119.148.7.10
-auto_mint: 2 usable BD proxies: ['http://103.79.183.109:8080', 'socks5://119.148.7.10:22122']
-mint[t1]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t2]: FRESH BD ACCOUNT 8378384270 (Kexin7558)
-mint[t3]: major_register 8378385443: ('Connection aborted.', RemoteDisconnect
-mint[t4]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
-mint[t5]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t6]: FRESH BD ACCOUNT 8378387415 (Kexin6659)
-auto_mint: 2 fresh BD accounts minted
-pool: 2 fresh account(s) saved to registered_pool.json
-account pool: 494 usable, 3 burned-skip
-candidates: 11 accounts, want=3, cycles=40, first=[8378384270, 8378387415, '8378387415', '8378384270', '8376818983', '8373962466', '8372937915', '8372936259']
-BULK MODE: 11 candidates, 3 parallel workers, cycles=40
-[8378384270] authenticating...
-    gr_login[8378384270]: status=200 len=1172 has_jwt=True
-    raw_login[8378384270]: mint-style login OK (jwt 736 chars)
-    GetLoginData httpx failed (status=401) — requests fallback
-    GetLoginData requests fallback: status=401 len=21
-[8378384270] GetLoginData FAILED (cached JWT dropped)
-[8378387415] authenticating...
-    gr_login[8378387415]: status=200 len=1172 has_jwt=True
-    raw_login[8378387415]: mint-style login OK (jwt 736 chars)
-    GetLoginData httpx failed (status=401) — requests fallback
-    GetLoginData requests fallback: status=401 len=21
-[8378387415] GetLoginData FAILED (cached JWT dropped)
-progress push failed: timed out
-[8378387415] authenticating...
-    gr_login[8378387415]: status=200 len=1172 has_jwt=True
-    raw_login[8378387415]: mint-style login OK (jwt 736 chars)
-    GetLoginData httpx failed (status=401) — requests fallback
-    GetLoginData requests fallback: status=401 len=21
-[8378387415] GetLoginData FAILED (cached JWT dropped)
-progress push failed: timed out
-[8378384270] -> logindata_failed | done=0
-[8378387415] -> logindata_failed | done=0
-[8378387415] -> logindata_failed | done=0
-[8378384270] authenticating...
-    gr_login[8378384270]: status=200 len=1172 has_jwt=True
-    raw_login[8378384270]: mint-style login OK (jwt 736 chars)
-    GetLoginData httpx failed (status=401) — requests fallback
-    GetLoginData requests fallback: status=401 len=21
-[8378384270] GetLoginData FAILED (cached JWT dropped)
-progress push failed: timed out
+bd proxy hunt: 22 alive candidates
+bd proxy http://114.130.153.46:58080: BD exit but can't reach garenanow — skip
+bd proxy http://103.54.43.131:8080: BD exit but can't reach garenanow — skip
+bd proxy http://45.115.114.41:2379: BD exit but can't reach garenanow — skip
+auto_mint: no usable BD proxy (round 1/6) — retrying in 75s
+bd proxy hunt: 24 alive candidates
+bd proxy socks5://103.136.106.5:1081: BD exit but can't reach garenanow — skip
+bd proxy http://180.211.161.26:8080: BD exit but can't reach garenanow — skip
+bd proxy OK: socks5://118.179.155.202:9090 exit=118.179.155.202
+auto_mint: 1 usable BD proxies: ['socks5://118.179.155.202:9090']
+mint[t1]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t2]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t3]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t4]: major_register 8379394376: SOCKSHTTPSConnectionPool(host='loginbp.p
+mint[t5]: EXC cannot unpack non-iterable NoneType object
+mint[t6]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t7]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t8]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+auto_mint: 0 fresh BD accounts minted
+account pool: 492 usable, 5 burned-skip
+candidates: 9 accounts, want=3, cycles=40, first=['8376818983', '8373962466', '8372937915', '8372936259', '8371740426', '8370184893', '8370181666', '8368439981']
+BULK MODE: 9 candidates, 3 parallel workers, cycles=40
 [8376818983] authenticating...
     gr_login[8376818983]: status=200 len=97 has_jwt=False
     raw_login[8376818983]: modern MajorLogin failed -> legacy wire fallbacks
-    raw_login[8376818983]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
-    raw_login[8376818983]: gr path status=200 len=97 prot=True
-[8376818983] LOGIN FAILED (majorlogin_failed)
-progress push failed: timed out
 [8373962466] authenticating...
-    gr_login[8373962466]: status=200 len=97 has_jwt=False
+    gr_login[8373962466]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Ma
     raw_login[8373962466]: modern MajorLogin failed -> legacy wire fallbacks
-    raw_login[8373962466]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
-    raw_login[8373962466]: gr path EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries 
-[8373962466] LOGIN FAILED (majorlogin_failed)
-progress push failed: timed out
-[8378384270] -> logindata_failed | done=0
-[8376818983] -> login_failed | done=0
-[8373962466] -> login_failed | done=0
 [8372937915] authenticating...
     gr_login[8372937915]: status=200 len=97 has_jwt=False
     raw_login[8372937915]: modern MajorLogin failed -> legacy wire fallbacks
@@ -69,24 +35,89 @@ progress push failed: timed out
     raw_login[8372936259]: modern MajorLogin failed -> legacy wire fallbacks
     raw_login[8372936259]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
     raw_login[8372936259]: gr path status=200 len=97 prot=True
-[8372936259] LOGIN FAILED (majorlogin_failed)
+[8372936259] LOGIN FAILED (err:cannot unpack non-iterable NoneType obje)
 progress push failed: timed out
 [8371740426] authenticating...
     gr_login[8371740426]: status=200 len=97 has_jwt=False
-    raw_login[8371740426]: modern MajorLogin OK (jwt 8 chars)
-[8372936259] -> login_failed | done=0
+    raw_login[8371740426]: modern MajorLogin failed -> legacy wire fallbacks
 [8370184893] authenticating...
-    gr_login[8370184893]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Ma
+    gr_login[8370184893]: status=200 len=97 has_jwt=False
     raw_login[8370184893]: modern MajorLogin failed -> legacy wire fallbacks
-[8370181666] authenticating...
-    gr_login[8370181666]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Ma
-    raw_login[8370181666]: modern MajorLogin failed -> legacy wire fallbacks
-    raw_login[8370181666]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
-    raw_login[8370181666]: gr path EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries 
-[8370181666] LOGIN FAILED (err:cannot unpack non-iterable NoneType obje)
-[8370181666] -> login_failed | done=0
+[8372936259] -> login_failed | done=0
 unhandled exception during asyncio.run() shutdown
-task: <Task finished name='Task-11' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:1055> exception=ConnectTimeout('timed out')>
+task: <Task finished name='Task-6' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:1055> exception=ConnectTimeout('timed out')>
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 295, in handle_request
+    raise exc
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 231, in handle_request
+    stream = self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectTimeout: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1066, in _worker
+    res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=420)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/tasks.py", line 479, in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 678, in run_account
+    login = raw_login(uid, pw)
+            ^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 498, in raw_login
+    r = httpx.post(FULL_ML_URL, headers=h, data=body, timeout=25, verify=False)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 39, in <lambda>
+    httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_api.py", line 304, in post
+    return request(
+           ^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_api.py", line 109, in request
+    return client.request(
+           ^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectTimeout: timed out
+unhandled exception during asyncio.run() shutdown
+task: <Task finished name='Task-7' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:1055> exception=ConnectTimeout('timed out')>
 Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
     yield
@@ -208,9 +239,9 @@ Traceback (most recent call last):
   File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 678, in run_account
     login = raw_login(uid, pw)
             ^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 507, in raw_login
-    r = httpx.post(ML_URL, headers=h2, data=api._enc(wire), timeout=25, verify=False)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 498, in raw_login
+    r = httpx.post(FULL_ML_URL, headers=h, data=body, timeout=25, verify=False)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 39, in <lambda>
     httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
