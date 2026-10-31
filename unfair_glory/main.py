@@ -2789,6 +2789,13 @@ def load_accounts():
                 data = json.load(f)
                 if isinstance(data, list): accounts = data
         except Exception as e: print_error(f"load: {e}")
+    # newest accounts first: fresh registrations are the only ones that can log in,
+    # old uid blocks (8374xxxx/8375xxxx) are burned and used to occupy all 4 slots
+    try:
+        accounts.sort(key=lambda a: int(str(a.get("uid", "0")))
+                      if str(a.get("uid", "")).isdigit() else 0, reverse=True)
+    except Exception:
+        pass
     dead = _dead_load()
     if dead:
         before = len(accounts)
