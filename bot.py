@@ -1860,6 +1860,29 @@ def _name_variants(base: str, n: int = 5) -> list:
     return out
 
 
+
+_INVIS = {0x3164: "HANGUL FILLER", 0x2800: "BRAILLE BLANK", 0x200B: "ZERO-WIDTH SPACE",
+          0x200C: "ZERO-WIDTH NON-JOINER", 0x200D: "ZERO-WIDTH JOINER", 0xFEFF: "BOM",
+          0x00A0: "NO-BREAK SPACE", 0x2007: "FIGURE SPACE", 0x202F: "NARROW NO-BREAK SPACE",
+          0x115F: "HANGUL CHOSEONG FILLER", 0x1160: "HANGUL JUNGSEONG FILLER"}
+
+
+def _invis_report(name: str):
+    """Return (count, detail_lines, cleaned) for hidden/zero-width characters."""
+    hits = {}
+    clean = []
+    for ch in name:
+        cp = ord(ch)
+        if cp in _INVIS or (0x200B <= cp <= 0x200F) or (0x202A <= cp <= 0x202E):
+            hits[cp] = hits.get(cp, 0) + 1
+            continue
+        clean.append(ch)
+    lines = []
+    for cp, n in hits.items():
+        label = _INVIS.get(cp, "HIDDEN CHARACTER")
+        lines.append(f"• U+{cp:04X} {label} ×{n}")
+    return sum(hits.values()), lines, "".join(clean)
+
 @bot.message_handler(commands=["namecheck", "uname"])
 def cmd_namecheck(m):
     parts = m.text.split(maxsplit=1)
@@ -1891,8 +1914,22 @@ def cmd_namecheck(m):
         lines.append("⚠️ usable, but 6+ characters look better in-game")
     else:
         lines.append("✅ format looks valid for Free Fire")
-    lines.append("ℹ️ Real FF availability only shows in the in-game name-change screen "
-                 "(no public lookup exists), so always confirm there before spending a name card.")
+    inv_count, inv_lines, cleaned = _invis_report(raw)
+    if inv_count:
+        lines.append("")
+        lines.append(f"👻 <b>Hidden characters: {inv_count}</b>")
+        lines.extend(inv_lines)
+        lines.append(f"👁 Visible version: <code>{cleaned}</code>")
+        lines.append("ℹ️ These render as spaces in-game. Rename/search usually matches "
+                     "the VISIBLE text, so people can copy the look with a plain space.")
+    lines.append("")
+    lines.append("🎮 <b>Verify in 10 seconds (free, no card needed):</b>")
+    lines.append("1. Open Free Fire → Friends → Add Friend → Search by nickname")
+    lines.append("2. Paste the exact name and search")
+    lines.append("3. Player found = ❌ not available · No result = ✅ available")
+    lines.append("4. Confirm finally on the name-change screen before spending a card")
+    lines.append("")
+    lines.append("ℹ️ Garena has no public name→player API, so this bot cannot query it directly.")
     if status == "taken" or ff_problems:
         lines.append("")
         lines.append("<b>Try these instead:</b>")
