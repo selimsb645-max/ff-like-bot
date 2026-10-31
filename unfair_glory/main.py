@@ -639,6 +639,98 @@ def accept_team_invite(target_uid, group_id, key, iv):
         27: {1: 2, 2: 4}}}
     return create_packet(create_proto(fields).hex(), "0515", key, iv)
 
+
+# ═══════════════════════ GUILD (CLAN) JOIN ═══════════════════════
+# main.py had NO clan code at all, which is why bots came online and never
+# entered the guild. Ported from the proven app.py path: POST /RequestJoinClan
+# with an AES-CBC encrypted MyMessage{field_1: clan_id}.
+try:
+    import reqClan_pb2
+    _CLAN_PB = True
+except Exception:
+    _CLAN_PB = False
+
+CLAN_AES_KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
+CLAN_AES_IV = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
+_CLAN_DONE = set()
+
+
+def _clan_region_from_jwt(tok):
+    try:
+        p = tok.split(".")[1]
+        p += "=" * (-len(p) % 4)
+        d = json.loads(base64.urlsafe_b64decode(p))
+        return (d.get("lock_region") or d.get("noti_region") or "BD").upper()
+    except Exception:
+        return "BD"
+
+
+def _clan_region_url(region):
+    region = (region or "BD").upper()
+    if region == "IND":
+        return "https://client.ind.freefiremobile.com"
+    if region in ("BR", "US", "NA"):
+        return "https://client.us.freefiremobile.com"
+    return "https://clientbp.ggpolarbear.com"
+
+
+def _clan_payload(clan_id):
+    if not _CLAN_PB:
+        return None
+    try:
+        msg = reqClan_pb2.MyMessage()
+        msg.field_1 = int(clan_id)
+        raw = msg.SerializeToString()
+        return AES.new(CLAN_AES_KEY, AES.MODE_CBC, CLAN_AES_IV).encrypt(pad(raw, AES.block_size))
+    except Exception as e:
+        print_error(f"[CLAN] payload: {e}")
+        return None
+
+
+async def join_clan(jwt_token, clan_id, base_url=None):
+    if not (jwt_token and clan_id):
+        return False
+    payload = _clan_payload(clan_id)
+    if not payload:
+        return False
+    # Use the account's OWN server_url: a BD account lives on
+    # clientbp.ppmainecoonghj.com, and hitting ggpolarbear returns 401.
+    base = (base_url or _clan_region_url(_clan_region_from_jwt(jwt_token))).rstrip("/")
+    url = base.rstrip("/") + "/RequestJoinClan"
+    hdrs = {"Authorization": f"Bearer {jwt_token}",
+            "X-Unity-Version": "2018.4.11f1", "X-GA": "v1 1", "ReleaseVersion": "OB55",
+            "Content-Type": "application/octet-stream", "Host": base.replace("https://", ""),
+            "Connection": "Keep-Alive", "Accept-Encoding": "gzip"}
+    try:
+        async with httpx.AsyncClient(timeout=15, verify=False) as c:
+            r = await c.post(url, headers=hdrs, content=payload)
+            if r.status_code == 200:
+                print_success(f"[CLAN] ✅ Join sent for {clan_id}")
+                return True
+            print_warning(f"[CLAN] Join status {r.status_code} (400 = already a member)")
+            return False
+    except Exception as e:
+        print_error(f"[CLAN] {e}")
+        return False
+
+
+async def _clan_join_for_account(uid_str, acc_data):
+    """Join the guild once per account."""
+    if uid_str in _CLAN_DONE:
+        return
+    _CLAN_DONE.add(uid_str)
+    clan = os.environ.get("FF_CLAN_ID", "3106233034").strip()
+    tok = (acc_data or {}).get("token")
+    srv = (acc_data or {}).get("server_url")
+    if not (clan and tok):
+        print_warning(f"[CLAN] {uid_str}: no token/clan id")
+        return
+    for attempt in range(3):
+        if await join_clan(tok, clan, srv):
+            return
+        await asyncio.sleep(4)
+
+
 def start_match_team(account_id, key, iv, region="ID"):
     fields = {1: 9, 2: {1: int(account_id), 7: {1: "IDC3", 2: 410, 3: region}}}
     return create_packet(create_proto(fields).hex(), "0515", key, iv)
@@ -1784,6 +1876,24 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
             await asyncio.sleep(TEAM_READY_DELAY + TEAM_MEMBER_START_DELAY)
             async with _team_state["lock"]:
                 if _team_state["leader_uid"] == uid_str: return
+            # Do NOT search until this bot is actually ACCEPTED into the squad.
+            # Searching early is what kept the team at "In team (1/4)": everybody
+            # went into their own lobby, so the squad never filled and no match
+            # could start.
+            _t0 = time.time()
+            joined = False
+            while time.time() - _t0 < 60:
+                async with _team_state["members_lock"]:
+                    joined = uid_str in _team_state["members"]
+                    _n = len(_team_state["members"])
+                if joined:
+                    print_success(f"[TEAM] 🤝 {uid_str} accepted into squad ({_n}/{TEAM_SIZE}) - searching together")
+                    break
+                if bot_state.is_paused(uid_str): return
+                await asyncio.sleep(1.0)
+            if not joined:
+                print_warning(f"[TEAM] {uid_str} was not accepted within 60s - holding, will not solo search")
+                return
             print_success(f"[TEAM] 🚀 Member {uid_str}: ready → 1s → start (every 5s)")
             my_id = current_account_data.get('account_id', uid_str) if current_account_data else uid_str
             while _team_active["flag"]:
@@ -1877,6 +1987,10 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                     current_search_region = REGION_ROTATION_LIST[region_index]
 
                 print_success(f"[FUNC] TCP connected {uid_str} (DNS:{rip} Lvl:{current_level} R:{current_search_region})")
+                try:
+                    asyncio.create_task(_clan_join_for_account(uid_str, current_account_data))
+                except Exception as _ce:
+                    print_warning(f"[CLAN] hook: {_ce}")
                 reconnects = 0; no_response_count = 0; last_start_time = 0.0
 
                 async with _team_state["lock"]:
