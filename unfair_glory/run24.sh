@@ -32,6 +32,11 @@ command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock
 [ -f .msecs ] && export FF_MATCH_SECONDS="$(cat .msecs)"
 export FF_LOG="$LOG"
 
+# Log which network/IP we are on: Garena throttles per IP, so a WiFi vs mobile
+# switch is the fastest way out of a login block. Seeing the IP makes that visible.
+PUBIP="$(curl -s --max-time 8 https://api.ipify.org 2>/dev/null || echo unknown)"
+echo "[runner $(date +%H:%M:%S)] public IP: $PUBIP" >> "$LOG"
+
 nohup bash -c '
   cd "'"$(pwd)"'" || exit 1
   while true; do
