@@ -45,9 +45,10 @@ def probe_tcp(host, port, wait=6.0):
 
 
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] in ("--control", "-c"):
+        control(); return
     if len(sys.argv) < 2 or ":" not in sys.argv[1]:
-        print(__doc__)
-        return
+        print(__doc__); control(); return
     host, port = sys.argv[1].split(":")
     port = int(port)
     print(f"target {host}:{port}")
@@ -62,6 +63,42 @@ def main():
     else:
         print("  Neither TCP nor UDP answers -> this network path is blocked.")
         print("  Try mobile data vs Wi-Fi, or a VPN, then re-run.")
+
+
+# ── control probes: does this network allow UDP at all? ─────────────────────
+def dns_query(host: str, port: int, timeout: float = 3.0):
+    """Send a real DNS query over UDP; a reply proves UDP egress works."""
+    import struct
+    q = (b"\xab\xcd"                    # id
+         b"\x01\x00"                    # flags: standard query
+         b"\x00\x01"                    # qdcount
+         b"\x00\x00\x00\x00\x00\x00"
+         b"\x07example\x03com\x00"      # qname
+         b"\x00\x01\x00\x01")          # A, IN
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(timeout)
+    try:
+        s.sendto(q, (host, port))
+        data, _ = s.recvfrom(4096)
+        return len(data)
+    except Exception as e:
+        return f"{type(e).__name__}: {e}"
+    finally:
+        s.close()
+
+
+def control():
+    print("CONTROL PROBES (is the network the problem?)")
+    print("  udp dns 1.1.1.1:53 ->", dns_query("1.1.1.1", 53))
+    print("  udp dns 8.8.8.8:53 ->", dns_query("8.8.8.8", 53))
+    try:
+        s = socket.create_connection(("1.1.1.1", 443), timeout=6)
+        print("  tcp 1.1.1.1:443   -> CONNECTED"); s.close()
+    except Exception as e:
+        print("  tcp 1.1.1.1:443   ->", f"{type(e).__name__}: {e}")
+    print("\nIf the UDP DNS probes return a byte count, UDP egress is fine and the")
+    print("match server simply is not answering our packets (packet problem).")
+    print("If they all fail, this network blocks UDP and no bot can play here.")
 
 
 if __name__ == "__main__":
