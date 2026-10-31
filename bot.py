@@ -152,6 +152,27 @@ def build_uid_card(user_id):
             "Tap the Change UID button to save one.", None)
 
 
+
+
+def _mark_capped(target):
+    """Record that this uid refused likes today (daily receive cap)."""
+    try:
+        u = load_usage()
+        capped = u.setdefault("capped", {})
+        capped[str(target)] = time.strftime("%Y-%m-%d")
+        save_usage(u)
+        threading.Thread(target=persist_usage_github, daemon=True).start()
+    except Exception:
+        pass
+
+
+def _is_capped(target):
+    try:
+        u = load_usage()
+        return u.get("capped", {}).get(str(target)) == time.strftime("%Y-%m-%d")
+    except Exception:
+        return False
+
 def run_like_flow(chat_id, target, user, skip_slot=False):
     """Execute a full-pool like for target; report honestly; record history+reminder."""
     if not skip_slot:
@@ -199,7 +220,14 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
     if sent == 0:
         bot.send_message(chat_id, "⚠️ Every account in the pool already liked this target. Try again tomorrow.")
     elif delta == 0:
-        bot.send_message(chat_id, "⚠️ This UID was already liked today — try again tomorrow.")
+        # sent > 0 but Garena's counter did not move: the RECEIVING uid is capped
+        # for today, not a pool problem. Say so, and remember it for this target.
+        _mark_capped(target)
+        bot.send_message(chat_id,
+            f"⚠️ Garena did not count these likes.\n"
+            f"{sent} were sent but {target} still shows <b>{likes_after}</b> likes.\n"
+            f"That UID has hit its daily receive limit — it will work again after reset.\n"
+            f"(This is a target limit, not an account-pool problem.)")
     elif delta is not None and 0 < delta < sent:
         bot.send_message(chat_id, f"⚠️ {sent} attempted, actually landed {delta}.\n"
                                   f"❤️ Total Likes now: <b>{likes_after}</b>")
@@ -1301,8 +1329,10 @@ def cb_like(c):
         bot.send_message(c.message.chat.id,
             f"✅ {delta} likes added!\n❤️ Total Likes now: <b>{likes_after}</b>")
     elif delta == 0:
+        _mark_capped(target)
         bot.send_message(c.message.chat.id,
-            "⚠️ This UID was already liked today — try again tomorrow.")
+            f"⚠️ Garena did not count these likes.\n{sent} sent, {target} still shows "
+            f"<b>{likes_after}</b> likes.\nThat UID is at its daily receive limit today.")
     else:
         bot.send_message(c.message.chat.id,
             f"✅ {sent} requests sent. Check /stats {target} to check.")
