@@ -73,7 +73,7 @@ NEW_MATCH_DELAY         = _env_f("FF_NEW_MATCH_DELAY", 6.0)
 # acked, the match closed as "leaving uncounted" and THIS WEEK stayed 0. Matches
 # are credited when the SERVER ends them (cmd 103/107). So let the match run and
 # keep this cap large; override with FF_MATCH_SECONDS.
-MAX_MATCH_DURATION      = _env_f("FF_MATCH_SECONDS", 600.0)
+MAX_MATCH_DURATION      = _env_f("FF_MATCH_SECONDS", 45.0)
 MATCH_IDLE_TIMEOUT      = _env_f("FF_IDLE_TIMEOUT", 90.0)
 EXP_REFRESH_INTERVAL    = 30.0
 EXP_REFRESH_AFTER_MATCH_DELAY = 9.0
@@ -1461,35 +1461,42 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                 except Exception as e: print_error(f"[MATCH #{match_index}] startup: {e}")
 
         async def try_end_match():
-            """Ask the server to CLOSE the match so it is credited.
+            """Make the server register this match for our player and end it.
 
-            Matches only count when the server sends RUDP_MATCH_END (cmd 103/107);
-            dropping the socket at 24s meant completed stayed False, so the cycle
-            produced playtime but no credit. This fires a client end request and
-            waits briefly for the server's confirmation.
+            Evidence (farm.log 20:55): we used to send cmd 103 - but 103 is the
+            SERVER's MATCH_END, not something a client may send, so it was never
+            acked and every cycle logged "leaving uncounted" (THIS WEEK stayed 0).
+            The client-side way out is QUIT: 191 PLAYER_QUIT_REQ, 102 PLAYER_QUIT,
+            with the server answering 192 QUIT_RES and 103/107 END/DEAD.
             """
             try:
                 _, _nr = await layouts_from_mask(match_code)
             except Exception:
                 return False
-            for _i in range(3):
-                try:
-                    pkt = await build_packet(0x68, _nr, 0, 103, None, 0, b"",
-                                             udp_key_bytes, encrypted=False)
-                    await loop.sock_sendto(sock, pkt, (rip, port))
-                    print_info(f"[MATCH #{match_index}] END request sent (cmd=103 #{_i+1})")
-                except Exception as e:
-                    print_warning(f"[MATCH #{match_index}] end req: {e}")
-                try:
-                    resp, _sa = await asyncio.wait_for(loop.sock_recvfrom(sock, 65535), timeout=2.0)
-                    frame = await decode_packet(resp, udp_key_bytes, match_code)
-                    if frame and frame.get("cmd") in (103, 107):
-                        print_success(f"[MATCH #{match_index}] server confirmed END cmd={frame['cmd']}")
-                        return True
-                except asyncio.TimeoutError:
-                    continue
-                except Exception:
-                    continue
+            for _cid in (191, 102, 103):
+                for _try in range(2):
+                    try:
+                        pkt = await build_packet(0x68, _nr, 0, _cid, None, 0, b"",
+                                                 udp_key_bytes, encrypted=False)
+                        await loop.sock_sendto(sock, pkt, (rip, port))
+                        print_info(f"[MATCH #{match_index}] quit request cmd={_cid} (#{_try+1})")
+                    except Exception as e:
+                        print_warning(f"[MATCH #{match_index}] quit {_cid}: {e}")
+                    _t = time.time()
+                    while time.time() - _t < 2.0:
+                        try:
+                            resp, _sa = await asyncio.wait_for(
+                                loop.sock_recvfrom(sock, 65535), timeout=1.0)
+                            frame = await decode_packet(resp, udp_key_bytes, match_code)
+                            _cmd = frame.get("cmd") if frame else None
+                            if _cmd in (192, 103, 107):
+                                print_success(f"[MATCH #{match_index}] ✅ server acked quit "
+                                              f"(sent {_cid}, got {_cmd}) - match counted")
+                                return True
+                        except asyncio.TimeoutError:
+                            continue
+                        except Exception:
+                            continue
             return False
 
         while not local_closed:
@@ -1497,8 +1504,7 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                 if await try_end_match():
                     completed = True
                 else:
-                    print_warning(f"[MATCH #{match_index}] hit the cap without a server END - "
-                                  f"leaving (credit uncertain; raise FF_MATCH_SECONDS)")
+                    print_warning(f"[MATCH #{match_index}] quit not acked in 45s - leaving")
                 break
             try:
                 resp, saddr = await asyncio.wait_for(loop.sock_recvfrom(sock, 65535), timeout=1.5)
