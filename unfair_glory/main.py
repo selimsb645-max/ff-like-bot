@@ -2505,6 +2505,22 @@ async def run_account_worker(ad, label):
 _REPLACE_AFTER = int(os.environ.get("FF_REPLACE_AFTER", "3"))
 _login_fails = {}
 _remint_lock = asyncio.Lock()
+_login_ok = set()                     # uids that actually reached TCP/BR
+_mint_times = []                      # sliding window for the mint budget
+MINT_PER_HOUR = int(os.environ.get("FF_MINT_PER_HOUR", "6"))
+
+
+def _mint_budget_ok():
+    """Minting non-stop makes it worse: every new account triggers another login
+    attempt, Garena throttles the IP, and then freshly minted accounts fail too
+    (log 12:36 - 15 accounts in a row). Allow only MINT_PER_HOUR mints."""
+    now = time.time()
+    _mint_times[:] = [t for t in _mint_times if now - t < 3600]
+    return len(_mint_times) < MINT_PER_HOUR
+
+
+def _note_mint():
+    _mint_times.append(time.time())
 
 
 def _drop_account(uid):
@@ -2524,6 +2540,10 @@ def _drop_account(uid):
 async def _replace_dead_account(uid):
     """Mint one fresh account and start its worker."""
     async with _remint_lock:
+        if not _mint_budget_ok():
+            print_warning(f"[MINT] budget spent ({MINT_PER_HOUR}/h) - NOT minting, cooling down")
+            return False
+        _note_mint()
         print_warning(f"[MINT] {uid} is dead - replacing it with a fresh account")
         _drop_account(uid)
         try:
@@ -2557,6 +2577,10 @@ async def _replace_dead_account(uid):
 # ── pool guardian: keep TEAM_SIZE live accounts, always ─────────────────────
 async def _mint_one_and_start():
     """Mint one fresh account and start its worker. True on success."""
+    if not _mint_budget_ok():
+        print_warning(f"[POOL] mint budget spent ({MINT_PER_HOUR}/h) - waiting")
+        return False
+    _note_mint()
     try:
         proc = await asyncio.create_subprocess_exec(
             sys.executable, "mint_accounts.py", "1", "--gap", "0",
@@ -2598,7 +2622,8 @@ async def _pool_guardian():
             live = []
             for _u, _t in list(bot_state.account_workers.items()):
                 if _t is not None and not _t.done():
-                    live.append(str(_u))
+                    if str(_u) in _login_ok:
+                        live.append(str(_u))
                 else:
                     bot_state.account_workers.pop(_u, None)
             if len(live) < want:
@@ -2625,14 +2650,19 @@ async def account_loop_guest(uid, password):
             if not ad:
                 n = _login_fails.get(str(uid), 0) + 1
                 _login_fails[str(uid)] = n
-                print_error(f"Login failed {uid} ({n}/{_REPLACE_AFTER}), retry 15s")
+                _login_ok.discard(str(uid))
+                _gap = 15 if n < 2 else 45 if n == 2 else 90
+                print_error(f"Login failed {uid} ({n}/{_REPLACE_AFTER}), retry {_gap}s")
                 try: bot_state.update_status(str(uid), "ERROR")
                 except Exception: pass
                 if n >= _REPLACE_AFTER:
                     if await _replace_dead_account(uid):
                         return          # a new worker took this slot
                     _login_fails[str(uid)] = 0
-                await asyncio.sleep(15); continue
+                await asyncio.sleep(_gap); continue
+            _login_ok.add(str(uid))
+            _login_fails[str(uid)] = 0
+            print_success(f"[LOGIN-OK] {uid} is in the pool")
             await run_account_worker(ad, uid)
             print_warning(f"Session end {uid}, reconnect 3s")
             await asyncio.sleep(3)
