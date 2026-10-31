@@ -2549,6 +2549,61 @@ async def _replace_dead_account(uid):
         return started
 
 
+
+# ── pool guardian: keep TEAM_SIZE live accounts, always ─────────────────────
+async def _mint_one_and_start():
+    """Mint one fresh account and start its worker. True on success."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "mint_accounts.py", "1", "--gap", "0",
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.STDOUT)
+        await asyncio.wait_for(proc.wait(), timeout=180)
+    except Exception as e:
+        print_error(f"[POOL] mint: {e}")
+        return False
+    try:
+        with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+            accs = json.load(f) or []
+    except Exception:
+        return False
+    for a in accs:
+        u, pw = str(a.get("uid")), a.get("password")
+        if u and pw and u not in bot_state.account_workers:
+            _login_fails.pop(u, None)
+            t = asyncio.create_task(account_loop_guest(u, pw))
+            bot_state.account_workers[u] = t
+            print_success(f"[POOL] ✅ new account live: {u}")
+            return True
+    return False
+
+
+async def _pool_guardian():
+    """With fewer than 4 live accounts a Battle Royale lobby never fills, so
+    nothing plays even though the remaining bots look 'online'."""
+    want = int(os.environ.get("FF_POOL_SIZE", str(TEAM_SIZE)))
+    await asyncio.sleep(45)                     # let the first logins finish
+    while True:
+        try:
+            try:
+                with open(ACCOUNTS_FILE, "r", encoding="utf-8") as f:
+                    accs = json.load(f) or []
+            except Exception:
+                accs = []
+            live = [a for a in accs if str(a.get("uid")) in bot_state.account_workers]
+            if len(live) < want:
+                need = want - len(live)
+                print_warning(f"[POOL] only {len(live)}/{want} live accounts - minting {need}")
+                for _ in range(need):
+                    if not await _mint_one_and_start():
+                        await asyncio.sleep(20)
+                    await asyncio.sleep(8)      # registration throttles in bursts
+            else:
+                print_info(f"[POOL] {len(live)}/{want} accounts live")
+        except Exception as e:
+            print_error(f"[POOL] guardian: {e}")
+        await asyncio.sleep(int(os.environ.get("FF_POOL_CHECK", "180")))
+
+
 async def account_loop_guest(uid, password):
     while True:
         try:
@@ -2643,6 +2698,8 @@ async def main():
         bot_state.refresh_callbacks["on_account_added"] = on_account_added
         bot_state.refresh_callbacks["on_refresh_account"] = on_refresh_account
     except Exception: pass
+
+    asyncio.create_task(_pool_guardian())
 
     accounts = load_accounts()
     if not accounts:
