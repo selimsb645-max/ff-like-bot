@@ -1602,12 +1602,12 @@
   "cycles": 0
  },
  "8381074587": {
-  "status": "logindata_failed",
-  "cycles": 0
- },
- "8381074587": {
   "status": "tcp_failed",
   "err": "",
+  "cycles": 0
+ },
+ "8382596510": {
+  "status": "logindata_failed",
   "cycles": 0
  }
 }
