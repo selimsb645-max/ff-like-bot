@@ -5,7 +5,7 @@ Setup: get a token from @BotFather, then:
   export BOT_TOKEN=123456:ABC...
   python3 bot.py
 """
-import os, json, time, threading, tempfile, random
+import os, json, time, threading, tempfile, random, re
 from pathlib import Path
 import telebot
 import httpx
@@ -152,27 +152,6 @@ def build_uid_card(user_id):
             "Tap the Change UID button to save one.", None)
 
 
-
-
-def _mark_capped(target):
-    """Record that this uid refused likes today (daily receive cap)."""
-    try:
-        u = load_usage()
-        capped = u.setdefault("capped", {})
-        capped[str(target)] = time.strftime("%Y-%m-%d")
-        save_usage(u)
-        threading.Thread(target=persist_usage_github, daemon=True).start()
-    except Exception:
-        pass
-
-
-def _is_capped(target):
-    try:
-        u = load_usage()
-        return u.get("capped", {}).get(str(target)) == time.strftime("%Y-%m-%d")
-    except Exception:
-        return False
-
 def run_like_flow(chat_id, target, user, skip_slot=False):
     """Execute a full-pool like for target; report honestly; record history+reminder."""
     if not skip_slot:
@@ -220,14 +199,7 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
     if sent == 0:
         bot.send_message(chat_id, "⚠️ Every account in the pool already liked this target. Try again tomorrow.")
     elif delta == 0:
-        # sent > 0 but Garena's counter did not move: the RECEIVING uid is capped
-        # for today, not a pool problem. Say so, and remember it for this target.
-        _mark_capped(target)
-        bot.send_message(chat_id,
-            f"⚠️ Garena did not count these likes.\n"
-            f"{sent} were sent but {target} still shows <b>{likes_after}</b> likes.\n"
-            f"That UID has hit its daily receive limit — it will work again after reset.\n"
-            f"(This is a target limit, not an account-pool problem.)")
+        bot.send_message(chat_id, "⚠️ This UID was already liked today — try again tomorrow.")
     elif delta is not None and 0 < delta < sent:
         bot.send_message(chat_id, f"⚠️ {sent} attempted, actually landed {delta}.\n"
                                   f"❤️ Total Likes now: <b>{likes_after}</b>")
@@ -1010,6 +982,7 @@ def cmd_help(m):
         "<b>/stopremind</b> — দৈনিক রিমাইন্ডার বন্ধ\n\n"
         "✨ <b>অতিরিক্ত</b>\n"
         "<b>/namegen</b> — স্টাইলিশ FF নাম (style: gamer/bd/short)\n"
+        "<b>/namecheck</b> <code>name</code> — নাম/ইউজারনেম খালি কিনা চেক\n"
         "<b>/redeem</b> — 🎁 অফিশিয়াল রিডিম কোড ও গাইড\n"
         "<b>/help</b> — এই লিস্ট\n"
         "<b>/start</b> — ওয়েলকাম মেনু\n"
@@ -1329,10 +1302,8 @@ def cb_like(c):
         bot.send_message(c.message.chat.id,
             f"✅ {delta} likes added!\n❤️ Total Likes now: <b>{likes_after}</b>")
     elif delta == 0:
-        _mark_capped(target)
         bot.send_message(c.message.chat.id,
-            f"⚠️ Garena did not count these likes.\n{sent} sent, {target} still shows "
-            f"<b>{likes_after}</b> likes.\nThat UID is at its daily receive limit today.")
+            "⚠️ This UID was already liked today — try again tomorrow.")
     else:
         bot.send_message(c.message.chat.id,
             f"✅ {sent} requests sent. Check /stats {target} to check.")
@@ -1832,6 +1803,103 @@ def cmd_delcode(m):
     threading.Thread(target=_github_commit_file, args=(CODES_FILE.name, "remove redeem code"),
                      daemon=True).start()
     bot.reply_to(m, f"🗑️ Code <code>{code}</code> removed.")
+
+
+# ============ NEW: USERNAME / NICKNAME CHECKER (/namecheck) ============
+def _tg_username_status(uname: str) -> str:
+    """Check Telegram username availability via the public t.me preview."""
+    try:
+        r = httpx.get(f"https://t.me/{uname}", timeout=12, follow_redirects=True,
+                      headers={"User-Agent": "Mozilla/5.0"})
+        t = r.text
+        if "tgme_page_title" in t or "tgme_page_extra" in t:
+            return "taken"
+        if "tgme_page" in t:
+            return "free"
+        return "unknown"
+    except Exception:
+        return "error"
+
+
+def _tg_username_problems(uname: str) -> list:
+    out = []
+    if not (5 <= len(uname) <= 32):
+        out.append("length must be 5–32 characters")
+    if not uname[:1].isalpha():
+        out.append("must start with a letter")
+    if not re.match(r"^[A-Za-z0-9_]+$", uname):
+        out.append("only letters, numbers and underscore allowed")
+    if "__" in uname:
+        out.append("no double underscore (__)")
+    if uname.endswith("_"):
+        out.append("cannot end with underscore")
+    return out
+
+
+def _ff_nick_problems(nick: str) -> list:
+    out = []
+    if len(nick) < 4:
+        out.append("too short for Free Fire (min ~4)")
+    elif len(nick) > 13:
+        out.append("too long — Free Fire rejects most names over 13 chars")
+    if nick != nick.strip():
+        out.append("leading/trailing space breaks the name")
+    if "  " in nick:
+        out.append("double space is rejected")
+    return out
+
+
+def _name_variants(base: str, n: int = 5) -> list:
+    clean = re.sub(r"[^A-Za-z0-9_]", "", base) or "Player"
+    out = []
+    for i in range(n):
+        suf = random.choice(["_BD", "FF", "_99", "_OP", "007", "X", "_YT", "01", "BD", "_Pro"])
+        v = (clean[:26] + suf)[:32]
+        if v not in out:
+            out.append(v)
+    return out
+
+
+@bot.message_handler(commands=["namecheck", "uname"])
+def cmd_namecheck(m):
+    parts = m.text.split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        bot.reply_to(m, "⚠️ Usage: <code>/namecheck your_name</code>\n"
+                        "Checks Telegram username availability + Free Fire nickname rules.")
+        return
+    raw = parts[1].strip().lstrip("@")
+    tg_problems = _tg_username_problems(raw)
+    status = _tg_username_status(raw) if not tg_problems else None
+    ff_problems = _ff_nick_problems(raw)
+    lines = [f"🔎 <b>NAME CHECK</b>  ·  <code>{raw}</code>", "━━━━━━━━━━━━━━━",
+             "<b>Telegram username</b>"]
+    if tg_problems:
+        lines.append("❌ invalid: " + "; ".join(tg_problems))
+    elif status == "free":
+        lines.append("✅ <b>available</b> — you can claim it")
+    elif status == "taken":
+        lines.append("❌ <b>already taken</b>")
+    elif status == "error":
+        lines.append("⚠️ could not check right now (network) — try again")
+    else:
+        lines.append("⚠️ status unclear — check in the Telegram app")
+    lines.append("")
+    lines.append("<b>Free Fire nickname</b>")
+    if ff_problems:
+        lines.append("⚠️ " + "; ".join(ff_problems))
+    elif len(raw) < 6:
+        lines.append("⚠️ usable, but 6+ characters look better in-game")
+    else:
+        lines.append("✅ format looks valid for Free Fire")
+    lines.append("ℹ️ Real FF availability only shows in the in-game name-change screen "
+                 "(no public lookup exists), so always confirm there before spending a name card.")
+    if status == "taken" or ff_problems:
+        lines.append("")
+        lines.append("<b>Try these instead:</b>")
+        lines.append("<code>" + "\n".join(_name_variants(raw)) + "</code>")
+    lines.append("━━━━━━━━━━━━━━━")
+    lines.append("✧ More ideas: /namegen")
+    bot.reply_to(m, "\n".join(lines))
 
 @bot.message_handler(commands=["guild"])
 def cmd_guild(m):
