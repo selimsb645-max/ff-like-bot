@@ -73,7 +73,11 @@ NEW_MATCH_DELAY         = _env_f("FF_NEW_MATCH_DELAY", 6.0)
 # acked, the match closed as "leaving uncounted" and THIS WEEK stayed 0. Matches
 # are credited when the SERVER ends them (cmd 103/107). So let the match run and
 # keep this cap large; override with FF_MATCH_SECONDS.
-MAX_MATCH_DURATION      = _env_f("FF_MATCH_SECONDS", 45.0)
+MAX_MATCH_DURATION      = _env_f("FF_MATCH_SECONDS", 90.0)
+# After the join/thunder handshake the bot is "landed". The working glory bots
+# die / leave right after landing so the server ends the match for them and the
+# cycle repeats. Seconds to wait after landing before quitting.
+QUIT_AFTER_LANDING      = _env_f("FF_QUIT_AFTER", 12.0)
 MATCH_IDLE_TIMEOUT      = _env_f("FF_IDLE_TIMEOUT", 90.0)
 EXP_REFRESH_INTERVAL    = 30.0
 EXP_REFRESH_AFTER_MATCH_DELAY = 9.0
@@ -1500,6 +1504,14 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
             return False
 
         while not local_closed:
+            # landed (handshake done) -> wait a moment, then eliminate ourselves
+            if (ack_state == "thunder_sharma_sent" and thunder_sent
+                    and (time.time() - t0) > QUIT_AFTER_LANDING):
+                if await try_end_match():
+                    completed = True
+                else:
+                    print_warning(f"[MATCH #{match_index}] quit sent but not acked")
+                break
             if time.time() - t0 > MAX_MATCH_DURATION:
                 if await try_end_match():
                     completed = True
