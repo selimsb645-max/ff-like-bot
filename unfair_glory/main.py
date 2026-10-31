@@ -33,10 +33,20 @@ TOKEN_CACHE_FILE = "token_cache.json"
 DEVICES_FILE = "devices.json"
 TOKEN_CACHE_TTL = 4500
 
-START_MATCH_INTERVAL    = 4.0
-NEW_MATCH_DELAY         = 6.0
-MAX_MATCH_DURATION      = 3000
-MATCH_IDLE_TIMEOUT      = 90.0
+def _env_f(name, default):
+    try:
+        return float(os.environ.get(name, default))
+    except Exception:
+        return float(default)
+
+
+START_MATCH_INTERVAL    = _env_f("FF_START_INTERVAL", 4.0)
+NEW_MATCH_DELAY         = _env_f("FF_NEW_MATCH_DELAY", 6.0)
+# How long a match is played before leaving and queueing the next one.
+# Glory is credited per completed match, so short cycles = many more matches
+# per hour. Default 24s (owner's target); override with FF_MATCH_SECONDS.
+MAX_MATCH_DURATION      = _env_f("FF_MATCH_SECONDS", 24.0)
+MATCH_IDLE_TIMEOUT      = _env_f("FF_IDLE_TIMEOUT", 90.0)
 EXP_REFRESH_INTERVAL    = 30.0
 EXP_REFRESH_AFTER_MATCH_DELAY = 9.0
 MAX_CONSECUTIVE_PARSE_FAILURES = 5
