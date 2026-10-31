@@ -2271,5 +2271,23 @@
   "pw": "ANON",
   "nick": "ANON\u20224HJCY",
   "account_id": "18961568684"
+ },
+ {
+  "uid": "8382460940",
+  "pw": "ANON",
+  "region": "BD",
+  "nick": "ANON\u2022RS1W3",
+  "account_id": "18961602838",
+  "source": "auto_mint",
+  "ts": 1793444635593
+ },
+ {
+  "uid": "8382461171",
+  "pw": "ANON",
+  "region": "BD",
+  "nick": "ANON\u2022AILUY",
+  "account_id": "18961603972",
+  "source": "auto_mint",
+  "ts": 1793444641703
  }
 ]
