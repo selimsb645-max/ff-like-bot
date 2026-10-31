@@ -46,10 +46,12 @@ def _env_f(name, default):
 
 START_MATCH_INTERVAL    = _env_f("FF_START_INTERVAL", 4.0)
 NEW_MATCH_DELAY         = _env_f("FF_NEW_MATCH_DELAY", 6.0)
-# How long a match is played before leaving and queueing the next one.
-# Glory is credited per completed match, so short cycles = many more matches
-# per hour. Default 24s (owner's target); override with FF_MATCH_SECONDS.
-MAX_MATCH_DURATION      = _env_f("FF_MATCH_SECONDS", 24.0)
+# Hard safety cap only - NOT a cycle length. Evidence (farm.log 20:55): with a
+# 24s cap the bot sent "END request sent (cmd=103)" three times, the server never
+# acked, the match closed as "leaving uncounted" and THIS WEEK stayed 0. Matches
+# are credited when the SERVER ends them (cmd 103/107). So let the match run and
+# keep this cap large; override with FF_MATCH_SECONDS.
+MAX_MATCH_DURATION      = _env_f("FF_MATCH_SECONDS", 600.0)
 MATCH_IDLE_TIMEOUT      = _env_f("FF_IDLE_TIMEOUT", 90.0)
 EXP_REFRESH_INTERVAL    = 30.0
 EXP_REFRESH_AFTER_MATCH_DELAY = 9.0
@@ -1473,7 +1475,8 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                 if await try_end_match():
                     completed = True
                 else:
-                    print_warning(f"[MATCH #{match_index}] no END ack - leaving uncounted")
+                    print_warning(f"[MATCH #{match_index}] hit the cap without a server END - "
+                                  f"leaving (credit uncertain; raise FF_MATCH_SECONDS)")
                 break
             try:
                 resp, saddr = await asyncio.wait_for(loop.sock_recvfrom(sock, 65535), timeout=1.5)
