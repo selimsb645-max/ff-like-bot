@@ -2459,7 +2459,21 @@ async def main():
     accounts = load_accounts()
     if not accounts:
         print_warning(f"No accounts in {ACCOUNTS_FILE}. Add via dashboard.")
-    for acc in accounts:
+    # Only start what one squad needs, and stagger them. Launching every entry at
+    # once is what produced the login storm: 7 simultaneous logins -> the IP gets
+    # throttled -> 5 of them die with "Login failed" and the squad never fills.
+    try:
+        _max = max(1, int(os.environ.get("FF_MAX_ACCOUNTS", str(TEAM_SIZE))))
+    except Exception:
+        _max = TEAM_SIZE
+    if len(accounts) > _max:
+        print_warning(f"{len(accounts)} accounts found - starting only {_max} "
+                      f"(set FF_MAX_ACCOUNTS to change)")
+        accounts = accounts[:_max]
+    _stagger = float(os.environ.get("FF_LOGIN_STAGGER", "6"))
+    for _i, acc in enumerate(accounts):
+        if _i:
+            await asyncio.sleep(_stagger)      # serialise logins
         if acc.get("token"):
             t = asyncio.create_task(account_loop_token(acc["token"]))
             bot_state.account_workers[acc["token"][:10]] = t
