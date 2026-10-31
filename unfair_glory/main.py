@@ -31,7 +31,11 @@ WEB_PORT = 20333
 ACCOUNTS_FILE = "accounts.json"
 TOKEN_CACHE_FILE = "token_cache.json"
 DEVICES_FILE = "devices.json"
-TOKEN_CACHE_TTL = 4500
+# Was 4500s (75 min): the local expiry check killed healthy workers in the middle
+# of a match ("Cache expired" -> re-login -> guest accounts cannot re-login, so the
+# session was lost for good). The server rejects a stale JWT on its own, so keep
+# the cached session much longer and let the connection decide.
+TOKEN_CACHE_TTL = int(os.environ.get("FF_CACHE_TTL", "43200"))   # 12h
 
 def _env_f(name, default):
     try:
@@ -2589,7 +2593,14 @@ async def _pool_guardian():
                     accs = json.load(f) or []
             except Exception:
                 accs = []
-            live = [a for a in accs if str(a.get("uid")) in bot_state.account_workers]
+            # count only workers whose task is STILL running; a stopped worker stays
+            # in the dict and used to make the pool look full while bots were dead
+            live = []
+            for _u, _t in list(bot_state.account_workers.items()):
+                if _t is not None and not _t.done():
+                    live.append(str(_u))
+                else:
+                    bot_state.account_workers.pop(_u, None)
             if len(live) < want:
                 need = want - len(live)
                 print_warning(f"[POOL] only {len(live)}/{want} live accounts - minting {need}")
