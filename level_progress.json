@@ -1563,7 +1563,7 @@
  },
  "8373962466": {
   "status": "login_failed",
-  "stage": "majorlogin_failed",
+  "stage": "err:cannot unpack non-iterable NoneType obje",
   "cycles": 0
  },
  "8375310319": {
@@ -1576,7 +1576,7 @@
  },
  "8372937915": {
   "status": "login_failed",
-  "stage": "majorlogin_failed",
+  "stage": "err:cannot unpack non-iterable NoneType obje",
   "cycles": 0
  },
  "8376818235": {
