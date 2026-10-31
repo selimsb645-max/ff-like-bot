@@ -1892,8 +1892,10 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                 if bot_state.is_paused(uid_str): return
                 await asyncio.sleep(1.0)
             if not joined:
-                print_warning(f"[TEAM] {uid_str} was not accepted within 60s - holding, will not solo search")
-                return
+                # Do not leave the bot idle. A bot that never got the invite (or whose
+                # accept was ignored) used to just sit there while its two squad mates
+                # played. Searching alone still produces a real BR match and counts.
+                print_warning(f"[TEAM] {uid_str} not accepted in 60s - searching SOLO so it still plays")
             print_success(f"[TEAM] 🚀 Member {uid_str}: ready → 1s → start (every 5s)")
             my_id = current_account_data.get('account_id', uid_str) if current_account_data else uid_str
             while _team_active["flag"]:
