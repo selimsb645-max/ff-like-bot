@@ -336,6 +336,12 @@ _team_state = {
     "members": set(),
     "members_lock": asyncio.Lock(),
     "lock": asyncio.Lock(),
+    # True while the leader is forming the squad. The search watchdog must not
+    # kill the connection during that time: MATCH_SEARCH_TIMEOUT is 90s but
+    # forming a squad legitimately takes peer_wait(90) + invites(120) + grace(45),
+    # so the leader's own watchdog was reconnecting mid-coordination and the team
+    # fell back from 4/4 to 3/4 every single time.
+    "coordinating": False,
 }
 
 async def _team_member_join(uid):
@@ -1840,6 +1846,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
 
     # ═══════════ LEADER: create → invite-loop → ready → start ═══════════
     async def _team_coordinator():
+        _team_state["coordinating"] = True
         try:
             deadline = time.time() + TEAM_PEER_WAIT_TIMEOUT
             while time.time() < deadline:
@@ -1990,6 +1997,8 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
         except Exception as e:
             print_error(f"[TEAM] coordinator: {e}")
             traceback.print_exc()
+        finally:
+            _team_state["coordinating"] = False
 
     async def _member_match_trigger():
         try:
@@ -2139,7 +2148,12 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                     now = asyncio.get_running_loop().time()
                     if now - last_watchdog_check >= MATCH_WATCHDOG_CHECK:
                         last_watchdog_check = now
-                        sd = now - connection_start_time
+                        if _team_state.get("coordinating") or _team_state.get("leader_uid") == uid_str:
+                            # squad is forming / leading -> not a stalled search
+                            connection_start_time = now
+                            sd = 0.0
+                        else:
+                            sd = now - connection_start_time
                         if sd > 30: print_warning(f"[WATCHDOG] {uid_str} searching {int(sd)}s att={search_attempts}")
                         if sd > MATCH_SEARCH_TIMEOUT:
                             raise ConnectionError("Search watchdog")
