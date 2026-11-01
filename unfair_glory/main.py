@@ -1926,15 +1926,32 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                 try: await asyncio.wait_for(heartbeat_stop.wait(), timeout=TEAM_INVITE_CYCLE_WAIT)
                 except asyncio.TimeoutError: pass
 
+            # Give late joiners a grace window instead of a single check: members
+            # accept a second or two apart, and one early FINAL used to abort the
+            # whole start loop ("Only 3/4 joined") so the leader never queued again.
+            try:
+                _grace = float(os.environ.get("FF_TEAM_FINAL_GRACE", "45"))
+            except Exception:
+                _grace = 45.0
+            _t_end = time.time() + _grace
             final_cnt = await _team_member_count()
+            while final_cnt < TEAM_SIZE and time.time() < _t_end:
+                await asyncio.sleep(1.0)
+                final_cnt = await _team_member_count()
+                if bot_state.is_paused(uid_str):
+                    return
             print_colored(f"[TEAM] ══ FINAL: In team ({final_cnt}/{TEAM_SIZE}) ══", Colors.MAGENTA)
 
-            if final_cnt < TEAM_SIZE:
-                print_error(f"[TEAM] Only {final_cnt}/{TEAM_SIZE} joined — abort, retry")
+            if final_cnt < 1:
+                print_error(f"[TEAM] nobody joined — abort, retry")
                 heartbeat_stop.set()
                 try: hb_task.cancel(); await hb_task
                 except Exception: pass
                 return
+            if final_cnt < TEAM_SIZE:
+                # Play anyway: a 2-3 man squad still queues a real BR match, and a
+                # match that starts is worth more than a squad that never did.
+                print_warning(f"[TEAM] only {final_cnt}/{TEAM_SIZE} joined — starting anyway")
 
             await asyncio.sleep(TEAM_FINAL_WAIT)
             heartbeat_stop.set()
