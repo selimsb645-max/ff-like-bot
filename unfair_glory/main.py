@@ -128,7 +128,12 @@ FALLBACK_UID = ""
 FALLBACK_PASSWORD = ""
 
 # ═══════════════════════════ SQUAD CONFIG ═══════════════════════════
-TEAM_MODE               = True
+# Squad mode keeps failing: members only ever receive the 15-byte "invited" frame
+# (f3=8), never the group id, so they cannot accept; the leader loops invites
+# forever and no match starts (farm.log 07:42: matches=0, closes=65, quit=48).
+# The only run that ever scored (guild 240 points) was solo search, so solo is the
+# default. Set FF_TEAM_MODE=1 to bring the squad back.
+TEAM_MODE               = os.environ.get("FF_TEAM_MODE", "0") == "1"
 TEAM_SIZE               = 4
 TEAM_PEER_WAIT_TIMEOUT  = 90.0
 TEAM_CREATE_WAIT        = 4.0
