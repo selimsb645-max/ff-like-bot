@@ -1,68 +1,62 @@
-auto_phone: 0 new phone accounts to activate
-bd proxy hunt: 21 alive candidates
-bd proxy socks5://202.44.106.141:1080: BD exit but can't reach garenanow — skip
-bd proxy socks5://119.148.7.10:22122: BD exit but can't reach garenanow — skip
-auto_mint: no usable BD proxy (round 1/6) — retrying in 75s
-bd proxy hunt: 19 alive candidates
-auto_mint: no usable BD proxy (round 2/6) — retrying in 75s
+auto_phone: 80 new phone accounts to activate
 bd proxy hunt: 17 alive candidates
-bd proxy socks5://202.91.41.102:1080: BD exit but can't reach garenanow — skip
-auto_mint: no usable BD proxy (round 3/6) — retrying in 75s
+auto_mint: no usable BD proxy (round 1/6) — retrying in 75s
 bd proxy hunt: 12 alive candidates
-auto_mint: no usable BD proxy (round 4/6) — retrying in 75s
-bd proxy hunt: 24 alive candidates
-bd proxy http://175.29.125.242:8080: BD exit but can't reach garenanow — skip
-bd proxy OK: http://45.115.114.41:2379 exit=45.115.114.41
-bd proxy http://103.251.232.32:8090: BD exit but can't reach garenanow — skip
-auto_mint: 1 usable BD proxies: ['http://45.115.114.41:2379']
-mint[t1]: EXC HTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries excee
-mint[t2]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t3]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t4]: major_register 8384541263: HTTPSConnectionPool(host='loginbp.ppmain
-mint[t5]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t6]: major_register 8384543982: HTTPSConnectionPool(host='loginbp.ppmain
-mint[t7]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t8]: EXC HTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries excee
-auto_mint: 0 fresh BD accounts minted
-account pool: 493 usable, 14 burned-skip
-candidates: 9 accounts, want=3, cycles=40, first=['8381074587', '8376818983', '8373962466', '8372937915', '8372936259', '8371740426', '8370184893', '8370181666']
-BULK MODE: 9 candidates, 3 parallel workers, cycles=40
-[8381074587] authenticating...
-    gr_login[8381074587]: EXC HTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max ret
-    raw_login[8381074587]: modern MajorLogin failed -> legacy wire fallbacks
-[8376818983] authenticating...
-    gr_login[8376818983]: status=200 len=97 has_jwt=False
-    raw_login[8376818983]: modern MajorLogin failed -> legacy wire fallbacks
-[8373962466] authenticating...
-    gr_login[8373962466]: status=200 len=97 has_jwt=False
-    raw_login[8373962466]: modern MajorLogin failed -> legacy wire fallbacks
-    raw_login[8373962466]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
-    raw_login[8373962466]: gr path status=200 len=97 prot=True
-[8373962466] LOGIN FAILED (err:cannot unpack non-iterable NoneType obje)
+bd proxy http://182.160.127.29:12331: BD exit but can't reach garenanow — skip
+bd proxy OK: socks5://119.148.7.10:22122 exit=119.148.7.10
+auto_mint: 1 usable BD proxies: ['socks5://119.148.7.10:22122']
+mint[t1]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries 
+mint[t2]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t3]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t4]: major_register 8385604361: SOCKSHTTPSConnectionPool(host='loginbp.p
+mint[t5]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t6]: major_register 8385605928: SOCKSHTTPSConnectionPool(host='loginbp.p
+mint[t7]: FRESH BD ACCOUNT 8385606509 (Kexin3663)
+mint[t8]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries 
+auto_mint: 1 fresh BD accounts minted
+pool: 1 fresh account(s) saved to registered_pool.json
+account pool: 574 usable, 14 burned-skip
+candidates: 10 accounts, want=3, cycles=40, first=[8385606509, '8385321772', '8385321472', '8385320269', '8385319982', '8385318750', '8385318472', '8385316259']
+BULK MODE: 10 candidates, 3 parallel workers, cycles=40
+[8385606509] authenticating...
+    gr_login[8385606509]: status=200 len=1172 has_jwt=True
+    raw_login[8385606509]: mint-style login OK (jwt 736 chars)
+    GetLoginData httpx failed (status=401) — requests fallback
+    GetLoginData requests fallback: status=401 len=21
+[8385606509] GetLoginData FAILED (cached JWT dropped)
 progress push failed: timed out
-[8373962466] -> login_failed | done=0
-[8372937915] authenticating...
-    gr_login[8372937915]: status=200 len=97 has_jwt=False
-    raw_login[8372937915]: modern MajorLogin failed -> legacy wire fallbacks
-    raw_login[8372937915]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
-    raw_login[8372937915]: gr path status=200 len=97 prot=True
-[8372937915] LOGIN FAILED (err:cannot unpack non-iterable NoneType obje)
-[8372936259] authenticating...
-    gr_login[8372936259]: EXC HTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max ret
-    raw_login[8372936259]: modern MajorLogin failed -> legacy wire fallbacks
-    raw_login[8372936259]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
-    raw_login[8372936259]: gr path EXC HTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries excee
-[8372936259] LOGIN FAILED (err:cannot unpack non-iterable NoneType obje)
-[8371740426] authenticating...
-    gr_login[8371740426]: EXC HTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max ret
-    raw_login[8371740426]: modern MajorLogin failed -> legacy wire fallbacks
-    raw_login[8371740426]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
-    raw_login[8371740426]: gr path EXC HTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Max retries excee
-[8371740426] LOGIN FAILED (majorlogin_failed)
+[8385321772] authenticating...
+    gr_login[8385321772]: status=200 len=1178 has_jwt=True
+    raw_login[8385321772]: mint-style login OK (jwt 742 chars)
+    GetLoginData httpx failed (status=401) — requests fallback
+    GetLoginData requests fallback EXC: SOCKSHTTPSConnectionPool(host='clientbp.ppmainecoonghj.com', port=443): Max retr
+[8385321772] GetLoginData FAILED (cached JWT dropped)
 progress push failed: timed out
-[8372937915] -> login_failed | done=0
-[8372936259] -> login_failed | done=0
-[8371740426] -> login_failed | done=0
+[8385321472] authenticating...
+    gr_login[8385321472]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ggpolarbear.com', port=443): Ma
+    raw_login[8385321472]: modern MajorLogin OK (jwt 741 chars)
+[8385606509] -> logindata_failed | done=0
+[8385321772] -> logindata_failed | done=0
+[8385320269] authenticating...
+    gr_login[8385320269]: status=200 len=1178 has_jwt=True
+    raw_login[8385320269]: mint-style login OK (jwt 742 chars)
+    GetLoginData httpx failed (status=401) — requests fallback
+    GetLoginData requests fallback: status=401 len=21
+[8385320269] GetLoginData FAILED (cached JWT dropped)
+progress push failed: timed out
+[8385319982] authenticating...
+    gr_login[8385319982]: status=200 len=1178 has_jwt=True
+    raw_login[8385319982]: mint-style login OK (jwt 742 chars)
+[8385318750] authenticating...
+    gr_login[8385318750]: status=200 len=1178 has_jwt=True
+    raw_login[8385318750]: mint-style login OK (jwt 742 chars)
+    GetLoginData httpx failed (status=401) — requests fallback
+    GetLoginData requests fallback: status=401 len=21
+[8385318750] GetLoginData FAILED (cached JWT dropped)
+[8385320269] -> logindata_failed | done=0
+[8385318750] -> logindata_failed | done=0
+unhandled exception during asyncio.run() shutdown
+task: <Task finished name='Task-6' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:1055> exception=ConnectTimeout('timed out')>
 Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
     yield
@@ -74,15 +68,79 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
     response = connection.handle_request(
                ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/http_proxy.py", line 288, in handle_request
-    connect_response = self._connection.handle_request(
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 101, in handle_request
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 295, in handle_request
     raise exc
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 78, in handle_request
-    stream = self._connect(request)
-             ^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 124, in _connect
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 231, in handle_request
+    stream = self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectTimeout: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1066, in _worker
+    res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=420)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/tasks.py", line 479, in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 692, in run_account
+    servers = get_login_data(login)
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 563, in get_login_data
+    r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 39, in <lambda>
+    httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_api.py", line 304, in post
+    return request(
+           ^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_api.py", line 109, in request
+    return client.request(
+           ^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectTimeout: timed out
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 295, in handle_request
+    raise exc
+  File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 231, in handle_request
     stream = self._network_backend.connect_tcp(**kwargs)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
@@ -117,12 +175,12 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.17/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
     return fut.result()
            ^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 678, in run_account
-    login = raw_login(uid, pw)
-            ^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 498, in raw_login
-    r = httpx.post(FULL_ML_URL, headers=h, data=body, timeout=25, verify=False)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 692, in run_account
+    servers = get_login_data(login)
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 563, in get_login_data
+    r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 39, in <lambda>
     httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
