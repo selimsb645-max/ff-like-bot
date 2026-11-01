@@ -51,6 +51,30 @@ def known_uids(entries):
     return {str(e.get("uid")) for e in entries if isinstance(e, dict)}
 
 
+async def _probe_region(uid, rel, rv, login_url, gop1, appv, want="BD"):
+    """Read which region this IP just registered the account in.
+
+    Garena fixes an account's region at registration from the caller's IP. GitHub
+    Actions and datacenter IPs register US/other accounts, and a US token can only
+    reach client.us.freefiremobile.com - asking it for a BD uid answers
+    BR_ACCOUNT_NOT_FOUND, so those accounts are useless for BD likes and must not
+    be added to the pool.
+    """
+    try:
+        tok = await bot.grant_token(uid, "ANON", gop1, appv)
+        if not tok:
+            return None
+        mp, _ = await bot.get_payload(tok["access_token"], tok["open_id"],
+                                      tok.get("platform", 4), rv, "bn")
+        res = await bot.major_login(mp, login_url, rel)
+        if not isinstance(res, dict):
+            return None
+        v = res.get("10", res.get(10))
+        srv = v.get("data") if isinstance(v, dict) and "data" in v else v
+        return srv
+    except Exception:
+        return None
+
 async def mint_one(rel, rv, login_url, gop1, appv):
     uid = None
     for attempt in range(3):
@@ -80,6 +104,7 @@ async def main():
     ap.add_argument("--gap", type=float, default=6.0, help="seconds between registrations")
     ap.add_argument("--max-fail-streak", type=int, default=12)
     ap.add_argument("--region", default="BD")
+    ap.add_argument("--skip-region-check", action="store_true")
     ap.add_argument("--time-budget", type=int, default=4 * 3600,
                     help="stop after this many seconds (GitHub job safety)")
     a = ap.parse_args()
@@ -106,6 +131,30 @@ async def main():
     print(f"version {rel}/{rv} via {login_url} | gap={a.gap}s")
 
     have = known_uids(pool)
+
+    # Fail fast on a wrong region instead of filling the pool with unusable
+    # accounts: probe the FIRST registration, and abort the whole run if this IP
+    # is not creating BD accounts.
+    if not a.skip_region_check:
+        first, err = await mint_one(rel, rv, login_url, gop1, appv)
+        if first:
+            srv = await _probe_region(first["uid"], rel, rv, login_url, gop1, appv)
+            print(f"region probe: server_url = {srv}")
+            if srv and "clientbp" not in str(srv):
+                print("ABORT: this IP registers non-BD accounts "
+                      f"({srv}). They cannot like BD uids. Run this on the phone "
+                      "(BD IP) or pass --skip-region-check to override.")
+                return
+            first["region"] = "BD"
+            if first["uid"] not in have:
+                pool.append(first); have.add(first["uid"])
+                state["added"] = already_today + 1
+                save_pool(pool)
+                print(f"[1] ✅ {first['nick']} uid={first['uid']} (BD confirmed)")
+        else:
+            print(f"first mint failed ({err}) - stopping before wasting more attempts")
+            return
+
     started = time.time()
     streak = 0
     added = 0

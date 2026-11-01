@@ -139,7 +139,7 @@ def major_login(access_token: str, open_id: str) -> str | None:
                 + _pf_str(29, access_token) + _pf_str(99, "4"))
         body = _enc(wire)
         h = {"User-Agent": LOGIN_UA, "Connection": "Keep-Alive", "Accept-Encoding": "gzip",
-             "X-GA-SV": "1789638359", "Content-Type": "application/x-www-form-urlencoded",
+             "X-GA-SV": str(int(time.time())), "Content-Type": "application/x-www-form-urlencoded",
              "Expect": "100-continue", "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1",
              "ReleaseVersion": "OB55"}
         r = httpx.post(MAJOR_LOGIN_URL, headers=h, data=body, timeout=20, verify=False)
