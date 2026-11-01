@@ -6,7 +6,7 @@ Endpoints verified 2026-10-23:
   JWT pool: external minting service (uid+pass -> fresh JWT per request)
 Target uid = BD player's account_id (11-digit, as shown in profile).
 """
-import httpx, json, time, re, warnings, binascii, base64
+import os, httpx, json, time, re, warnings, binascii, base64
 from pathlib import Path
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
@@ -597,14 +597,64 @@ def load_registered_bd():
     return out
 
 
+BURNED_FILE = Path(__file__).parent / "like_burned.json"
+POOL_MINT_BUDGET = int(os.environ.get("POOL_MINT_BUDGET", "40"))
+
+
+def _burned_load() -> set:
+    try:
+        return set(str(x) for x in json.loads(BURNED_FILE.read_text()))
+    except Exception:
+        return set()
+
+
+def _burned_add(uids):
+    try:
+        cur = _burned_load()
+        cur.update(str(u) for u in uids)
+        BURNED_FILE.write_text(json.dumps(sorted(cur), indent=1))
+    except Exception:
+        pass
+
+
 def refresh_pool() -> list:
-    """Mint fresh JWTs for all pool accounts."""
-    pool = []
+    """Mint JWTs for the NEWEST unused pool accounts only.
+
+    A guest account can be logged in exactly once, so the old "mint every account
+    on every refresh" was doubly wrong: it burned every usable account in the first
+    call and re-tried hundreds of dead uids afterwards (slow enough that callers
+    timed out and no likes went out at all). Now: newest first, bounded by
+    POOL_MINT_BUDGET, and every account touched is recorded in like_burned.json so
+    it is never attempted again.
+    """
+    burned = _burned_load()
+    cands = []
     for uid, pw in load_creds() + load_registered_bd():
-        t = mint_jwt(uid, pw)
+        if str(uid) in burned:
+            continue
+        try:
+            n = int(str(uid))
+        except Exception:
+            n = 0
+        cands.append((n, str(uid), pw))
+    cands.sort(reverse=True)                       # newest registrations first
+    cands = cands[:POOL_MINT_BUDGET]
+
+    pool, touched = [], []
+    for _n, uid, pw in cands:
+        touched.append(uid)
+        try:
+            t = mint_jwt(uid, pw)
+        except Exception:
+            t = None
         if t:
             pool.append(t)
-    POOL_FILE.write_text(json.dumps(pool, indent=1))
+    _burned_add(touched)                           # login spent either way
+    try:
+        POOL_FILE.write_text(json.dumps(pool, indent=1))
+    except Exception:
+        pass
+    print(f"[POOL] minted {len(pool)}/{len(touched)} tokens (budget {POOL_MINT_BUDGET})")
     return pool
 
 
