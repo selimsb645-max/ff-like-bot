@@ -922,11 +922,20 @@ async def build_tcp_startup_packet(account_id, token, server_time, key, iv, regi
     return f"{pfx}{uid_hex}{ts_hex}{enc_len}{enc}"
 
 async def send_keep_alive(region="ID"):
-    try:
+    """Gateway keepalive.
+
+    Was a hardcoded 2-byte body ("0219"/"0214"/"0215") which is not even the
+    gateway frame format (real frames are: cmd, 00 00 00, length, payload).
+    Evidence (farm.log 07:18): the socket closed 10-25s after connecting, and the
+    packet just before every close was cmd 0x0b - the SERVER's heartbeat, which we
+    never answered. So: send nothing periodic and answer the server's heartbeat
+    (see the 0x0b handler in the read loop). Set FF_GATEWAY_KA=1 to restore the
+    old behaviour.
+    """
+    if os.environ.get("FF_GATEWAY_KA") == "1":
         reg = str(region).upper() if region else "ID"
         return bytes.fromhex("0219" if reg == "ID" else ("0214" if reg == "IND" else "0215"))
-    except Exception:
-        return bytes.fromhex("0219")
+    return b""
 
 # ═══════════════════════════ MATCH SEARCH PACKETS ═══════════════════════════
 BR_HEX = (
@@ -2084,7 +2093,7 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
                     while True:
                         await asyncio.sleep(bypass_ka_jitter(5.0))
                         try:
-                            if writer and not writer.is_closing():
+                            if ka_bytes and writer and not writer.is_closing():
                                 writer.write(ka_bytes); await writer.drain()
                         except Exception: break
                 gateway_ping_task = asyncio.create_task(func_gateway_keepalive())
@@ -2155,6 +2164,16 @@ async def functional_battle_royale(addrs, starter_packet, account_region, client
 
                     if DEBUG_TEAM_PACKETS and not hex_data.startswith("0300") and not hex_data.startswith("0600"):
                         print_info(f"[RAW-IN {uid_str}] len={pl} prefix={hex_data[:24]}")
+
+                    # gateway heartbeat (cmd 0x0b): echoing the exact frame keeps
+                    # the socket open - ignoring it is what closed every session
+                    if data[:1] == b"\x0b":
+                        try:
+                            if writer and not writer.is_closing():
+                                writer.write(data); await writer.drain()
+                        except Exception as _ke:
+                            print_warning(f"[KA] echo {uid_str}: {_ke}")
+                        continue
 
                     if hex_data.startswith("0600") and pl > 20:
                         await _process_social_packet(data, current_account_data, tag="MAIN")
