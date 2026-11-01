@@ -73,11 +73,13 @@ NEW_MATCH_DELAY         = _env_f("FF_NEW_MATCH_DELAY", 6.0)
 # acked, the match closed as "leaving uncounted" and THIS WEEK stayed 0. Matches
 # are credited when the SERVER ends them (cmd 103/107). So let the match run and
 # keep this cap large; override with FF_MATCH_SECONDS.
-MAX_MATCH_DURATION      = _env_f("FF_MATCH_SECONDS", 90.0)
+MAX_MATCH_DURATION      = _env_f("FF_MATCH_SECONDS", 420.0)
 # After the join/thunder handshake the bot is "landed". The working glory bots
 # die / leave right after landing so the server ends the match for them and the
 # cycle repeats. Seconds to wait after landing before quitting.
-QUIT_AFTER_LANDING      = _env_f("FF_QUIT_AFTER", 12.0)
+# 0 = never ask to leave: stay in the match and let the zone eliminate the bot.
+# The server then ends the match itself (103/107), which is the credited path.
+QUIT_AFTER_LANDING      = _env_f("FF_QUIT_AFTER", 0.0)
 MATCH_IDLE_TIMEOUT      = _env_f("FF_IDLE_TIMEOUT", 90.0)
 EXP_REFRESH_INTERVAL    = 30.0
 EXP_REFRESH_AFTER_MATCH_DELAY = 9.0
@@ -103,7 +105,12 @@ BYPASS_PACKET_JITTER  = True
 BYPASS_HELLO_DELAY    = True
 BYPASS_KA_JITTER      = True
 
-ENABLE_SPEED_MOVEMENT       = True
+# Movement is OFF by default. The owner's theory (and the only run that ever scored
+# guild points): a bot must actually be ELIMINATED for the server to end its match.
+# Standing still in the safe-zone kills it within a couple of minutes and the server
+# sends DEAD(107)/MATCH_END(103) - we treat those as a completed, credited match.
+# Set FF_MOVE=1 to bring the movement worker back.
+ENABLE_SPEED_MOVEMENT       = os.environ.get("FF_MOVE", "0") == "1"
 MOVEMENT_SPEED_MIN          = 1.0
 MOVEMENT_SPEED_MAX          = 1.4
 MOVEMENT_PATTERN            = "circle"
@@ -1525,7 +1532,7 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
 
         while not local_closed:
             # landed (handshake done) -> wait a moment, then eliminate ourselves
-            if (ack_state == "thunder_sharma_sent" and thunder_sent
+            if (QUIT_AFTER_LANDING > 0 and ack_state == "thunder_sharma_sent" and thunder_sent
                     and (time.time() - t0) > QUIT_AFTER_LANDING):
                 if await try_end_match():
                     completed = True
