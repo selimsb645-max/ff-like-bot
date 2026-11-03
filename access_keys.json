@@ -17,6 +17,17 @@
    "last_used": "",
    "uses": 0,
    "revoked": false
+  },
+  {
+   "label": "demo2",
+   "salt": "6801011d94119ae3dd86331d374413bc",
+   "hash": "fe56cbfa50c483625bc14e467f91fface979dbb5d97c8b9a3aa5ac7e79198f18",
+   "created": "2026-11-03T05:31:27Z",
+   "bound_device": "",
+   "bound_at": "",
+   "last_used": "",
+   "uses": 0,
+   "revoked": false
   }
  ],
  "mode": "remember"
