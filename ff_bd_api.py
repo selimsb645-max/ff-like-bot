@@ -205,16 +205,39 @@ def guest_grant(uid: str, pw: str):
         return None
 
 
+def _post_any(url, *, json_body=None, data=None, headers=None, timeout=15):
+    """POST with httpx, falling back to requests if httpx cannot connect.
+
+    On the owner's phone httpx raised ConnectError for the grant endpoint while a
+    raw TLS handshake and plain requests reached it, so one HTTP library must not
+    be a single point of failure on the mint path.
+    """
+    px = _proxy()
+    try:
+        return httpx.post(url, json=json_body, data=data, headers=headers,
+                          timeout=timeout, verify=False, **_pxkw())
+    except Exception as first:
+        try:
+            import requests
+            import urllib3
+            urllib3.disable_warnings()
+            kw = {"proxies": {"http": px, "https": px}} if px else {}
+            return requests.post(url, json=json_body, data=data, headers=headers,
+                                 timeout=timeout, verify=False, **kw)
+        except Exception:
+            raise first
+
+
 def grant_any(uid: str, pw: str) -> tuple[tuple[str, str] | None, str]:
     """(access_token, open_id) from whichever grant host answers, or (None, why)."""
     errs = []
     for host in GRANT_HOSTS:
         try:
-            r = httpx.post(host + GRANT_PATH, json={
+            r = _post_any(host + GRANT_PATH, json_body={
                 "client_id": 100067, "client_secret": CLIENT_SECRET, "client_type": 2,
                 "password": pw, "response_type": "token", "uid": int(uid)},
                 headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
-                timeout=15, verify=False, **_pxkw())
+                timeout=15)
         except Exception as ex:
             errs.append(f"{host.split('//')[1]} {type(ex).__name__}")
             continue
@@ -260,8 +283,7 @@ def _major_login_bytes(access_token: str, open_id: str):
              "X-GA-SV": str(int(time.time())), "Content-Type": "application/x-www-form-urlencoded",
              "Expect": "100-continue", "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1",
              "ReleaseVersion": "OB55"}
-        r = httpx.post(major_login_url(), headers=h, data=body, timeout=20,
-                       verify=False, **_pxkw())
+        r = _post_any(major_login_url(), headers=h, data=body, timeout=20)
         if r.status_code != 200:
             return None
         return r.content
@@ -309,8 +331,7 @@ def mint_jwt_detailed(uid: str, pw: str) -> tuple[dict | None, str]:
          "Expect": "100-continue", "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1",
          "ReleaseVersion": "OB55"}
     try:
-        r2 = httpx.post(major_login_url(), headers=h, data=_enc(wire), timeout=20,
-                        verify=False, **_pxkw())
+        r2 = _post_any(major_login_url(), headers=h, data=_enc(wire), timeout=20)
     except Exception as ex:
         return None, f"majorlogin network error: {type(ex).__name__}"
     if r2.status_code != 200:
