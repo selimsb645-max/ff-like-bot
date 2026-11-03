@@ -685,16 +685,19 @@ LAST_WARN = {}   # user_id -> last mute-warning ts
 LIKE_BUSY = {"until": 0, "user": None}   # global like operation window
 USER_LIKE_CD = {} # user_id -> next-allowed like ts
 SPAM_WINDOW = 30      # seconds
-SPAM_MAX = 8          # commands per window before mute
-MUTE_STEPS = (60, 300, 1800)   # escalating mute seconds
+SPAM_MAX = 20          # commands per window before mute
+MUTE_STEPS = (30, 120, 300)   # escalating mute seconds
 LIKE_USER_COOLDOWN = 60        # per-user seconds between /like
 LIKE_GLOBAL_WINDOW = 45        # global busy window per like operation
+
+
+OWNER_IDS = {6303816151}  # owner: never muted
 
 
 def _spam_guard(user_id: int) -> int:
     """Returns seconds remaining if muted, else 0 (and records activity)."""
     now = time.time()
-    if user_id in ADMIN_IDS:
+    if user_id in ADMIN_IDS or user_id in OWNER_IDS:
         return 0
     mu = MUTES.get(user_id, 0)
     if now < mu:
@@ -764,7 +767,19 @@ def wrap_with_guard(fn):
         if left:
             _spamsafe_reply(m, f"⏳ Too many commands! Please wait *{left} seconds*.")
             return None
-        return fn(m, *a, **kw)
+        try:
+            return fn(m, *a, **kw)
+        except Exception as e:
+            print(f"[handler-error] {getattr(fn, '__name__', '?')}: {e}")
+            try:
+                bot.reply_to(m, f"⚠️ This command hit an error: <code>{str(e)[:120]}</code>\n"
+                                f"Try again in a moment.")
+            except Exception:
+                try:
+                    bot.reply_to(m, "⚠️ This command hit an error. Try again in a moment.")
+                except Exception:
+                    pass
+            return None
     return guarded
 
 
@@ -2087,7 +2102,7 @@ if __name__ == "__main__":
 
     from telebot.apihelper import ApiTelegramException
     try:
-        bot.infinity_polling(skip_pending=True)
+        bot.infinity_polling(skip_pending=False)
     except ApiTelegramException as e:
         if getattr(e, "error_code", None) != 409:
             raise
