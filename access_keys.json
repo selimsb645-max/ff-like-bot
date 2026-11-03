@@ -6,6 +6,18 @@
   "hash": "67b265d214ac4d2004c9b8076eaae18c41ded9380fab63d5fcc58cd055940f40",
   "iterations": 260000
  },
- "keys": [],
+ "keys": [
+  {
+   "label": "selim",
+   "salt": "5d031b8509c3436604195dbe40bb4c78",
+   "hash": "70b6f00cb50615731868663afb16cb85d3c57a39fc4e0d22f9e08eef9bb22b0d",
+   "created": "2026-11-03T05:39:02Z",
+   "bound_device": "",
+   "bound_at": "",
+   "last_used": "",
+   "uses": 0,
+   "revoked": false
+  }
+ ],
  "mode": "remember"
 }
