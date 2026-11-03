@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from guests_manager import game_register as gr  # noqa: E402
 
 ARGS = [a for a in sys.argv[1:] if not a.startswith("-")]
+CHECK = "--check" in sys.argv
 DO_REGISTER = "--register" in sys.argv
 N = int(ARGS[0]) if ARGS else 6
 POOL = Path(__file__).parent / "bd_pool.json"
@@ -87,6 +88,14 @@ def push(msg):
 
 
 def main():
+    if CHECK:
+        print("connection exits in:", (api._exit_country() or "unknown").upper())
+        print("endpoint reachability from this phone:")
+        for host, status in api.check_endpoints():
+            print(f"  {host:45s} {status}")
+        print("\nIf a host says TCP 443 failed, that network blocks it; the mint now "
+              "tries the other grant host automatically.")
+        return 0
     cc = (api._exit_country() or "").upper()
     print(f"connection exits in: {cc or 'unknown'}")
     if cc != "BD":

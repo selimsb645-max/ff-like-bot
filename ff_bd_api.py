@@ -160,6 +160,11 @@ def load_creds() -> list:
 
 # ── Self-minted JWT (MajorLogin, verified 2026-10-23) ──────────────
 GRANT_URL = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
+GRANT_PATH = "/api/v2/oauth/guest/token:grant"
+GRANT_HOSTS = [
+    "https://ffmconnect.live.gop.garenanow.com",   # the one the registration flow uses
+    "https://100067.connect.garena.com",
+]
 def major_login_url() -> str:
     return _hosts.login_base() + "/MajorLogin"
 CLIENT_SECRET = "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
@@ -198,6 +203,50 @@ def guest_grant(uid: str, pw: str):
         return (at, oid) if at and oid else None
     except Exception:
         return None
+
+
+def grant_any(uid: str, pw: str) -> tuple[tuple[str, str] | None, str]:
+    """(access_token, open_id) from whichever grant host answers, or (None, why)."""
+    errs = []
+    for host in GRANT_HOSTS:
+        try:
+            r = httpx.post(host + GRANT_PATH, json={
+                "client_id": 100067, "client_secret": CLIENT_SECRET, "client_type": 2,
+                "password": pw, "response_type": "token", "uid": int(uid)},
+                headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
+                timeout=15, verify=False, **_pxkw())
+        except Exception as ex:
+            errs.append(f"{host.split('//')[1]} {type(ex).__name__}")
+            continue
+        if r.status_code != 200:
+            errs.append(f"{host.split('//')[1]} http{r.status_code}")
+            continue
+        d = r.json().get("data", r.json())
+        at, oid = d.get("access_token"), d.get("open_id")
+        if at and oid:
+            return (at, oid), ""
+        errs.append(f"{host.split('//')[1]} no token")
+    return None, "grant failed: " + "; ".join(errs)
+
+
+def check_endpoints() -> list[tuple[str, str]]:
+    """DNS + TCP/TLS reachability of every endpoint the mint needs, from this device."""
+    import socket
+    out = []
+    for url in GRANT_HOSTS + ["https://" + _hosts.login_host(), "https://ffmconnect.live.gop.garenanow.com"]:
+        host = url.split("//")[1]
+        try:
+            ip = socket.gethostbyname(host)
+        except Exception as ex:
+            out.append((host, f"DNS failed ({type(ex).__name__})"))
+            continue
+        try:
+            c = socket.create_connection((ip, 443), timeout=8)
+            c.close()
+            out.append((host, f"ok -> {ip}"))
+        except Exception as ex:
+            out.append((host, f"ip {ip} but TCP 443 failed ({type(ex).__name__})"))
+    return out
 
 
 def _major_login_bytes(access_token: str, open_id: str):
@@ -249,20 +298,10 @@ def major_login(access_token: str, open_id: str) -> str | None:
 
 def mint_jwt_detailed(uid: str, pw: str) -> tuple[dict | None, str]:
     """mint_jwt plus the reason it failed - "failed" alone is unactionable."""
-    try:
-        r = httpx.post(GRANT_URL, json={
-            "client_id": 100067, "client_secret": CLIENT_SECRET, "client_type": 2,
-            "password": pw, "response_type": "token", "uid": int(uid)},
-            headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
-            timeout=15, verify=False, **_pxkw())
-    except Exception as ex:
-        return None, f"grant network error: {type(ex).__name__}"
-    if r.status_code != 200:
-        return None, f"grant http{r.status_code}"
-    d = r.json().get("data", {})
-    at, oid = d.get("access_token"), d.get("open_id")
-    if not (at and oid):
-        return None, f"grant no token: {str(d)[:60]}"
+    pair, why = grant_any(uid, pw)
+    if not pair:
+        return None, why
+    at, oid = pair
 
     wire = (_pf_str(22, oid) + _pf_str(23, "4") + _pf_str(29, at) + _pf_str(99, "4"))
     h = {"User-Agent": LOGIN_UA, "Connection": "Keep-Alive", "Accept-Encoding": "gzip",
