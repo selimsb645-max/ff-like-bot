@@ -12,6 +12,27 @@ import httpx
 from telebot import types
 import ff_bd_api
 
+# ── the token lives in .env next to the code, so each person's own bot stays
+#    on their own machine and nobody has to edit ~/.bashrc ──────────────────
+def _load_dotenv(path: Path) -> None:
+    if not path.exists():
+        return
+    try:
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip().lstrip("export ").strip()
+            value = value.strip().strip("'").strip('"')
+            if key and key not in os.environ:
+                os.environ[key] = value
+    except Exception as ex:
+        print("could not read .env:", ex)
+
+
+_load_dotenv(Path(__file__).parent / ".env")
+
 BOT_TOKEN = (os.environ.get("BOT_TOKEN")
              or os.environ.get("TELEGRAM_BOT_TOKEN_2", "")).strip()
 if not BOT_TOKEN or ":" not in BOT_TOKEN:

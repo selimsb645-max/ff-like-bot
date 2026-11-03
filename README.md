@@ -169,6 +169,66 @@ was created, when it was welded, the IP it claimed from, and whether it is
 time. Owner-only, like `/revoke`; anyone else gets "শুধু owner দেখতে পারবে".
 
 
+## Giving the bot to someone else
+
+Telegram serves **one** `getUpdates` consumer per bot token. Two copies on one
+token do not share the load, they kill each other:
+
+    ApiTelegramException ... 409 Conflict: terminated by other getUpdates request
+
+So every person runs **their own bot from @BotFather with their own token**.
+`join.py` refuses a token whose username is one of the owner's bots and refuses
+a token that some other machine is already polling, so this mistake surfaces at
+setup instead of as a traceback later.
+
+### What the owner hands over, per person
+
+1. an invite to the channel the gate checks, so @NAI_AccessBot will issue a code
+2. a fine-grained GitHub token: `Contents: Read-only`, expiry 30 days, named
+   after the person ("ff-rahim") so revoking one person never touches anyone else
+3. this message: "clone the repo with that token, run `python3 join.py`, paste
+   your own bot token from @BotFather when it asks"
+
+### What that person does
+
+    git clone https://x-access-token:<their-token>@github.com/selimsb645-max/ff-like-bot.git
+    cd ff-like-bot
+    pip install -r requirements.txt
+    python3 join.py
+
+`join.py` checks the token with getMe, proves nothing else is polling it, writes
+it to `.env` (mode 600, git-ignored), runs the access gate so the NAI-... code
+binds to that machine's fingerprint, then starts `bot.py`.
+
+### Their phone, their server
+
+* **Termux on their phone** - the natural place: BD mobile IP, so guest-account
+  minting works, and nothing depends on GitHub Actions.
+* **A VPS they rent** - fine for the Telegram side, but the like pool must still
+  be minted from a BD IP. `deploy/ffbot@.service` runs it under systemd:
+
+      sudo cp deploy/ffbot@.service /etc/systemd/system/
+      sudo systemctl daemon-reload
+      sudo systemctl enable --now ffbot@<name>
+
+* **One VPS for several people** - one directory and one token each, so one
+  shared server never means one shared licence:
+
+      sudo ./deploy/add-user.sh rahim --pat ghp_xxx
+      sudo -u ffbot bash -c 'cd /srv/ffbot/rahim && python3 join.py --no-start'
+      sudo systemctl enable --now ffbot@rahim
+
+  `/srv/ffbot/<name>/.ff_access_device` is that person's licence. Deleting the
+  directory, or revoking the code in Telegram, ends their access; nothing else
+  is touched.
+
+### Nothing to write down
+
+The code, the device, the IP and the last check all sit in the AccessCode table,
+so `/history` in @NAI_AccessBot is the register of who runs what, and `/revoke`
+is the off switch. A person who stops paying needs no remote access to their
+machine: revoke the code and their next start is refused.
+
 ### The lock screen
 
 The access gate prints in colour on a terminal (grey rule lines, cyan title,

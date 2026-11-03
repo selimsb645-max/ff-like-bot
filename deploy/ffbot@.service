@@ -1,0 +1,40 @@
+# One instance per person on a shared Linux server.
+#
+#   /srv/ffbot/<name>/          their own clone of the repo
+#   /srv/ffbot/<name>/.env      their own BOT_TOKEN, written by join.py
+#   /srv/ffbot/<name>/.ff_access_device   their device fingerprint + code
+#
+# install:
+#   sudo cp deploy/ffbot@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ffbot@rahim
+#
+# each person keeps their own token, so two instances never fight over updates.
+
+[Unit]
+Description=FF BD bot for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ffbot
+Group=ffbot
+WorkingDirectory=/srv/ffbot/%i
+ExecStart=/usr/bin/python3 -u bot.py
+Restart=always
+RestartSec=15
+KillSignal=SIGINT
+TimeoutStopSec=20
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+
+# a little hardening, none of it in the way of the bot
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/srv/ffbot/%i
+
+[Install]
+WantedBy=multi-user.target
