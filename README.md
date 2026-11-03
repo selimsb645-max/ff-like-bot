@@ -148,14 +148,10 @@ If the phone is offline the run falls back to the old tunnel/proxy hunt.## Getti
     2) যে কোডটা আসবে সেটা এখানে পেস্ট করো
     Access code (3 tries left): NAI-4K7Q-9XZ2-M3TB
 
-That code comes from @NAI_AccessBot in the form `NAI-XXXX-XXXX-XXXX`
-(no 0/O/1/I, so it is easy to read out loud). It is valid 30 minutes and
-**only the phone that claims it can use it**: the claim records both the device
-fingerprint and the public IP it arrived from, on the server.
-A second phone gets "এই কোড অন্য একটা ফোনে ব্যবহার হয়েছে".
-
-After the first claim that phone is remembered and starting the bot asks nothing.
-`python3 access.py setmode strict` brings the prompt back on every start.
+In Telegram the bot first asks them to join https://t.me/FF_FreeLike_BD:
+it sends two buttons, "📢 চ্যানেলে জয়েন করো" and "✅ ভেরিফাই". Tapping verify
+makes the bot re-check membership with Telegram; only a real member gets the
+code, and the message then turns into "✅ ভেরিফাইড".
 
 ### Under the hood
 * `functions/ffAccessBot` (Base44, webhook of @NAI_AccessBot) mints the code and
