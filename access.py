@@ -198,6 +198,37 @@ def _fail(msg: str, code: int = 1):
     raise SystemExit(code)
 
 
+
+# ── device memory (remember mode) ──────────────────────────────────────────
+def mode(doc: dict) -> str:
+    """'remember' = a bound device skips the key; 'strict' = key every start."""
+    return str(doc.get("mode") or "remember").lower()
+
+
+def is_remember(doc: dict) -> bool:
+    return mode(doc) != "strict"
+
+
+def bound_for(fp: str, doc: dict) -> dict | None:
+    """The active key already welded to this device, if any."""
+    for rec in doc.get("keys", []):
+        if rec.get("revoked") or not rec.get("bound_device"):
+            continue
+        if hmac.compare_digest(str(rec["bound_device"]), str(fp)):
+            return rec
+    return None
+
+
+def touch(rec: dict) -> None:
+    """Count a start on an already bound device (no key retyped)."""
+    doc = load()
+    for r in doc.get("keys", []):
+        if r.get("label") == rec.get("label") and not r.get("revoked"):
+            r["uses"] = int(r.get("uses") or 0) + 1
+            r["last_used"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    save(doc)
+
+
 def require_access(purpose: str = "this program") -> None:
     """Ask username, password, access key. Returns only when all three pass."""
     doc = load()
@@ -228,6 +259,13 @@ def require_access(purpose: str = "this program") -> None:
         if not gate_ok(user, pw, doc):
             print("[access] wrong username or password.")
             continue
+        fp = device_fingerprint()
+        known = bound_for(fp, doc) if is_remember(doc) else None
+        if known:
+            # this device already redeemed an active key: no need to type it again
+            print(f"[access] this device is already activated for '{known['label']}'")
+            touch(known)
+            return
         try:
             key = input("Access key: ").strip()
         except (EOFError, KeyboardInterrupt):
@@ -244,6 +282,16 @@ def require_access(purpose: str = "this program") -> None:
 # ── CLI ────────────────────────────────────────────────────────────────────
 def main(argv: list[str]) -> int:
     cmd = (argv[1] if len(argv) > 1 else "status").lower()
+    if cmd == "setmode":
+        want = (argv[2] if len(argv) > 2 else "").lower()
+        if want not in ("remember", "strict"):
+            print("usage: python3 access.py setmode remember|strict")
+            print("  remember = a phone that already redeemed a key skips the key")
+            print("  strict   = the key is required on every single start")
+            return 2
+        doc = load(); doc["mode"] = want; save(doc)
+        print(f"mode set to {want}")
+        return 0
 
     if cmd == "new":
         if len(argv) < 3:
@@ -310,6 +358,9 @@ def main(argv: list[str]) -> int:
     print(f"  keys total   : {len(keys)}")
     print(f"  keys active  : {sum(1 for k in keys if not k.get('revoked'))}")
     print(f"  keys unused  : {sum(1 for k in keys if not k.get('revoked') and not k.get('bound_device'))}")
+    print(f"  mode         : {mode(doc)}"
+          + ("  (a bound phone skips the key)" if is_remember(doc)
+             else "  (key required on every start)"))
     print(f"  this device  : {device_fingerprint()[:16]}...")
     print(f"  key file     : {os.path.basename(KEYS_FILE)}")
     return 0

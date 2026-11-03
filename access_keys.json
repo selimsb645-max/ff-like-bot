@@ -6,17 +6,6 @@
   "hash": "67b265d214ac4d2004c9b8076eaae18c41ded9380fab63d5fcc58cd055940f40",
   "iterations": 260000
  },
- "keys": [
-  {
-   "label": "rahim",
-   "salt": "332a5f34a559f8c3dcc5138f7660c5ab",
-   "hash": "7b87cd1e1f4c5da0852924bf85485e2bb346a08afe0200449d6bddc19b4376ca",
-   "created": "2026-11-03T04:41:08Z",
-   "bound_device": "c9a82a442254cbce4a9dd9420f1dd447",
-   "bound_at": "2026-11-03T04:41:10Z",
-   "last_used": "2026-11-03T04:41:10Z",
-   "uses": 2,
-   "revoked": true
-  }
- ]
+ "keys": [],
+ "mode": "remember"
 }
