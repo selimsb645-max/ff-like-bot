@@ -36,9 +36,36 @@ def _proxy() -> str:
     return ""
 
 
+_PROXY_STATE = {"url": None, "ok": False, "checked": 0.0}
+_PROXY_TTL = 600  # re-check a proxy every 10 minutes
+
+
+def _proxy_healthy(px: str) -> bool:
+    """A dead BD proxy must never hang every call - check it once, cache result."""
+    now = time.time()
+    if _PROXY_STATE["url"] == px and now - _PROXY_STATE["checked"] < _PROXY_TTL:
+        return _PROXY_STATE["ok"]
+    ok = False
+    try:
+        r = httpx.get("https://ipinfo.io/json", proxy=px, timeout=7)
+        d = r.json() if r.status_code == 200 else {}
+        ok = d.get("country") == "BD"
+        print(f"[proxy] health {px[:40]} -> {d.get('ip')} {d.get('country')} {'OK' if ok else 'BAD'}")
+    except Exception as e:
+        print(f"[proxy] health {px[:40]} FAILED: {str(e)[:60]}")
+        ok = False
+    _PROXY_STATE.update({"url": px, "ok": ok, "checked": now})
+    return ok
+
+
 def _pxkw() -> dict:
     px = _proxy()
-    return {"proxy": px} if px else {}
+    if not px:
+        return {}
+    if not _proxy_healthy(px):
+        print("[proxy] unhealthy - falling back to DIRECT connection")
+        return {}
+    return {"proxy": px}
 
 
 def profile_url() -> str:
