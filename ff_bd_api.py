@@ -750,6 +750,26 @@ def _burned_add(uids):
         pass
 
 
+POOL_HEALTH_FILE = Path(__file__).parent / "pool_health.json"
+
+
+def _health_write(upd: dict) -> None:
+    """Persist why the pool is empty (or how the mint went) so it is inspectable
+    from the repo and shown by /pool without digging through runner logs."""
+    try:
+        old = {}
+        if POOL_HEALTH_FILE.exists():
+            try:
+                old = json.loads(POOL_HEALTH_FILE.read_text())
+            except Exception:
+                old = {}
+        old.update(upd)
+        old["ts"] = int(time.time())
+        POOL_HEALTH_FILE.write_text(json.dumps(old, indent=1))
+    except Exception:
+        pass
+
+
 def _exit_country() -> str:
     """Country code this machine (or its BD proxy) looks like from outside."""
     try:
@@ -789,23 +809,29 @@ def refresh_pool() -> list:
 
     # A guest account can be logged in ONCE and Garena stamps its region from the
     # IP that minted it. Minting from a non-BD machine therefore cannot produce a
-    # usable BD token, it only burns accounts. Check before spending anything.
-    if not _proxy():
-        global _BLOCK_CC, _BLOCK_TS
-        cc = ""
-        if time.time() - _BLOCK_TS < 60:
-            cc = _BLOCK_CC
+    # usable BD token, it only burns accounts. So probe the exit that will actually
+    # be used - including through the proxy - before spending anything.
+    global _BLOCK_CC, _BLOCK_TS
+    px = _proxy()
+    if time.time() - _BLOCK_TS < 60:
+        cc = _BLOCK_CC
+    else:
+        cc = _exit_country()
+        _BLOCK_CC, _BLOCK_TS = cc, time.time()
+    if cc.upper() != "BD":
+        src = f"proxy {px}" if px else "this machine"
+        if not cc:
+            reason = (f"{src} did not answer or gave no country, so nothing is known "
+                      f"about the exit region")
         else:
-            cc = _exit_country()
-            _BLOCK_CC, _BLOCK_TS = cc, time.time()
-        if cc and cc.upper() != "BD":
-            print(f"[POOL] mint blocked: this machine exits from {cc.upper()} and a "
-                  f"{cc.upper()} token can never like or read a BD player.")
-            print("[POOL] no account was spent. Set LIKE_PROXY_URL to a BD proxy "
-                  "(the phone tunnel does this) or run the bot on the phone.")
-            return []
+            reason = f"{src} exits from {cc.upper()}"
+        print(f"[POOL] mint blocked: {reason}. A {cc.upper() or 'non-BD'} token can never "
+              f"like or read a BD player, so no account was spent.")
+        _health_write({"blocked": reason, "exit_country": cc, "proxy": px,
+                       "minted": 0, "tried": 0})
+        return []
 
-    pool, touched, wrong_region = [], [], 0
+    pool, touched, wrong_region, fails = [], [], 0, 0
     for _n, uid, pw in cands:
         touched.append(uid)
         try:
@@ -813,16 +839,22 @@ def refresh_pool() -> list:
         except Exception:
             t = None
         if not t:
+            # a failed login on a BD exit means the network is refusing us, not
+            # that every remaining account is dead - stop before burning the batch
+            fails += 1
+            if fails >= 3:
+                print(f"[POOL] stopping mint after {fails} failed logins in a row "
+                      f"(last uid {uid}) - try again later instead of burning accounts")
+                break
             continue
         url = str(t.get("server_url") or "")
         if url and not _hosts.is_bd_host(url):
             wrong_region += 1
             print(f"[POOL] {uid} came back on {url} - wrong region for BD likes")
-            if wrong_region >= 1:
-                print("[POOL] stopping mint: every further account would land in the same "
-                      "wrong region and waste its one-time login")
-                break
-            continue
+            print("[POOL] stopping mint: every further account would land in the same "
+                  "wrong region and waste its one-time login")
+            break
+        fails = 0
         pool.append(t)
     _burned_add(touched)                           # login spent either way
     try:
@@ -830,6 +862,11 @@ def refresh_pool() -> list:
     except Exception:
         pass
     print(f"[POOL] minted {len(pool)}/{len(touched)} tokens (budget {POOL_MINT_BUDGET})")
+    _health_write({"blocked": "" if pool else (
+        f"minted 0 of {len(touched)} tried"
+        + (f", {wrong_region} came back in a foreign region" if wrong_region else "")),
+        "exit_country": _BLOCK_CC, "proxy": _proxy(),
+        "minted": len(pool), "tried": len(touched), "wrong_region": wrong_region})
     return pool
 
 

@@ -1259,11 +1259,23 @@ def cmd_pool(m):
     rows.append(f"exit: <b>{(cc or 'unknown').upper()}</b> · proxy: "
                 f"{'<code>' + px + '</code>' if px else 'none'}")
 
+    try:
+        import json as _json
+        hp = _json.loads((Path(__file__).parent / "pool_health.json").read_text())
+        if hp.get("blocked"):
+            rows.append("")
+            rows.append(f"last mint: <b>blocked</b> \u2014 {hp['blocked']}")
+        elif hp.get("minted") is not None:
+            rows.append("")
+            rows.append(f"last mint: <b>{hp.get('minted')}</b> ok / {hp.get('tried')} tried")
+    except Exception:
+        pass
+
     if not live:
         rows.append("")
         rows.append("⚠️ No usable token. Likes and /profile cannot work until the pool can "
-                    "mint from a BD IP: run on the phone, or set <code>LIKE_PROXY_URL</code> "
-                    "to a BD proxy.")
+                    "mint from a BD IP: run on the phone, or point "
+                    "<code>LIKE_PROXY_URL</code> at a BD proxy that really exits in BD.")
     else:
         bad = [t for t in live if t.get("server_url") and "freefiremobile.com" in str(t.get("server_url"))]
         if bad:
