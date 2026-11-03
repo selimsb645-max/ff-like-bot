@@ -63,31 +63,56 @@ hashes, and a wrong pair refuses to start. A scheduled Actions job with no
 terminal and no secrets keeps running so the farm does not stall, which is why
 setting those two secrets is the way to close that door completely.
 
-## Access control - who can run this bot
+## Giving someone access - the whole procedure
 
-Two things stand between a stranger and a running bot, and nothing else.
+Two layers exist and nothing else: GitHub decides who may clone, and one access
+key decides who may run. This is the complete path.
 
-*Cloning:* the repo is private, so GitHub itself decides who may clone
-(fine-grained token, Contents: Read-only, used as the password).
+### Once, for yourself
+1. Create a token with write access so you can publish new keys:
+   https://github.com/settings/personal-access-tokens/new
+   name `ff-owner`, Only select repositories -> `ff-like-bot`,
+   Contents: **Read and write**, 30 days. Keep it private.
 
-*Running:* one prompt, one key.
+### For each new person
+1. **Issue the key** on your phone, inside the repo folder:
 
-    python3 bot.py
-    === FF BD bot is locked ===
-    Access key: NAI-XXXX-XXXX-XXXX
+       python3 give_access.py rahim
 
-The key is issued by the owner (`python3 access.py new <name>`), printed once,
-and welds itself to the first phone that redeems it. Another phone with the same
-key is refused. Once a phone is activated it is remembered and stops asking
-(`python3 access.py setmode strict` brings the prompt back on every start).
+   It pulls, mints a key, pushes `access_keys.json` and prints the exact message
+   to send. (Without that push their clone would reject the key.)
+   The first time it asks for the owner token and saves it in ~/.ff_owner_token.
 
-    python3 access.py new rahim      # issue
-    python3 access.py list           # unused / active / revoked
-    python3 access.py revoke rahim   # cut access
-    python3 access.py status         # mode + this device
+2. **Create their GitHub token** (their door to the code):
+   https://github.com/settings/personal-access-tokens/new
+   name `ff-rahim`, Only select repositories -> `ff-like-bot`,
+   Contents: **Read-only**, 30 days.
+   Naming it after them is what lets you see, later, whose token is whose.
 
-`BOT_TOKEN` is separate and still comes from @BotFather:
-`BOT_TOKEN='123:ABC' python3 bot.py`, or `export BOT_TOKEN=...` once in ~/.bashrc.
+3. **Send them four things**: the clone link, the username `selimsb645-max`,
+   their token, and the access key from step 1. Their Telegram bot token is
+   their own, you never share yours.
+
+### What they do
+    git clone https://github.com/selimsb645-max/ff-like-bot.git
+    # Username: selimsb645-max   Password: <their token>
+    cd ff-like-bot
+    pip install -r requirements.txt
+    BOT_TOKEN='<their telegram token>' python3 bot.py
+    # Access key: NAI-XXXX-XXXX-XXXX   <- from step 1, works once, then locks
+    #                                    to their phone
+
+### Taking access back
+    python3 access.py revoke rahim
+    git add access_keys.json && git commit -m "revoke rahim" && git push
+
+The key dies on their next start after they pull. For an immediate stop without
+waiting for them, delete their token (Settings -> Developer settings ->
+Fine-grained tokens) so they cannot pull or clone again, and ask them to stop.
+
+### Seeing who has what
+    python3 access.py list     # key per person: unused / active / revoked
+    https://github.com/settings/tokens?type=beta   # tokens, last used date
 
 ## Owner's phone as the BD proxy (best setup, free)
 
