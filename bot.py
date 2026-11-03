@@ -575,7 +575,14 @@ def reminder_loop():
                         info["remind_at"] = now + 24 * 3600
                         changed = True
                     except Exception as e:
-                        print("reminder send failed:", e)
+                        text = str(e)
+                        # a chat the bot can no longer reach will never come back
+                        if any(x in text for x in ("chat not found", "blocked", "deactivated", "chat_id is empty")):
+                            rem.pop(uid, None)
+                            changed = True
+                            print("reminder dropped for", uid, "-", text[:70])
+                        else:
+                            print("reminder send failed:", e)
             if changed:
                 _save_json(REMINDERS_FILE, rem)
         except Exception as e:
@@ -1956,4 +1963,30 @@ if __name__ == "__main__":
     threading.Thread(target=reminder_loop, daemon=True).start()
     threading.Thread(target=health_loop, daemon=True).start()
     threading.Thread(target=rank_watch_loop, daemon=True).start()
-    bot.infinity_polling(skip_pending=True)
+
+    # one token, one running copy: Telegram allows a single getUpdates consumer,
+    # so a second copy is killed with 409 and used to spill a raw traceback
+    try:
+        from access import C as _c, RED as _RED, YELLOW as _YELLOW, GRAY as _GRAY
+    except Exception:
+        def _c(t, _code=""):
+            return t
+        _RED = _YELLOW = _GRAY = ""
+
+    from telebot.apihelper import ApiTelegramException
+    try:
+        bot.infinity_polling(skip_pending=True)
+    except ApiTelegramException as e:
+        if getattr(e, "error_code", None) != 409:
+            raise
+        print("")
+        print("  " + _c("\u2715 this bot token is already being used by another copy", _RED + ";1" if _RED else ""))
+        print("  " + _c("Telegram allows one running copy per token, so this one was stopped.", _GRAY))
+        print("")
+        print("  " + _c("stop the other copy, then start again:", _YELLOW))
+        print("  " + _c("GitHub Actions  ->  Actions tab  ->  keep-bot-alive  ->  cancel the run", _GRAY))
+        print("  " + _c("another Termux window  ->  CTRL+C there, or:  pkill -f bot.py", _GRAY))
+        raise SystemExit(2)
+    except KeyboardInterrupt:
+        print("")
+        print("  " + _c("stopped", _GRAY))
