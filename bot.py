@@ -46,6 +46,7 @@ if not BOT_TOKEN or ":" not in BOT_TOKEN:
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 USAGE_FILE = Path(__file__).parent / "like_usage.json"
 USAGE_LOCK = threading.Lock()
+LIKE_PER_TARGET = int(os.environ.get('LIKE_PER_TARGET', '100'))  # pool is shared across targets/day
 MAX_LIKES_PER_REQUEST = 500
 ADMIN_IDS = set(int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip())
 
@@ -241,7 +242,8 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
     try:
         s0 = ff_bd_api.get_stats(target, jwt)
         likes_before = s0.get("likes") if s0 else None
-        sent = ff_bd_api.send_like(target, count=pool_size, used=used)
+        cap = min(pool_size, LIKE_PER_TARGET) if not skip_slot else pool_size
+        sent = ff_bd_api.send_like(target, count=cap, used=used)
     except Exception as e:
         bot.send_message(chat_id, f"❌ Error: {e}")
         return
@@ -264,7 +266,24 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
     except Exception:
         pass
     if sent == 0:
-        bot.send_message(chat_id, "⚠️ Every account in the pool already liked this target. Try again tomorrow.")
+        st = getattr(ff_bd_api, "LAST_LIKE_STATS", {}) or {}
+        reasons = st.get("reasons") or {}
+        lines = [f"⚠️ No like landed on <code>{target}</code>.", ""]
+        if st.get("attempted"):
+            lines.append(f"Tried {st.get('attempted')} pool accounts, 0 accepted.")
+        for reason, n in sorted(reasons.items(), key=lambda x: -x[1])[:4]:
+            if "DAILY_LIKE_PROFILE_LIMIT" in reason:
+                lines.append(f"• {n} accounts already used today's like quota "
+                             "(Garena allows about one profile per account per day)")
+            else:
+                lines.append(f"• {n} × <code>{reason[:48]}</code>")
+        if not reasons:
+            lines.append("• every usable account is already recorded for this target today")
+        lines.append("")
+        lines.append("The pool refills by itself when Garena resets the daily limits. "
+                     "To serve more UIDs in one day, the bot now spends at most "
+                     f"{LIKE_PER_TARGET} accounts per target.")
+        bot.send_message(chat_id, "\n".join(lines))
     elif delta == 0:
         bot.send_message(chat_id, "⚠️ This UID was already liked today — try again tomorrow.")
     elif delta is not None and 0 < delta < sent:
@@ -1189,8 +1208,8 @@ def cmd_like(m):
         pool_size = len(ff_bd_api.get_pool())
     except Exception:
         pool_size = MAX_LIKES_PER_REQUEST
-    count = min(int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else pool_size,
-                MAX_LIKES_PER_REQUEST)
+    want = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else min(pool_size, LIKE_PER_TARGET)
+    count = min(want, MAX_LIKES_PER_REQUEST)
     msg = bot.reply_to(m, f"🔄 {target} → {count} likes being sent...")
     usage = load_usage()
     with USAGE_LOCK:
