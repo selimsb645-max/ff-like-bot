@@ -27,6 +27,9 @@ import hashlib
 import hmac
 import json
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import garena_hosts  # noqa: E402
 import random
 import secrets
 import string
@@ -52,8 +55,8 @@ HEX_KEY = "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
 
 MSDK_REGISTER = "https://ffmconnect.live.gop.garenanow.com/api/v2/oauth/guest:register"
 MSDK_GRANT = "https://ffmconnect.live.gop.garenanow.com/api/v2/oauth/guest/token:grant"
-MAJOR_REGISTER_HOSTS = ["loginbp.ppmainecoonghj.com", "loginbp.ggpolarbear.com"]
-MAJOR_LOGIN = "https://loginbp.ggpolarbear.com/MajorLogin"
+MAJOR_REGISTER_HOSTS = ["loginbp.ppmainecoonghj.com", "loginbp.ggblueshark.com"]
+MAJOR_LOGIN = "https://" + garena_hosts.login_host() + "/MajorLogin"
 
 FIELD_22 = bytes.fromhex(
     "4747524501010100620200001052aa0d669c6a368f08338060d2ee0690053af84a41edcd3558556ec10f24f4"

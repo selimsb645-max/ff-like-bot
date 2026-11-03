@@ -69,7 +69,7 @@ if toks:
         for t in toks:
             m = lpb.like(); m.uid = TARGET; m.region = "BD"
             try:
-                r = httpx.post(api.LIKE_URL, headers=api._headers(t["token"], "OB55"),
+                r = httpx.post(api.like_url(), headers=api._headers(t["token"], "OB55"),
                                data=api._enc(m.SerializeToString()), timeout=20, verify=False)
                 if r.status_code == 200:
                     sent += 1

@@ -15,10 +15,11 @@ import time
 import datetime
 
 import httpx
+import garena_hosts
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 
-ML_URL = "https://loginbp.ppmainecoonghj.com/MajorLogin"
+ML_URL = "https://" + garena_hosts.login_host() + "/MajorLogin"  # resolved: ggpolarbear.com went NXDOMAIN 2026-11-03
 AES_KEY = b"Yg&tc%DEuh6%Zc^8"
 AES_IV = b"6oyZDr22E3ychjM%"
 # 2026-10-28: X-GA-SV must be the CURRENT unix timestamp (verified against a live
@@ -202,7 +203,7 @@ def build_min_payload(open_id: str, access_token: str) -> bytes:
 
 ML_HOSTS = ("https://loginbp.ggblueshark.com/MajorLogin",
             "https://loginbp.ppmainecoonghj.com/MajorLogin",
-            "https://loginbp.ggpolarbear.com/MajorLogin")
+            "https://" + garena_hosts.login_host() + "/MajorLogin")
 
 
 def _parse_any(buf: bytes) -> dict:

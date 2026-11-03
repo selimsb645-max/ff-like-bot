@@ -731,7 +731,7 @@ def _clan_region_url(region):
         return "https://client.ind.freefiremobile.com"
     if region in ("BR", "US", "NA"):
         return "https://client.us.freefiremobile.com"
-    return "https://clientbp.ggpolarbear.com"
+    return garena_hosts.client_base()
 
 
 def _clan_payload(clan_id):

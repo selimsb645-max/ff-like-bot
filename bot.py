@@ -258,6 +258,26 @@ def run_stats_flow(chat_id, target, user):
             f"⭐ Level: <b>{s.get('level') or '-'}</b>\n❤️ Likes: <b>{s.get('likes')}</b>")
 
 
+
+def pool_problem_text() -> str:
+    """Why a profile / like call has no usable pool token, in plain words."""
+    try:
+        pool = ff_bd_api.get_pool()
+    except Exception as ex:
+        return f"pool error: {ex}"
+    if pool:
+        return ""
+    where = "unknown"
+    try:
+        px = ff_bd_api._proxy()
+        where = "via proxy" if px else (ff_bd_api._exit_country() or "unknown")
+    except Exception:
+        pass
+    return (f"the like pool has no working BD token right now (mint source: {where}).\n"
+            "Garena stamps a guest account's region from the IP that created it, so "
+            "accounts minted outside Bangladesh cannot like or read BD players.")
+
+
 def run_profile_flow(chat_id, target, user):
     try:
         pool = ff_bd_api.get_pool()
@@ -267,7 +287,14 @@ def run_profile_flow(chat_id, target, user):
         bot.send_message(chat_id, f"❌ Error: {e}")
         return
     if not p or p.get("error"):
-        bot.send_message(chat_id, "❌ Could not fetch profile.")
+        err = (p or {}).get("error") or "no answer from the server"
+        why = pool_problem_text()
+        msg = f"❌ Could not fetch profile ({err})."
+        if why:
+            msg += "\n\n" + why
+        else:
+            msg += "\n\nThe pool has a token, so this is about the UID itself: check it is on the BD server."
+        bot.send_message(chat_id, msg)
         return
     g = p.get("guild")
     card = ("👤 <b>Player Profile</b>\n━━━━━━━━━━━━━━━\n"
@@ -1140,8 +1167,14 @@ def cmd_like(m):
         likes_after = None
 
     if sent == 0:
-        bot.edit_message_text("⚠️ Every account in the pool already liked this target. Try again later.",
-                              msg.chat.id, msg.message_id)
+        why = pool_problem_text()
+        if why:
+            bot.edit_message_text("⚠️ Nothing was sent.\n\n" + why,
+                                  msg.chat.id, msg.message_id)
+        else:
+            bot.edit_message_text("⚠️ Every account in the pool already liked this target "
+                                  "(one account can like a profile once per day). Try again later.",
+                                  msg.chat.id, msg.message_id)
         return
     delta = None
     if isinstance(likes_before, int) and isinstance(likes_after, int):
@@ -1172,6 +1205,58 @@ def cmd_like(m):
 
 
 
+@bot.message_handler(commands=["pool"])
+def cmd_pool(m):
+    """Admin: why likes/profile work or do not, in one card."""
+    if not is_admin(m.from_user.id):
+        bot.reply_to(m, "⛔ admin only")
+        return
+    now = int(time.time())
+    rows = ["<b>Like pool health</b>", "━━━━━━━━━━━━━━━"]
+    try:
+        pool = ff_bd_api.get_pool()
+    except Exception as ex:
+        pool = []
+        rows.append(f"pool error: <code>{ex}</code>")
+    live = [t for t in pool if (t.get("exp") or 0) > now]
+    rows.append(f"tokens: <b>{len(pool)}</b> ({len(live)} not expired)")
+
+    hosts = {}
+    for t in pool:
+        h = (t.get("server_url") or "no server_url").split("//")[-1].split("/")[0]
+        hosts[h] = hosts.get(h, 0) + 1
+    for h, c in sorted(hosts.items(), key=lambda kv: -kv[1])[:4]:
+        rows.append(f"  • {h} — {c}")
+
+    try:
+        accs = ff_bd_api.phone_accounts()
+        burned = ff_bd_api._burned_load()
+        rows.append(f"accounts on file: <b>{len(accs)}</b> · logins spent: <b>{len(burned)}</b>")
+    except Exception:
+        pass
+
+    px = ff_bd_api._proxy() if hasattr(ff_bd_api, "_proxy") else ""
+    cc = ""
+    try:
+        cc = ff_bd_api._exit_country()
+    except Exception:
+        pass
+    rows.append(f"exit: <b>{(cc or 'unknown').upper()}</b> · proxy: "
+                f"{'<code>' + px + '</code>' if px else 'none'}")
+
+    if not live:
+        rows.append("")
+        rows.append("⚠️ No usable token. Likes and /profile cannot work until the pool can "
+                    "mint from a BD IP: run on the phone, or set <code>LIKE_PROXY_URL</code> "
+                    "to a BD proxy.")
+    else:
+        bad = [t for t in live if t.get("server_url") and "freefiremobile.com" in str(t.get("server_url"))]
+        if bad:
+            rows.append("")
+            rows.append(f"⚠️ {len(bad)} token(s) belong to a non-BD region and will be refused by the BD server.")
+    bot.reply_to(m, "\n".join(rows))
+
+
 @bot.message_handler(commands=["profile"])
 def cmd_profile(m):
     parts = m.text.split()
@@ -1196,7 +1281,13 @@ def cmd_profile(m):
         return
     if not p or p.get("error"):
         err = (p or {}).get("error", "player not found")
-        bot.edit_message_text(f"❌ Could not fetch profile: {err}", msg.chat.id, msg.message_id)
+        why = pool_problem_text()
+        text = f"❌ Could not fetch profile: {err}"
+        if why:
+            text += "\n\n" + why
+        else:
+            text += "\n\nThe pool has a token, so this is about the UID: confirm it is a BD-server player."
+        bot.edit_message_text(text, msg.chat.id, msg.message_id)
         return
     import time as _t
     age = ""

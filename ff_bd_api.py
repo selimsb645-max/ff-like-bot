@@ -2,7 +2,9 @@
 """
 FF BD API — stats + likes via JWT pool.
 Endpoints verified 2026-10-23:
-  GetPlayerPersonalShow / LikeProfile @ clientbp.ggpolarbear.com (OB53/55, Bearer JWT)
+  GetPlayerPersonalShow / LikeProfile @ the BD client host (OB53/55, Bearer JWT)
+  Host is resolved at runtime (garena_hosts): ggpolarbear.com went NXDOMAIN on
+  2026-11-03 and every hardcoded call to it silently returned "no profile".
   JWT pool: external minting service (uid+pass -> fresh JWT per request)
 Target uid = BD player's account_id (11-digit, as shown in profile).
 """
@@ -14,8 +16,43 @@ from Crypto.Util.Padding import pad
 warnings.filterwarnings("ignore")
 AES_KEY = b"Yg&tc%DEuh6%Zc^8"
 AES_IV = b"6oyZDr22E3ychjM%"
-PROFILE_URL = "https://clientbp.ggpolarbear.com/GetPlayerPersonalShow"
-LIKE_URL = "https://clientbp.ggpolarbear.com/LikeProfile"
+import garena_hosts as _hosts
+
+
+def _proxy() -> str:
+    """BD exit proxy for every Garena call, when one is configured.
+
+    Order matters: a like-specific override wins, then the phone tunnel that
+    run.sh discovers, then the shared BD proxy the glory engine uses.
+    A malformed value (socks5://:1080 with no host) is ignored, not used.
+    """
+    for key in ("LIKE_PROXY_URL", "PHONE_PROXY_URL", "BD_PROXY_URL"):
+        val = (os.environ.get(key) or "").strip()
+        if not val or "://" not in val:
+            continue
+        if not val.split("://", 1)[1].split("/", 1)[0].strip(":"):
+            continue
+        return val
+    return ""
+
+
+def _pxkw() -> dict:
+    px = _proxy()
+    return {"proxy": px} if px else {}
+
+
+def profile_url() -> str:
+    return _hosts.client_base() + "/GetPlayerPersonalShow"
+
+
+def like_url() -> str:
+    return _hosts.client_base() + "/LikeProfile"
+
+
+def _api_base(token: dict | None = None) -> str:
+    """Prefer the server_url the game handed this account at login."""
+    own = _hosts.normalise_server_url((token or {}).get("server_url"))
+    return own or _hosts.client_base()
 JWT_SERVICE = "https://sheihk-jwt-ob55.up.railway.app/token"
 
 # Live public token pools (community like-bots that auto-refresh their JWTs to GitHub)
@@ -63,6 +100,9 @@ def _headers(jwt: str, rv: str = "OB55") -> dict:
         "Expect": "100-continue",
         "X-Unity-Version": "2018.4.11f1",
         "X-GA": "v1 1",
+        # Garena signs with the caller's clock: a stale or missing X-GA-SV is
+        # rejected ("SignError1" / "signature is invalid") even with a good JWT
+        "X-GA-SV": str(int(time.time())),
         "ReleaseVersion": rv,
     }
 
@@ -93,7 +133,8 @@ def load_creds() -> list:
 
 # ── Self-minted JWT (MajorLogin, verified 2026-10-23) ──────────────
 GRANT_URL = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
-MAJOR_LOGIN_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
+def major_login_url() -> str:
+    return _hosts.login_base() + "/MajorLogin"
 CLIENT_SECRET = "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
 LOGIN_UA = "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)"
 
@@ -122,7 +163,7 @@ def guest_grant(uid: str, pw: str):
             "client_id": 100067, "client_secret": CLIENT_SECRET, "client_type": 2,
             "password": pw, "response_type": "token", "uid": int(uid)},
             headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
-            timeout=15, verify=False)
+            timeout=15, verify=False, **_pxkw())
         if r.status_code != 200:
             return None
         d = r.json().get("data", r.json())
@@ -132,8 +173,9 @@ def guest_grant(uid: str, pw: str):
         return None
 
 
-def major_login(access_token: str, open_id: str) -> str | None:
-    """MajorLogin (OB55, dummy X-GA-SV) -> JWT or None."""
+def _major_login_bytes(access_token: str, open_id: str):
+    """Raw MajorLogin response, or None. The response carries both the JWT and
+    the server_url that says WHICH REGION this account belongs to."""
     try:
         wire = (_pf_str(22, open_id) + _pf_str(23, "4")
                 + _pf_str(29, access_token) + _pf_str(99, "4"))
@@ -142,15 +184,40 @@ def major_login(access_token: str, open_id: str) -> str | None:
              "X-GA-SV": str(int(time.time())), "Content-Type": "application/x-www-form-urlencoded",
              "Expect": "100-continue", "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1",
              "ReleaseVersion": "OB55"}
-        r = httpx.post(MAJOR_LOGIN_URL, headers=h, data=body, timeout=20, verify=False)
+        r = httpx.post(major_login_url(), headers=h, data=body, timeout=20,
+                       verify=False, **_pxkw())
         if r.status_code != 200:
             return None
-        m = re.search(rb"(eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]{43})", r.content)
-        if not m:
-            return None
-        return m.group(1).decode()
+        return r.content
     except Exception:
         return None
+
+
+_JWT_RE = re.compile(rb"(eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]{43})")
+_URL_RE = re.compile(rb"https://[A-Za-z0-9._\-]+")
+
+
+def major_login_full(access_token: str, open_id: str) -> dict | None:
+    """{token, server_url} from one MajorLogin, or None."""
+    raw = _major_login_bytes(access_token, open_id)
+    if not raw:
+        return None
+    m = _JWT_RE.search(raw)
+    if not m:
+        return None
+    out = {"token": m.group(1).decode(), "server_url": ""}
+    for cand in _URL_RE.findall(raw):
+        url = cand.decode("utf-8", "replace")
+        if "freefiremobile.com" in url or "bp." in url:
+            out["server_url"] = url
+            break
+    return out
+
+
+def major_login(access_token: str, open_id: str) -> str | None:
+    """MajorLogin (OB55, current X-GA-SV) -> JWT or None."""
+    full = major_login_full(access_token, open_id)
+    return full["token"] if full else None
 
 
 def mint_jwt_self(uid: str, pw: str) -> dict | None:
@@ -158,15 +225,17 @@ def mint_jwt_self(uid: str, pw: str) -> dict | None:
     tok_pair = guest_grant(uid, pw)
     if not tok_pair:
         return None
-    tok = major_login(*tok_pair)
-    if not tok:
+    full = major_login_full(*tok_pair)
+    if not full:
         return None
+    tok = full["token"]
     pl = tok.split(".")[1]
     pl += "=" * (-len(pl) % 4)
     claims = json.loads(base64.urlsafe_b64decode(pl))
     return {"uid": uid, "pass": pw, "token": tok,
             "account_id": claims.get("account_id"),
             "region": claims.get("lock_region", "BD"),
+            "server_url": full.get("server_url", ""),
             "exp": claims.get("exp")}
 
 def mint_jwt(uid: str, pw: str) -> dict | None:
@@ -277,7 +346,8 @@ def get_profile(account_id, jwt: str = None) -> dict | None:
     h["ReleaseVersion"] = "OB53"
     h["X-GA-SV"] = "1789556611"
     try:
-        r = httpx.post(PROFILE_URL, headers=h, data=_enc(wire), timeout=20, verify=False)
+        r = httpx.post(profile_url(), headers=h, data=_enc(wire), timeout=20,
+                       verify=False, **_pxkw())
     except Exception:
         return None
     if r.status_code != 200:
@@ -398,8 +468,8 @@ def check_token(jwt: str) -> bool:
         wire = _pb(1, HEALTH_TARGET) + _pb(2, 1)
         h = dict(_headers(jwt))
         h["ReleaseVersion"] = "OB53"
-        h["X-GA-SV"] = "1789556611"
-        r = httpx.post(PROFILE_URL, headers=h, data=_enc(wire), timeout=15, verify=False)
+        r = httpx.post(profile_url(), headers=h, data=_enc(wire), timeout=15,
+                       verify=False, **_pxkw())
         return r.status_code == 200
     except Exception:
         return False
@@ -424,8 +494,12 @@ def drop_from_pool(dead_ids) -> int:
 
 
 # ── Guild (clan) API ─────────────────────────────────────────
-CLAN_INFO_URL = "https://clientbp.ggpolarbear.com/GetClanInfoByClanID"
-CLAN_MAIN_URL = "https://clientbp.ggpolarbear.com/GetClanMainPageInfo"
+def clan_info_url() -> str:
+    return _hosts.client_base() + "/GetClanInfoByClanID"
+
+
+def clan_main_url() -> str:
+    return _hosts.client_base() + "/GetClanMainPageInfo"
 
 
 def _pb_varint(n: int) -> bytes:
@@ -488,7 +562,8 @@ def get_guild(clan_id: int, jwt: str = None) -> dict | None:
 
     # 1) basic info (plaintext protobuf response)
     try:
-        r = httpx.post(CLAN_INFO_URL, headers=_headers(jwt, "OB55"), data=body, timeout=20, verify=False)
+        r = httpx.post(clan_info_url(), headers=_headers(jwt, "OB55"), data=body,
+                   timeout=20, verify=False, **_pxkw())
         if r.status_code != 200 or not r.content:
             return None
         pt = r.content
@@ -532,7 +607,8 @@ def get_guild(clan_id: int, jwt: str = None) -> dict | None:
         uids.add(out["captain"])
     uids.update(out.get("officers") or [])
     try:
-        r2 = httpx.post(CLAN_MAIN_URL, headers=_headers(jwt, "OB55"), data=body, timeout=20, verify=False)
+        r2 = httpx.post(clan_main_url(), headers=_headers(jwt, "OB55"), data=body,
+                    timeout=20, verify=False, **_pxkw())
         if r2.status_code == 200 and r2.content:
             for f, t, v in _walk_pb(r2.content):
                 if f == 3 and t == "bytes":
@@ -617,6 +693,16 @@ def _burned_add(uids):
         pass
 
 
+def _exit_country() -> str:
+    """Country code this machine (or its BD proxy) looks like from outside."""
+    try:
+        kw = _pxkw()
+        r = httpx.get("https://ipinfo.io/json", timeout=12, verify=False, **kw)
+        return str(r.json().get("country") or "")
+    except Exception:
+        return ""
+
+
 def refresh_pool() -> list:
     """Mint JWTs for the NEWEST unused pool accounts only.
 
@@ -640,15 +726,37 @@ def refresh_pool() -> list:
     cands.sort(reverse=True)                       # newest registrations first
     cands = cands[:POOL_MINT_BUDGET]
 
-    pool, touched = [], []
+    # A guest account can be logged in ONCE and Garena stamps its region from the
+    # IP that minted it. Minting from a non-BD machine therefore cannot produce a
+    # usable BD token, it only burns accounts. Check before spending anything.
+    if not _proxy():
+        cc = _exit_country()
+        if cc and cc.upper() != "BD":
+            print(f"[POOL] mint blocked: this machine exits from {cc.upper()} and a "
+                  f"{cc.upper()} token can never like or read a BD player.")
+            print("[POOL] no account was spent. Set LIKE_PROXY_URL to a BD proxy "
+                  "(the phone tunnel does this) or run the bot on the phone.")
+            return []
+
+    pool, touched, wrong_region = [], [], 0
     for _n, uid, pw in cands:
         touched.append(uid)
         try:
             t = mint_jwt(uid, pw)
         except Exception:
             t = None
-        if t:
-            pool.append(t)
+        if not t:
+            continue
+        url = str(t.get("server_url") or "")
+        if url and not _hosts.is_bd_host(url):
+            wrong_region += 1
+            print(f"[POOL] {uid} came back on {url} - wrong region for BD likes")
+            if wrong_region >= 1:
+                print("[POOL] stopping mint: every further account would land in the same "
+                      "wrong region and waste its one-time login")
+                break
+            continue
+        pool.append(t)
     _burned_add(touched)                           # login spent either way
     try:
         POOL_FILE.write_text(json.dumps(pool, indent=1))
@@ -674,7 +782,7 @@ def _client():
         with _CLIENT_LOCK:
             if _CLIENT is None:
                 _CLIENT = httpx.Client(
-                    verify=False, timeout=12,
+                    verify=False, timeout=12, **_pxkw(),
                     limits=httpx.Limits(max_connections=60, max_keepalive_connections=30),
                     headers={"Connection": "keep-alive"},
                 )
@@ -785,7 +893,8 @@ def get_stats(account_id: int, jwt: str = None) -> dict | None:
     m.krishna_ = int(account_id)
     m.teamXdarks = 1
     payload = _enc(m.SerializeToString())
-    r = httpx.post(PROFILE_URL, headers=_headers(jwt, "OB53"), data=payload, timeout=25, verify=False)
+    r = httpx.post(profile_url(), headers=_headers(jwt, "OB53"), data=payload,
+                   timeout=25, verify=False, **_pxkw())
     if r.status_code != 200:
         msg = r.content[:60].decode("utf-8", "replace").strip()
         return {"error": msg or f"HTTP {r.status_code}"}
@@ -888,7 +997,9 @@ def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> 
                 return
         try:
             time.sleep(_rnd.uniform(0, 0.3))  # jitter: avoid burst signature
-            r = cli.post(LIKE_URL, headers=_headers(t["token"], "OB55"), data=payload)
+            base = _api_base(t)
+            r = cli.post(base + "/LikeProfile", headers=_headers(t["token"], "OB55"),
+                         data=payload)
             if r.status_code == 200:
                 with lock:
                     used.add(key)
@@ -918,8 +1029,9 @@ def get_full_profile(account_id: int, jwt: str = None) -> dict:
         return {}
     try:
         body = _enc(b"\x08" + _pb_varint(int(account_id)))
-        r = httpx.post("https://clientbp.ggpolarbear.com/GetPlayerPersonalShow",
-                       headers=_headers(jwt, "OB55"), data=body, timeout=20, verify=False)
+        r = httpx.post(_api_base() + "/GetPlayerPersonalShow",
+                       headers=_headers(jwt, "OB55"), data=body, timeout=20,
+                       verify=False, **_pxkw())
         if r.status_code != 200:
             return {}
         out = {}
@@ -936,7 +1048,8 @@ def get_full_profile(account_id: int, jwt: str = None) -> dict:
 # Verified against the UNFAIR glory bot: endpoint is /RequestJoinClan and the
 # body is an AES-CBC encrypted `MyMessage{field_1: clan_id}` (octet-stream),
 # NOT a wire proto. All the /JoinClan,/ApplyClan style paths return 404.
-CLAN_JOIN_URL = "https://clientbp.ggpolarbear.com/RequestJoinClan"
+def clan_join_url() -> str:
+    return _hosts.client_base() + "/RequestJoinClan"
 CLAN_KEY = bytes([89, 103, 38, 116, 99, 37, 68, 69, 117, 104, 54, 37, 90, 99, 94, 56])
 CLAN_IV = bytes([54, 111, 121, 90, 68, 114, 50, 50, 69, 51, 121, 99, 104, 106, 77, 37])
 

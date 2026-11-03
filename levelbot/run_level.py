@@ -14,6 +14,9 @@ import json
 import random
 from datetime import datetime, timezone
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import garena_hosts  # noqa: E402
 import re
 import sys
 import time
@@ -105,7 +108,7 @@ def _heartbeat_thread():
 
 PROGRESS_FILE = Path(__file__).parent.parent / "level_progress.json"
 GRANT_URL = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
-ML_URL = "https://loginbp.ggpolarbear.com/MajorLogin"
+ML_URL = "https://" + garena_hosts.login_host() + "/MajorLogin"  # host is resolved, see garena_hosts
 
 
 def load_accounts(limit, prefer=None):
@@ -452,7 +455,7 @@ def _gr_login(uid, pw):
         return {"jwt": jwt, "key": bytes(key), "iv": bytes(iv),
                 "ts": fields[21][0] if 21 in fields else int(time.time()),
                 "url": (fields[10][0].decode(errors="replace") if 10 in fields
-                        else "https://clientbp.ggpolarbear.com"),
+                        else garena_hosts.client_base()),
                 "region": "BD", "uid": str(uid), "pw": pw,
                 "account_id": fields[1][0] if 1 in fields else int(uid)}
     except Exception as e:
@@ -522,7 +525,7 @@ def raw_login(uid, pw):
                   "Content-Type": "application/x-www-form-urlencoded",
                   "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1", "ReleaseVersion": "OB55"}
             sess = gr.new_session()
-            r = sess.post("https://loginbp.ggpolarbear.com/MajorLogin", headers=h3,
+            r = sess.post("https://" + garena_hosts.login_host() + "/MajorLogin", headers=h3,
                           data=gr.encrypt_payload(wire3), timeout=20, verify=False)
             print(f"    raw_login[{uid}]: gr path status={r.status_code} len={len(r.content)} "
                   f"prot={b'Protection' in r.content}", flush=True)
@@ -766,7 +769,7 @@ def profile_level_exp(jwt, uid, base_url=None):
     """Raw profile fetch: f6=level, f7=exp, f21=likes."""
     try:
         body = api._enc(b"\x08" + api._pb_varint(int(uid)))
-        host = (base_url or "https://clientbp.ggpolarbear.com").rstrip("/")
+        host = (base_url or garena_hosts.client_base()).rstrip("/")
         r = httpx.post(host + "/GetPlayerPersonalShow",
             headers=api._headers(jwt, "OB55"), data=body, timeout=20, verify=False)
         out = {}
@@ -794,7 +797,7 @@ def ext_login_data(jwt):
         H = dict(api._headers(jwt, "OB55"))
         H["Authorization"] = f"Bearer {jwt}"
         H["Content-Type"] = "application/octet-stream"
-        r = httpx.post("https://clientbp.ggpolarbear.com/GetLoginData", headers=H,
+        r = httpx.post(garena_hosts.client_base() + "/GetLoginData", headers=H,
                        data=api._enc(b""), timeout=25, verify=False)
         if r.status_code != 200:
             print(f"[extLD] HTTP {r.status_code}: {r.content[:60]}", flush=True)
