@@ -54,6 +54,7 @@ TOKEN_ENV = "BOT_ACCESS_KEY"
 # never needs to call a server to be let in.
 TG_BOT = "NAI_AccessBot"
 REDEEM_URL = "https://solas-5609a435.base44.app/functions/ffAccessRedeem"
+OFFLINE_GRACE_HOURS = 24   # how long an activated phone may start with no internet
 SIGN_SECRET = b"NAI-access-2026-q7Lm4xZ9pT2vRb6n"
 
 
@@ -381,6 +382,54 @@ def _try_all(code: str) -> tuple[bool, str, dict | None]:
     return False, (legacy_msg if not legit else server_msg), None
 
 
+
+def check_remote(rec: dict) -> tuple[str, str]:
+    """Ask the server whether this phone is still allowed to start.
+
+    Returns (state, message) where state is "ok", "revoked", "unknown" or
+    "offline". Called on every start so revoking a code in Telegram takes effect
+    on that person's next launch, without anything changing on their phone.
+    """
+    payload = json.dumps({"action": "check", "device": device_fingerprint()}).encode()
+    req = urllib.request.Request(REDEEM_URL, data=payload,
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=12) as res:
+            data = json.loads(res.read() or b"{}")
+    except urllib.error.HTTPError as ex:
+        try:
+            data = json.loads(ex.read() or b"{}")
+        except Exception:
+            return "offline", f"server said HTTP {ex.code}"
+    except Exception:
+        return "offline", "no internet"
+
+    status = data.get("status")
+    if status == "revoked":
+        return "revoked", data.get("message", "access revoked")
+    if data.get("ok"):
+        return "ok", data.get("message", "allowed")
+    if status == "unknown":
+        return "unknown", data.get("message", "this phone is not on the server")
+    return "offline", data.get("message", "unexpected answer")
+
+
+def _stamp_verified(rec: dict) -> None:
+    doc = load()
+    for r in doc.get("keys", []):
+        if r.get("label") == rec.get("label"):
+            r["last_verified"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    save(doc)
+
+
+def _mark_local_revoked(rec: dict) -> None:
+    doc = load()
+    for r in doc.get("keys", []):
+        if r.get("label") == rec.get("label"):
+            r["revoked"] = True
+    save(doc)
+
+
 def require_access(purpose: str = "this program") -> None:
     """Let the person in with a Telegram access code. Nothing else.
 
@@ -409,9 +458,31 @@ def require_access(purpose: str = "this program") -> None:
     if is_remember(doc):
         known = bound_for(fp, doc)
         if known:
-            print(f"[access] this phone is activated ({known['label']}) - go ahead")
-            touch(known)
-            return
+            state, why = check_remote(known)
+            if state == "ok":
+                _stamp_verified(known)
+                touch(known)
+                print(f"[access] this phone is activated ({known['label']}) - go ahead")
+                return
+            if state == "revoked":
+                _mark_local_revoked(known)
+                _fail(f"[access] access to this phone was revoked ({why}). "
+                      "Telegram-এ @NAI_AccessBot থেকে নতুন কোড নাও।")
+            # server unreachable or the record is gone: allow a short grace period
+            last = str(known.get("last_verified") or known.get("bound_at") or "")
+            if last:
+                try:
+                    age_h = (time.time() - time.mktime(time.strptime(last, "%Y-%m-%dT%H:%M:%SZ"))) / 3600
+                except Exception:
+                    age_h = 999.0
+                if age_h <= OFFLINE_GRACE_HOURS:
+                    print(f"[access] server not reachable ({why}); last check {age_h:.1f}h ago - "
+                          f"allowing up to {OFFLINE_GRACE_HOURS}h offline")
+                    touch(known)
+                    return
+                _fail(f"[access] {OFFLINE_GRACE_HOURS}h ধরে সার্ভারে যোগাযোগ হচ্ছে না ({why}). "
+                      "একবার ইন্টারনেট দিয়ে চালাও, তারপর আবার চেষ্টা করো।")
+            print(f"[access] server not reachable ({why}) and no earlier check - asking for a code")
 
     print(f"\n=== {purpose} is locked ===")
     print(f"1) Telegram খুলে @{TG_BOT} খোঁজো, Start চাপো")

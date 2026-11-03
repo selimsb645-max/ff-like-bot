@@ -153,6 +153,23 @@ it sends two buttons, "📢 চ্যানেলে জয়েন করো" 
 makes the bot re-check membership with Telegram; only a real member gets the
 code, and the message then turns into "✅ ভেরিফাইড".
 
+
+### Revoking someone
+
+The owner writes this to @NAI_AccessBot from his own Telegram account:
+
+    /revoke NAI-4K7Q-9XZ2-M3TB
+
+That flips the code to `revoked` in the AccessCode table. Every start now asks
+the server `{action:"check", device}` before the bot runs, so the bound phone is
+refused on its **next launch** with "access to this phone was revoked". Nothing
+has to change on their phone, and a fresh code is needed to get back in.
+Only the owner's Telegram id can revoke; anyone else gets "শুধু owner পারবে".
+
+If the phone has no internet it may still start for up to 24 hours after its
+last successful check (so a farm without a link does not die instantly), and it
+refuses after that until it reaches the server once.
+
 ### Under the hood
 * `functions/ffAccessBot` (Base44, webhook of @NAI_AccessBot) mints the code and
   stores it in the `AccessCode` table as `issued`.
