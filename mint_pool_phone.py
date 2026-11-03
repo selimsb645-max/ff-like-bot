@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Mint like-pool tokens from a BD connection (run this on the phone).
 
-    python3 mint_pool_phone.py 6
+    python3 mint_pool_phone.py                # 6 tokens from accounts already on file
+    python3 mint_pool_phone.py --register 6   # register 6 BRAND-NEW accounts and mint them
+
+Garena refuses MajorLogin for accounts older than a few days ("Protection Bypass"),
+so once the fresh ones are spent the only way forward is registering new guests and
+logging them in immediately - which is what --register does.
 
 Why this exists: Garena stamps a guest account's region from the IP that logs it
 in, so tokens for the like pool can only be minted from Bangladesh. The GitHub
@@ -17,9 +22,54 @@ import time
 from pathlib import Path
 
 import ff_bd_api as api
+import random
+import secrets
+import string
+import sys
 
-N = int(sys.argv[1]) if len(sys.argv) > 1 else 6
+sys.path.insert(0, str(Path(__file__).parent))
+from guests_manager import game_register as gr  # noqa: E402
+
+ARGS = [a for a in sys.argv[1:] if not a.startswith("-")]
+DO_REGISTER = "--register" in sys.argv
+N = int(ARGS[0]) if ARGS else 6
 POOL = Path(__file__).parent / "bd_pool.json"
+
+
+
+def register_and_mint(n):
+    """Register n fresh guests and log each one in straight away (BD IP required)."""
+    made = []
+    sess = gr.new_session()
+    for i in range(n):
+        print(f"[{i+1}/{n}] registering guest ... ", end="", flush=True)
+        cred, why = gr.msdk_register(sess)
+        if not cred:
+            print(f"register failed ({why}) - stopping")
+            break
+        uid, pw = cred
+        at, oid = gr.token_grant(sess, uid, pw)
+        if not at:
+            print("grant failed - stopping")
+            break
+        nick = "ANON\u2022" + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+        ok, msg = gr.major_register(sess, at, oid, nick)
+        if not ok:
+            print(f"major register failed ({msg}) - stopping")
+            break
+        print(f"{nick} (uid {uid})", end=" ")
+        tok, reason = api.mint_jwt_detailed(str(uid), pw)
+        if not tok:
+            print(f"login failed: {reason}")
+            api._burned_add([str(uid)])
+            time.sleep(6)
+            continue
+        tok["name"] = nick
+        tok["level"] = None
+        made.append(tok)
+        print("-> token ok")
+        time.sleep(6)               # registration throttles quickly from one IP
+    return made
 
 
 def push(msg):
@@ -63,7 +113,7 @@ def main():
     cands.sort(reverse=True)          # newest registrations first
     print(f"candidates available: {len(cands)} | already in pool: {len(pool)}")
 
-    ok, tried = 0, []
+    ok, tried, consec = 0, [], 0
     for _n, uid, pw in cands:
         if ok >= N:
             break
@@ -72,13 +122,17 @@ def main():
         print(f"minting {uid} ... ", end="", flush=True)
         tried.append(uid)
         try:
-            t = api.mint_jwt(uid, pw)
+            t, reason = api.mint_jwt_detailed(uid, pw)
         except Exception as ex:
-            t = None
-            print(f"error {ex}")
+            t, reason = None, f"error {ex}"
         if not t:
-            print("failed")
+            print(f"failed - {reason}")
+            consec += 1
+            if consec >= 3 and "Protection Bypass" not in reason and "no jwt" not in reason:
+                print("three failures in a row from this network - stopping before more accounts are touched")
+                break
             continue
+        consec = 0
         url = str(t.get("server_url") or "")
         if url and not api._hosts.is_bd_host(url):
             print(f"wrong region ({url}) - stopping")
@@ -87,6 +141,10 @@ def main():
         ok += 1
         print("ok")
 
+    if DO_REGISTER:
+        for t in register_and_mint(N):
+            pool.append(t)
+            ok += 1
     api._burned_add(tried)            # a login is spent either way
     POOL.write_text(json.dumps(pool, indent=1))
     print(f"pool now holds {len(pool)} live tokens ({ok} new)")

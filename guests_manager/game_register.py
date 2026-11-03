@@ -139,7 +139,7 @@ def major_register(session, at, oid, nickname):
              + pf(7, 1) + pf(13, 1) + pf(14, enc_oid.encode("latin1")) + pf(15, "bn")
              + pf(16, 1) + pf(17, 1) + pf(22, FIELD_22))
     h = {"User-Agent": "Dalvik/2.1.0 (Linux; U; Android 13; CPH2095 Build/RKQ1.211119.001)",
-         "Accept-Encoding": "deflate, gzip", "X-GA-SV": "1789535859", "Authorization": "Bearer",
+         "Accept-Encoding": "deflate, gzip", "X-GA-SV": str(int(time.time())), "Authorization": "Bearer",
          "X-GA": "v1 1", "ReleaseVersion": "OB55",
          "Content-Type": "application/x-www-form-urlencoded",
          "X-Unity-Version": "2018.4.12f1"}
@@ -161,7 +161,7 @@ def major_register(session, at, oid, nickname):
 def major_login(session, at, oid):
     wire = (pf(22, oid) + pf(23, "4") + pf(29, at) + pf(99, "4"))
     h = {"User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
-         "Accept-Encoding": "gzip", "X-GA-SV": "1789638359",
+         "Accept-Encoding": "gzip", "X-GA-SV": str(int(time.time())),
          "Content-Type": "application/x-www-form-urlencoded",
          "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1", "ReleaseVersion": "OB55"}
     r = session.post(MAJOR_LOGIN, headers=h, data=encrypt_payload(wire), timeout=20, verify=False)

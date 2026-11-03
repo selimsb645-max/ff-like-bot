@@ -247,6 +247,58 @@ def major_login(access_token: str, open_id: str) -> str | None:
     return full["token"] if full else None
 
 
+def mint_jwt_detailed(uid: str, pw: str) -> tuple[dict | None, str]:
+    """mint_jwt plus the reason it failed - "failed" alone is unactionable."""
+    try:
+        r = httpx.post(GRANT_URL, json={
+            "client_id": 100067, "client_secret": CLIENT_SECRET, "client_type": 2,
+            "password": pw, "response_type": "token", "uid": int(uid)},
+            headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
+            timeout=15, verify=False, **_pxkw())
+    except Exception as ex:
+        return None, f"grant network error: {type(ex).__name__}"
+    if r.status_code != 200:
+        return None, f"grant http{r.status_code}"
+    d = r.json().get("data", {})
+    at, oid = d.get("access_token"), d.get("open_id")
+    if not (at and oid):
+        return None, f"grant no token: {str(d)[:60]}"
+
+    wire = (_pf_str(22, oid) + _pf_str(23, "4") + _pf_str(29, at) + _pf_str(99, "4"))
+    h = {"User-Agent": LOGIN_UA, "Connection": "Keep-Alive", "Accept-Encoding": "gzip",
+         "X-GA-SV": str(int(time.time())), "Content-Type": "application/x-www-form-urlencoded",
+         "Expect": "100-continue", "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1",
+         "ReleaseVersion": "OB55"}
+    try:
+        r2 = httpx.post(major_login_url(), headers=h, data=_enc(wire), timeout=20,
+                        verify=False, **_pxkw())
+    except Exception as ex:
+        return None, f"majorlogin network error: {type(ex).__name__}"
+    if r2.status_code != 200:
+        return None, f"majorlogin http{r2.status_code}: {r2.content[:40]!r}"
+    m = _JWT_RE.search(r2.content)
+    if not m:
+        return None, f"majorlogin no jwt ({len(r2.content)}b): {r2.content[:40]!r}"
+
+    tok = m.group(1).decode()
+    pl = tok.split(".")[1]
+    pl += "=" * (-len(pl) % 4)
+    claims = json.loads(base64.urlsafe_b64decode(pl))
+    url = ""
+    for cand in _URL_RE.findall(r2.content):
+        u = cand.decode("utf-8", "replace")
+        if "freefiremobile.com" in u or "bp." in u:
+            url = u
+            break
+    if url and not _hosts.is_bd_host(url):
+        return None, f"logged in on {url} (not BD)"
+    return {"uid": uid, "pass": pw, "token": tok,
+            "account_id": claims.get("account_id"),
+            "region": claims.get("lock_region", "BD"),
+            "server_url": url,
+            "exp": claims.get("exp")}, ""
+
+
 def mint_jwt_self(uid: str, pw: str) -> dict | None:
     """Mint a JWT for a known game account without any external service."""
     tok_pair = guest_grant(uid, pw)
