@@ -481,7 +481,13 @@ def raw_login(uid, pw):
             _ip = os.environ.get("PUBLIC_IP", "").strip()
         except Exception:
             _ip = ""
-        ml = ff_majorlogin.major_login(uid, oid, at, _ip or "223.191.51.89")
+        try:
+            from full_login import full_major_login
+            ml = full_major_login(uid, oid, at)
+        except Exception:
+            ml = None
+        if not (ml and ml.get("jwt")):
+            ml = ff_majorlogin.major_login(uid, oid, at, _ip or "223.191.51.89")
         if ml and ml.get("jwt"):
             ml["uid"] = str(uid)
             ml["pw"] = pw
