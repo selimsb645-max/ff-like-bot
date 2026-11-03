@@ -65,38 +65,29 @@ setting those two secrets is the way to close that door completely.
 
 ## Access control - who can run this bot
 
-The repo is private and the bot is locked twice. Cloning it is not enough.
+Two things stand between a stranger and a running bot, and nothing else.
 
-*Layer 0 (GitHub):* only people you invite can clone. Password authentication is
-dead there; they use a fine-grained token (Contents: Read-only) as the password.
+*Cloning:* the repo is private, so GitHub itself decides who may clone
+(fine-grained token, Contents: Read-only, used as the password).
 
-*Layer 1 (`auth.py`):* per-person bot login.
+*Running:* one prompt, one key.
 
-    python3 auth.py adduser rahim     # give access
-    python3 auth.py list              # who can run it
-    python3 auth.py deluser rahim     # take it back
+    python3 bot.py
+    === FF BD bot is locked ===
+    Access key: NAI-XXXX-XXXX-XXXX
 
-*Layer 2 (`access.py`):* one shared gate password + a personal, single-use,
-device-bound access key.
+The key is issued by the owner (`python3 access.py new <name>`), printed once,
+and welds itself to the first phone that redeems it. Another phone with the same
+key is refused. Once a phone is activated it is remembered and stops asking
+(`python3 access.py setmode strict` brings the prompt back on every start).
 
-    python3 access.py new rahim       # issue a key, printed once
-    python3 access.py list            # state: unused / active / revoked
-    python3 access.py revoke rahim    # kill it now
-    python3 access.py setgate         # change the shared username/password
-    python3 access.py status          # what the gate expects
+    python3 access.py new rahim      # issue
+    python3 access.py list           # unused / active / revoked
+    python3 access.py revoke rahim   # cut access
+    python3 access.py status         # mode + this device
 
-The start-up prompts, in order:
-
-    Username   : selimsb645-max
-    Password   : (the shared gate password)
-    Access key : NAI-XXXX-XXXX-XXXX
-
-The key welds itself to the first device that uses it. The same key on another
-phone, another Termux install or another account is refused with
-"this key is already activated on another device". 3 failed attempts and the
-program exits. Servers and Actions skip the prompt only when
-`BOT_USERNAME`/`BOT_PASSWORD` (and optionally `BOT_ACCESS_KEY`) are set as
-secrets, which are verified against the same hashes.
+`BOT_TOKEN` is separate and still comes from @BotFather:
+`BOT_TOKEN='123:ABC' python3 bot.py`, or `export BOT_TOKEN=...` once in ~/.bashrc.
 
 ## Owner's phone as the BD proxy (best setup, free)
 

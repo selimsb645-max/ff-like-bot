@@ -230,7 +230,13 @@ def touch(rec: dict) -> None:
 
 
 def require_access(purpose: str = "this program") -> None:
-    """Ask username, password, access key. Returns only when all three pass."""
+    """Ask for the access key only. Returns only when the key is accepted.
+
+    Simple on purpose: one prompt, one key. The shared username/password pair is
+    no longer part of the start-up; the key is what proves access, and it stays
+    welded to the phone that first used it (remember mode) or is demanded on
+    every start (strict mode).
+    """
     doc = load()
 
     env_key = os.environ.get(TOKEN_ENV, "").strip()
@@ -242,32 +248,23 @@ def require_access(purpose: str = "this program") -> None:
         return
 
     if os.environ.get("GITHUB_ACTIONS") == "true" and not sys.stdin.isatty():
-        print("[access] trusted CI runner without a terminal - skipping the "
-              "interactive key check. Set BOT_ACCESS_KEY to require it here too.")
+        print("[access] headless runner - skipping the interactive key check. "
+              "Set BOT_ACCESS_KEY to require it there too.")
+        return
+
+    fp = device_fingerprint()
+    known = bound_for(fp, doc) if is_remember(doc) else None
+    if known:
+        # this phone already redeemed an active key: nothing to type
+        print(f"[access] this device is activated for '{known['label']}'")
+        touch(known)
         return
 
     print(f"\n=== {purpose} is locked ===")
-    import getpass
     for attempt in range(1, ATTEMPTS + 1):
         left = ATTEMPTS - attempt + 1
         try:
-            user = input(f"Username ({left} tries left): ").strip()
-            pw = getpass.getpass("Password: ")
-        except (EOFError, KeyboardInterrupt):
-            print("\n[access] cancelled.")
-            raise SystemExit(1)
-        if not gate_ok(user, pw, doc):
-            print("[access] wrong username or password.")
-            continue
-        fp = device_fingerprint()
-        known = bound_for(fp, doc) if is_remember(doc) else None
-        if known:
-            # this device already redeemed an active key: no need to type it again
-            print(f"[access] this device is already activated for '{known['label']}'")
-            touch(known)
-            return
-        try:
-            key = input("Access key: ").strip()
+            key = input(f"Access key ({left} tries left): ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\n[access] cancelled.")
             raise SystemExit(1)

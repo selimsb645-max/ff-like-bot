@@ -169,46 +169,20 @@ access_purpose = ""
 
 
 def require_auth(purpose: str = "this program") -> None:
-    """Gate the process. Returns only when the caller is authenticated."""
-    global access_purpose
-    access_purpose = purpose
-    users = load_users()
+    """Start-up gate.
 
-    if not users:
-        if os.environ.get("GITHUB_ACTIONS") == "true":
-            print("[auth] no local credential record; trusted CI runner - "
-                  "continuing. Run 'python3 auth.py adduser <name>' to lock it.")
-            return
-        _fail("[auth] no login configured for this repository.\n"
-              "       Owner: run  python3 auth.py adduser <name>  once.")
-
-    env_user = os.environ.get(USER_ENV, "").strip()
-    env_pass = os.environ.get(PASS_ENV, "")
-    if env_user and env_pass:
-        if check(env_user, env_pass, users):
-            print(f"[auth] {env_user} verified from environment")
-            _second_layer()
-            return
-        _fail("[auth] BOT_USERNAME / BOT_PASSWORD are wrong. Refusing to start.")
-
-    if os.environ.get("GITHUB_ACTIONS") == "true" and not sys.stdin.isatty():
-        print("[auth] trusted CI runner (no prompt possible) - continuing. "
-              "Set BOT_USERNAME/BOT_PASSWORD secrets to require login here too.")
+    Kept as the single entry point every module already calls, but the
+    per-user username/password prompt is gone: access is now proven by the
+    access key alone (access.require_access), because the owner asked for one
+    key at start-up instead of a stack of logins. The users map in auth.json is
+    still readable for older installs and is not consulted here.
+    """
+    try:
+        import access
+    except Exception as ex:                       # pragma: no cover
+        print(f"[auth] access layer unavailable: {ex}")
         return
-
-    print(f"\n=== {purpose} is locked ===")
-    for attempt in range(1, ATTEMPTS + 1):
-        try:
-            user = input(f"Username ({ATTEMPTS - attempt + 1} tries left): ").strip()
-            pw = getpass.getpass("Password: ")
-        except (EOFError, KeyboardInterrupt):
-            _fail("\n[auth] cancelled.")
-        if check(user, pw, users):
-            role = (users.get(user) or {}).get("role", "guest")
-            print(f"[auth] welcome, {user} ({role})\n")
-            return
-        print("[auth] wrong username or password, or no access for this user.")
-    _fail("[auth] too many failed attempts. Exiting.")
+    access.require_access(purpose)
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────
