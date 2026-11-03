@@ -647,14 +647,29 @@ def get_guild(clan_id: int, jwt: str = None) -> dict | None:
     out["uids"] = sorted(uids)
     return out
 
+EXT_CACHE = Path(__file__).parent / "external_tokens_cache.json"
+
+
+def _gh_auth_headers() -> dict:
+    """raw.githubusercontent is rate-limited per IP and Actions runners share IPs,
+    so authenticate the fetch with the repo token when one is available."""
+    for key in ("GITHUB_USAGE_TOKEN", "GITHUB_TOKEN", "GITHUB_ACCESS_TOKEN", "USAGE_PAT"):
+        tok = (os.environ.get(key) or "").strip()
+        if tok:
+            return {"Authorization": f"Bearer {tok}", "User-Agent": "ff-bot"}
+    return {"User-Agent": "ff-bot"}
+
+
 def fetch_external_tokens() -> list:
     """Pull fresh JWTs from public token pools (live community bots)."""
     now = time.time()
     out = []
     for url in EXTERNAL_TOKEN_URLS:
         try:
-            r = httpx.get(url, timeout=20, verify=False)
+            r = httpx.get(url, timeout=20, verify=False, headers=_gh_auth_headers(),
+                          **_pxkw())
             if r.status_code != 200:
+                print(f"[POOL] external fetch {url[-28:]} -> HTTP {r.status_code}")
                 continue
             d = r.json()
             items = d if isinstance(d, list) else [d]
@@ -684,6 +699,21 @@ def fetch_external_tokens() -> list:
         if t["account_id"] and t["account_id"] not in seen:
             seen.add(t["account_id"])
             uniq.append(t)
+    if uniq:
+        try:
+            EXT_CACHE.write_text(json.dumps(uniq))
+        except Exception:
+            pass
+        return uniq
+    # nothing fetched (rate limit / outage): reuse the last good cache
+    try:
+        cached = json.loads(EXT_CACHE.read_text())
+        alive = [t for t in cached if (t.get("exp") or 0) > now + 60]
+        if alive:
+            print(f"[POOL] external fetch failed -> {len(alive)} cached tokens")
+            return alive
+    except Exception:
+        pass
     return uniq
 
 
