@@ -154,6 +154,18 @@ makes the bot re-check membership with Telegram; only a real member gets the
 code, and the message then turns into "✅ ভেরিফাইড".
 
 
+
+### Seeing who has a code
+
+    /history              last 40 codes: total, bound, waiting, revoked
+    /history bound        only the phones that are welded
+    /history revoked      only the ones that were switched off
+
+Each row is `CODE  NAME  DEV  WHEN`, with 🕓 waiting, 🔒 bound to a phone,
+🚫 revoked. The device column is the first 4 characters of that phone's
+fingerprint, so two codes on the same phone look the same. Owner-only, like
+`/revoke`; anyone else gets "শুধু owner দেখতে পারবে".
+
 ### Revoking someone
 
 The owner writes this to @NAI_AccessBot from his own Telegram account:
