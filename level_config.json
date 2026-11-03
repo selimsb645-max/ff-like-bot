@@ -6,8 +6,8 @@
  "external": false,
  "team_code": "0",
  "prefer": [],
- "auto_phone": true,
- "workers": 3,
+ "auto_phone": false,
+ "workers": 2,
  "auto_mint": 2,
  "farm": true
 }

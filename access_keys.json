@@ -6,6 +6,18 @@
   "hash": "67b265d214ac4d2004c9b8076eaae18c41ded9380fab63d5fcc58cd055940f40",
   "iterations": 260000
  },
- "keys": [],
+ "keys": [
+  {
+   "label": "solas-sandbox",
+   "salt": "5171ad2c44ecbc8323361062cf958312",
+   "hash": "7065981bbc3474fd778b426eae5d330a9ec846073130bfc5592446ab9679b2a7",
+   "created": "2026-11-03T15:14:14Z",
+   "bound_device": "00b492a4b0e3b30017a9ff128dfad27c",
+   "bound_at": "2026-11-03T15:14:27Z",
+   "last_used": "2026-11-03T16:28:13Z",
+   "uses": 9,
+   "revoked": false
+  }
+ ],
  "mode": "remember"
 }

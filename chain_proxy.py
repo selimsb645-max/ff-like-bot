@@ -101,7 +101,60 @@ def handle(client, chain):
             pass
 
 
+def socks_front(client, chain):
+    """Speak SOCKS5 to the client, then walk the chain to whatever it asked for.
+
+    The game engine (levelbot/connection.py) only accepts a single socks5:// URL, so
+    this turns the tailnet -> phone chain into one local SOCKS5 endpoint it can use.
+    """
+    try:
+        head = client.recv(2)
+        if len(head) < 2 or head[0] != 5:
+            client.close(); return
+        nm = client.recv(head[1]) if head[1] else b""
+        client.sendall(b"\x05\x00")
+        req = client.recv(4)
+        if len(req) < 4:
+            client.close(); return
+        atyp = req[3]
+        if atyp == 1:
+            host = socket.inet_ntoa(client.recv(4))
+        elif atyp == 3:
+            n = client.recv(1)[0]
+            host = client.recv(n).decode()
+        else:
+            host = socket.inet_ntop(socket.AF_INET6, client.recv(16))
+        port = struct.unpack(">H", client.recv(2))[0]
+        remote = dial(chain, host, port)
+        client.sendall(b"\x05\x00\x00\x01" + socket.inet_aton("0.0.0.0") + struct.pack(">H", 0))
+        pump(client, remote)
+    except Exception:
+        try:
+            client.sendall(b"\x05\x01\x00\x01" + socket.inet_aton("0.0.0.0") + struct.pack(">H", 0))
+        except Exception:
+            pass
+        try:
+            client.close()
+        except Exception:
+            pass
+
+
 def main():
+    if sys.argv[1] == "--socks":
+        port = int(sys.argv[2])
+        chain = []
+        for part in sys.argv[3:]:
+            h, _, p = part.rpartition(":")
+            chain.append((h, int(p)))
+        srv = socket.socket()
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("127.0.0.1", port))
+        srv.listen(64)
+        print(f"socks5 on 127.0.0.1:{port} via {' -> '.join(f'{h}:{p}' for h, p in chain)}", flush=True)
+        while True:
+            c, _ = srv.accept()
+            threading.Thread(target=socks_front, args=(c, chain), daemon=True).start()
+
     port = int(sys.argv[1])
     chain = []
     for part in sys.argv[2:]:
