@@ -145,7 +145,7 @@ Nothing to hand out by hand any more. The access code comes from a Telegram bot.
 2. **Start the bot**, it asks for a code:
        BOT_TOKEN='<your own bot token>' python3 bot.py
        === FF BD bot is locked ===
-       1) Telegram খুলে @ff_new_top_up_bot খোঁজো, Start চাপো
+       1) Telegram খুলে @NAI_AccessBot খোঁজো, Start চাপো
        2) যে কোডটা আসবে সেটা এখানে পেস্ট করো
        Access code (3 tries left): _
 

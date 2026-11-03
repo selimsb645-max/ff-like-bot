@@ -50,7 +50,7 @@ TOKEN_ENV = "BOT_ACCESS_KEY"
 # Telegram access bot (functions/ffAccessBot in the agent app).
 # It signs short codes with this secret; we verify them offline, so the terminal
 # never needs to call a server to be let in.
-TG_BOT = "ff_new_top_up_bot"
+TG_BOT = "NAI_AccessBot"
 SIGN_SECRET = b"NAI-access-2026-q7Lm4xZ9pT2vRb6n"
 
 
