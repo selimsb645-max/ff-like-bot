@@ -1,25 +1,35 @@
 #!/usr/bin/env python3
-"""Login gate for this repository.
+"""Login gate with per-person access for this repository.
 
 Nobody runs the bot just by cloning the repo: every entry point calls
-``require_auth()`` first and that call asks for the username + password.
+``require_auth()`` first, and that call asks for a username and password.
 
-How the password is stored
---------------------------
-Only a salted PBKDF2-HMAC-SHA256 hash lives in ``auth.json`` (260 000 rounds).
-The plaintext password is never written to disk, never committed and never
-printed. ``set_login.py`` writes/rotates the record.
+Only the people the owner adds get in. Each person gets their own username and
+password, so access can be given, rotated or taken away one person at a time -
+deleting a user locks that person out on their next start, and nobody else is
+affected.
 
-Three ways the gate can pass, in order
---------------------------------------
-1. ``BOT_USERNAME`` + ``BOT_PASSWORD`` in the environment (GitHub Actions
-   secrets, systemd Environment=, docker -e ...). Verified against the hash.
-2. An interactive terminal: prompts for username and password, 3 attempts.
-3. A trusted CI runner (``GITHUB_ACTIONS=true``) when no credentials are
-   configured yet - the scheduled farm must not stall on a prompt. Set the two
-   secrets to close this door as well.
+    python3 auth.py adduser ahmed      # give someone access (asks a password)
+    python3 auth.py list               # who can run this bot
+    python3 auth.py deluser ahmed      # take it back
+    python3 auth.py passwd selim       # rotate a password
+    python3 auth.py status             # quick summary
 
-Any other case exits non-zero without starting the bot.
+How passwords are stored
+------------------------
+Only a salted PBKDF2-HMAC-SHA256 hash lives in ``auth.json`` (260 000 rounds,
+16-byte salt per user). No plaintext password is ever written, committed,
+printed or logged.
+
+How the gate can pass, in order
+-------------------------------
+1. ``BOT_USERNAME`` + ``BOT_PASSWORD`` in the environment (Actions secrets,
+   systemd Environment=, docker -e). Verified against the same hashes.
+2. An interactive terminal: prompts for username + password, 3 attempts.
+3. A trusted scheduled runner (``GITHUB_ACTIONS=true`` with no terminal), so
+   the farm cannot stall. Set the two secrets to require login there as well.
+
+Anything else exits non-zero without starting the bot.
 """
 from __future__ import annotations
 
@@ -30,6 +40,7 @@ import json
 import os
 import secrets
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AUTH_FILE = os.path.join(HERE, "auth.json")
@@ -47,7 +58,21 @@ def _hash(password: str, salt_hex: str, iterations: int = ITERATIONS) -> str:
     ).hex()
 
 
-def load_record(path: str = AUTH_FILE) -> dict:
+def _new_entry(password: str, role: str = "guest", note: str = "") -> dict:
+    salt = secrets.token_hex(16)
+    return {
+        "salt": salt,
+        "hash": _hash(password, salt),
+        "iterations": ITERATIONS,
+        "algo": "pbkdf2_hmac_sha256",
+        "role": role,
+        "note": note,
+        "added": time.strftime("%Y-%m-%d"),
+    }
+
+
+# ── storage (v2 = many users, v1 = one user, read transparently) ───────────
+def _read_raw(path: str = AUTH_FILE) -> dict:
     try:
         with open(path, encoding="utf-8") as fh:
             rec = json.load(fh)
@@ -58,34 +83,71 @@ def load_record(path: str = AUTH_FILE) -> dict:
     return rec if isinstance(rec, dict) else {}
 
 
-def save_record(username: str, password: str, path: str = AUTH_FILE) -> dict:
-    """Write a fresh salt + hash for ``username``. Returns the stored record."""
-    salt = secrets.token_hex(16)
-    rec = {
-        "username": username.strip(),
-        "salt": salt,
-        "hash": _hash(password, salt),
-        "iterations": ITERATIONS,
-        "algo": "pbkdf2_hmac_sha256",
-    }
+def load_users(path: str = AUTH_FILE) -> dict:
+    """{username: entry}. Old single-user files are migrated on the fly."""
+    raw = _read_raw(path)
+    users = raw.get("users")
+    if isinstance(users, dict) and users:
+        return users
+    if raw.get("username") and raw.get("hash") and raw.get("salt"):
+        return {raw["username"]: {
+            "salt": raw["salt"], "hash": raw["hash"],
+            "iterations": raw.get("iterations") or ITERATIONS,
+            "algo": raw.get("algo") or "pbkdf2_hmac_sha256",
+            "role": "owner", "note": "", "added": "",
+        }}
+    return {}
+
+
+def save_users(users: dict, path: str = AUTH_FILE) -> None:
+    doc = {"version": 2,
+           "updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+           "users": users}
     with open(path, "w", encoding="utf-8") as fh:
-        json.dump(rec, fh, indent=1)
-    try:                                  # hash file, not world readable
+        json.dump(doc, fh, indent=1, sort_keys=True)
+    try:                              # hashes only, but still keep it private
         os.chmod(path, 0o600)
     except Exception:
         pass
-    return rec
+
+
+# ── user management ────────────────────────────────────────────────────────
+def add_user(username: str, password: str, role: str = "guest",
+             note: str = "") -> dict:
+    username = (username or "").strip()
+    if not username:
+        raise SystemExit("a username is required")
+    if len(password) < 6:
+        raise SystemExit("password must be at least 6 characters")
+    users = load_users()
+    users[username] = _new_entry(password, role, note)
+    save_users(users)
+    return users
+
+
+def remove_user(username: str) -> bool:
+    users = load_users()
+    if username not in users:
+        return False
+    del users[username]
+    save_users(users)
+    return True
+
+
+def list_users() -> list[tuple[str, str, str, str]]:
+    return [(u, e.get("role", "guest"), e.get("added", ""), e.get("note", ""))
+            for u, e in sorted(load_users().items())]
 
 
 # ── verification ───────────────────────────────────────────────────────────
-def check(username: str, password: str, record: dict | None = None) -> bool:
-    rec = record if record is not None else load_record()
-    if not rec or not rec.get("hash") or not rec.get("salt"):
+def check(username: str, password: str, users: dict | None = None) -> bool:
+    users = users if users is not None else load_users()
+    entry = users.get(str(username).strip())
+    if not entry or not entry.get("hash") or not entry.get("salt"):
         return False
-    user_ok = hmac.compare_digest(str(username).strip(), str(rec.get("username", "")))
-    got = _hash(str(password), rec["salt"], int(rec.get("iterations") or ITERATIONS))
-    pass_ok = hmac.compare_digest(got, rec["hash"])
-    return user_ok and pass_ok
+    got = _hash(str(password), entry["salt"],
+                int(entry.get("iterations") or ITERATIONS))
+    return hmac.compare_digest(got, entry["hash"])
 
 
 def _fail(msg: str, code: int = 1):
@@ -95,27 +157,24 @@ def _fail(msg: str, code: int = 1):
 
 def require_auth(purpose: str = "this program") -> None:
     """Gate the process. Returns only when the caller is authenticated."""
-    rec = load_record()
+    users = load_users()
 
-    if not rec:
-        # No credential has been set yet: refuse unless this is the trusted
-        # automation runner, so a fresh clone cannot simply start the bot.
+    if not users:
         if os.environ.get("GITHUB_ACTIONS") == "true":
             print("[auth] no local credential record; trusted CI runner - "
-                  "continuing. Run set_login.py to lock this repo.")
+                  "continuing. Run 'python3 auth.py adduser <name>' to lock it.")
             return
         _fail("[auth] no login configured for this repository.\n"
-              "       Owner: run  python3 set_login.py  once to create it.")
+              "       Owner: run  python3 auth.py adduser <name>  once.")
 
     env_user = os.environ.get(USER_ENV, "").strip()
     env_pass = os.environ.get(PASS_ENV, "")
     if env_user and env_pass:
-        if check(env_user, env_pass, rec):
+        if check(env_user, env_pass, users):
             print(f"[auth] {env_user} verified from environment")
             return
         _fail("[auth] BOT_USERNAME / BOT_PASSWORD are wrong. Refusing to start.")
 
-    # A scheduled farm cannot type a password. Keep it running, but say so.
     if os.environ.get("GITHUB_ACTIONS") == "true" and not sys.stdin.isatty():
         print("[auth] trusted CI runner (no prompt possible) - continuing. "
               "Set BOT_USERNAME/BOT_PASSWORD secrets to require login here too.")
@@ -128,31 +187,87 @@ def require_auth(purpose: str = "this program") -> None:
             pw = getpass.getpass("Password: ")
         except (EOFError, KeyboardInterrupt):
             _fail("\n[auth] cancelled.")
-        if check(user, pw, rec):
-            print(f"[auth] welcome, {user}\n")
+        if check(user, pw, users):
+            role = (users.get(user) or {}).get("role", "guest")
+            print(f"[auth] welcome, {user} ({role})\n")
             return
-        print("[auth] wrong username or password.")
+        print("[auth] wrong username or password, or no access for this user.")
     _fail("[auth] too many failed attempts. Exiting.")
 
 
+# ── CLI ────────────────────────────────────────────────────────────────────
+def _prompt_new_password(user: str) -> str:
+    while True:
+        pw = getpass.getpass(f"New password for {user}: ")
+        if len(pw) < 6:
+            print("  at least 6 characters, please.")
+            continue
+        if pw != getpass.getpass("Repeat password: "):
+            print("  the two passwords did not match.")
+            continue
+        return pw
+
+
 def main(argv: list[str]) -> int:
-    """`python3 auth.py status|check|set` for quick shell use."""
-    cmd = argv[1] if len(argv) > 1 else "status"
-    rec = load_record()
-    if cmd == "status":
-        print("configured:", bool(rec))
-        print("username:", rec.get("username", "-"))
-        print("hash:", rec.get("algo", "-"), rec.get("iterations", "-"), "rounds")
+    cmd = (argv[1] if len(argv) > 1 else "status").lower()
+    args = argv[2:]
+
+    if cmd in ("status", "list"):
+        users = list_users()
+        print("login configured:", bool(users))
+        print("users:", len(users))
+        for u, role, added, note in users:
+            print(f"  {u:16s} {role:6s} added {added or '-':10s} {note}")
         print("env credentials present:", bool(os.environ.get(USER_ENV)
                                                and os.environ.get(PASS_ENV)))
         return 0
+
     if cmd == "check":
         require_auth("login check")
         return 0
-    if cmd == "set":
+
+    if cmd == "adduser":
+        if not args:
+            _fail("usage: python3 auth.py adduser <username> [--owner] [--note text]")
+        user = args[0]
+        role = "owner" if "--owner" in args else "guest"
+        note = ""
+        if "--note" in args:
+            note = " ".join(args[args.index("--note") + 1:])
+        if user in load_users() and "--force" not in args:
+            _fail(f"[auth] '{user}' already exists. Use passwd to change the "
+                  f"password, or add --force to overwrite.")
+        add_user(user, _prompt_new_password(user), role, note)
+        print(f"[auth] access granted to '{user}' ({role}).")
+        return 0
+
+    if cmd in ("deluser", "remove", "revoke"):
+        if not args:
+            _fail("usage: python3 auth.py deluser <username>")
+        if remove_user(args[0]):
+            print(f"[auth] access revoked for '{args[0]}'. "
+                  f"They cannot start the bot anymore.")
+            return 0
+        _fail(f"[auth] no such user: {args[0]}")
+
+    if cmd in ("passwd", "password"):
+        if not args:
+            _fail("usage: python3 auth.py passwd <username>")
+        users = load_users()
+        if args[0] not in users:
+            _fail(f"[auth] no such user: {args[0]}")
+        users[args[0]].update(_new_entry(_prompt_new_password(args[0]),
+                                        users[args[0]].get("role", "guest"),
+                                        users[args[0]].get("note", "")))
+        save_users(users)
+        print(f"[auth] password changed for '{args[0]}'.")
+        return 0
+
+    if cmd == "set":                       # back-compat with set_login.py
         import set_login
-        return set_login.main(argv)
-    print("usage: python3 auth.py [status|check|set]")
+        return set_login.main(["set_login.py", *args])
+
+    print("usage: python3 auth.py [status|list|check|adduser|deluser|passwd|set]")
     return 2
 
 

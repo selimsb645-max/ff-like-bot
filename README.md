@@ -37,6 +37,32 @@ Password:
   scheduled runner (`GITHUB_ACTIONS=true`, no terminal) continues so the farm
   never stalls - set the secrets to close that last door as well.
 
+## Access control - who can run this bot
+
+The repo is private and the bot is locked. Cloning it is not enough: every entry
+point asks for a username and password first (`auth.require_auth()`), so only the
+people you add can start it.
+
+Give someone access, one person at a time:
+
+```
+python3 auth.py adduser ahmed     # asks for a password (6+ characters)
+python3 auth.py list              # shows every user and their role
+python3 auth.py deluser ahmed     # revoke - locked out on their next start
+python3 auth.py passwd ahmed      # rotate one person's password
+python3 auth.py check             # try the login yourself
+```
+
+Each person has their own username, salt and PBKDF2 hash in `auth.json`. Revoking
+one person never touches anyone else. Passwords are never stored in plain text
+and cannot be recovered from the file.
+
+Servers and scheduled Actions runs authenticate with `BOT_USERNAME` +
+`BOT_PASSWORD` instead of typing at a prompt; both are verified against the same
+hashes, and a wrong pair refuses to start. A scheduled Actions job with no
+terminal and no secrets keeps running so the farm does not stall, which is why
+setting those two secrets is the way to close that door completely.
+
 ## Owner's phone as the BD proxy (best setup, free)
 
 Public BD proxies keep dying and get flagged. The owner's own phone on mobile data

@@ -51,12 +51,15 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     pw = os.environ.get("BOT_PASSWORD_NEW") or _ask_password()
-    rec = auth.save_record(user, pw)
+    existed = user in auth.load_users()
+    auth.add_user(user, pw, role="owner" if not existed else
+                  auth.load_users()[user].get("role", "owner"))
     print(f"\nlogin saved to {os.path.basename(auth.AUTH_FILE)}")
-    print(f"  username: {rec['username']}")
-    print(f"  hash:     {rec['algo']} x{rec['iterations']}")
+    print(f"  username: {user}")
+    print(f"  hash:     pbkdf2_hmac_sha256 x{auth.ITERATIONS}")
     print("\nThe bot will now ask for this username and password when it starts.")
     print("Keep the password yourself - it cannot be recovered from the hash.")
+    print("Give other people access one at a time:  python3 auth.py adduser <name>")
     return 0
 
 
