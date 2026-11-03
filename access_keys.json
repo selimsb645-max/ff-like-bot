@@ -6,6 +6,18 @@
   "hash": "67b265d214ac4d2004c9b8076eaae18c41ded9380fab63d5fcc58cd055940f40",
   "iterations": 260000
  },
- "keys": [],
+ "keys": [
+  {
+   "label": "demo_test",
+   "salt": "cb75b928cfd926aa839774abae23217c",
+   "hash": "983aebbd6ee0b052aaa9ce206f92b55319e71a25a288b9745aea34e1f4e3a48d",
+   "created": "2026-11-03T05:31:23Z",
+   "bound_device": "",
+   "bound_at": "",
+   "last_used": "",
+   "uses": 0,
+   "revoked": false
+  }
+ ],
  "mode": "remember"
 }
