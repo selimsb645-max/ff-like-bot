@@ -703,6 +703,10 @@ def _exit_country() -> str:
         return ""
 
 
+_BLOCK_CC = ""
+_BLOCK_TS = 0.0
+
+
 def refresh_pool() -> list:
     """Mint JWTs for the NEWEST unused pool accounts only.
 
@@ -730,7 +734,13 @@ def refresh_pool() -> list:
     # IP that minted it. Minting from a non-BD machine therefore cannot produce a
     # usable BD token, it only burns accounts. Check before spending anything.
     if not _proxy():
-        cc = _exit_country()
+        global _BLOCK_CC, _BLOCK_TS
+        cc = ""
+        if time.time() - _BLOCK_TS < 60:
+            cc = _BLOCK_CC
+        else:
+            cc = _exit_country()
+            _BLOCK_CC, _BLOCK_TS = cc, time.time()
         if cc and cc.upper() != "BD":
             print(f"[POOL] mint blocked: this machine exits from {cc.upper()} and a "
                   f"{cc.upper()} token can never like or read a BD player.")
