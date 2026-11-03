@@ -76,6 +76,42 @@ def persist_usage_github():
     _github_commit_file("dead_tokens.json", "update dead token blacklist")
 
 
+
+# ── like history: (account, target) pairs expire so a target never locks forever ──
+LIKE_PAIR_TTL = 20 * 3600
+
+
+def _pairs_from_usage(usage: dict) -> set:
+    now = time.time()
+    raw = usage.get("used_pairs") or []
+    items = raw.items() if isinstance(raw, dict) else [
+        (f"{p[0]}:{p[1]}", 0) for p in raw if isinstance(p, (list, tuple)) and len(p) >= 2]
+    out = set()
+    for k, ts in items:
+        try:
+            if now - float(ts or 0) > LIKE_PAIR_TTL:
+                continue
+            a, b = str(k).split(":")
+            out.add((int(a), int(b)))
+        except Exception:
+            continue
+    return out
+
+
+def _pairs_to_usage(used: set, prev) -> dict:
+    now = time.time()
+    d = {}
+    if isinstance(prev, dict):
+        for k, ts in prev.items():
+            try:
+                if now - float(ts or 0) < LIKE_PAIR_TTL:
+                    d[k] = ts
+            except Exception:
+                pass
+    for a, b in used:
+        d[f"{a}:{b}"] = now
+    return d
+
 def load_usage() -> dict:
     if USAGE_FILE.exists():
         try:
@@ -200,7 +236,8 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
         pool_size, jwt = MAX_LIKES_PER_REQUEST, None
     usage = load_usage()
     with USAGE_LOCK:
-        used = set(tuple(k) for k in usage.get("used_pairs", []))
+        prev_pairs = usage.get("used_pairs") or {}
+        used = _pairs_from_usage(usage)
     try:
         s0 = ff_bd_api.get_stats(target, jwt)
         likes_before = s0.get("likes") if s0 else None
@@ -209,7 +246,7 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
         bot.send_message(chat_id, f"❌ Error: {e}")
         return
     with USAGE_LOCK:
-        usage["used_pairs"] = [list(k) for k in used]
+        usage["used_pairs"] = _pairs_to_usage(used, prev_pairs)
         save_usage(usage)
     threading.Thread(target=persist_usage_github, daemon=True).start()
     time.sleep(3)
@@ -1187,9 +1224,26 @@ def cmd_like(m):
             bot.edit_message_text("⚠️ Nothing was sent.\n\n" + why,
                                   msg.chat.id, msg.message_id)
         else:
-            bot.edit_message_text("⚠️ Every account in the pool already liked this target "
-                                  "(one account can like a profile once per day). Try again later.",
-                                  msg.chat.id, msg.message_id)
+            st = getattr(ff_bd_api, "LAST_LIKE_STATS", {}) or {}
+            reasons = st.get("reasons") or {}
+            lines = [f"⚠️ No like landed on <code>{target}</code>."]
+            if st.get("attempted"):
+                lines.append(f"Tried {st.get('attempted')} pool accounts, 0 accepted.")
+            for reason, n in sorted(reasons.items(), key=lambda x: -x[1])[:4]:
+                if "DAILY_LIKE_PROFILE_LIMIT" in reason:
+                    lines.append(f"• {n} accounts used today's like quota "
+                                 "(Garena allows a limited number of profiles per account per day)")
+                elif "already" in reason.lower():
+                    lines.append(f"• {n} accounts already liked this profile")
+                else:
+                    lines.append(f"• {n} × <code>{reason[:48]}</code>")
+            if not reasons:
+                lines.append("• every usable account in the pool is already recorded for "
+                             "this target (history expires after 20h)")
+            lines.append("")
+            lines.append("Garena resets these daily limits once per day, so the pool refills "
+                         "on its own — nothing is broken on the bot side.")
+            bot.edit_message_text("\n".join(lines), msg.chat.id, msg.message_id)
         return
     delta = None
     if isinstance(likes_before, int) and isinstance(likes_after, int):
@@ -1259,23 +1313,11 @@ def cmd_pool(m):
     rows.append(f"exit: <b>{(cc or 'unknown').upper()}</b> · proxy: "
                 f"{'<code>' + px + '</code>' if px else 'none'}")
 
-    try:
-        import json as _json
-        hp = _json.loads((Path(__file__).parent / "pool_health.json").read_text())
-        if hp.get("blocked"):
-            rows.append("")
-            rows.append(f"last mint: <b>blocked</b> \u2014 {hp['blocked']}")
-        elif hp.get("minted") is not None:
-            rows.append("")
-            rows.append(f"last mint: <b>{hp.get('minted')}</b> ok / {hp.get('tried')} tried")
-    except Exception:
-        pass
-
     if not live:
         rows.append("")
         rows.append("⚠️ No usable token. Likes and /profile cannot work until the pool can "
-                    "mint from a BD IP: run on the phone, or point "
-                    "<code>LIKE_PROXY_URL</code> at a BD proxy that really exits in BD.")
+                    "mint from a BD IP: run on the phone, or set <code>LIKE_PROXY_URL</code> "
+                    "to a BD proxy.")
     else:
         bad = [t for t in live if t.get("server_url") and "freefiremobile.com" in str(t.get("server_url"))]
         if bad:
