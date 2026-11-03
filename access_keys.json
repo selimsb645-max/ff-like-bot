@@ -6,40 +6,6 @@
   "hash": "67b265d214ac4d2004c9b8076eaae18c41ded9380fab63d5fcc58cd055940f40",
   "iterations": 260000
  },
- "keys": [
-  {
-   "label": "demo_test",
-   "salt": "cb75b928cfd926aa839774abae23217c",
-   "hash": "983aebbd6ee0b052aaa9ce206f92b55319e71a25a288b9745aea34e1f4e3a48d",
-   "created": "2026-11-03T05:31:23Z",
-   "bound_device": "",
-   "bound_at": "",
-   "last_used": "",
-   "uses": 0,
-   "revoked": false
-  },
-  {
-   "label": "demo2",
-   "salt": "6801011d94119ae3dd86331d374413bc",
-   "hash": "fe56cbfa50c483625bc14e467f91fface979dbb5d97c8b9a3aa5ac7e79198f18",
-   "created": "2026-11-03T05:31:27Z",
-   "bound_device": "",
-   "bound_at": "",
-   "last_used": "",
-   "uses": 0,
-   "revoked": false
-  },
-  {
-   "label": "demo3",
-   "salt": "8727867d33e80f53a318eeafdc2c55f3",
-   "hash": "6ba48c3453f1cf0758d076a277ba6c036986c2995362d5d72d52ef0fd0ec7616",
-   "created": "2026-11-03T05:31:30Z",
-   "bound_device": "",
-   "bound_at": "",
-   "last_used": "",
-   "uses": 0,
-   "revoked": false
-  }
- ],
+ "keys": [],
  "mode": "remember"
 }
