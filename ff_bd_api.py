@@ -160,11 +160,6 @@ def load_creds() -> list:
 
 # ── Self-minted JWT (MajorLogin, verified 2026-10-23) ──────────────
 GRANT_URL = "https://100067.connect.garena.com/api/v2/oauth/guest/token:grant"
-GRANT_PATH = "/api/v2/oauth/guest/token:grant"
-GRANT_HOSTS = [
-    "https://ffmconnect.live.gop.garenanow.com",   # the one the registration flow uses
-    "https://100067.connect.garena.com",
-]
 def major_login_url() -> str:
     return _hosts.login_base() + "/MajorLogin"
 CLIENT_SECRET = "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
@@ -205,73 +200,6 @@ def guest_grant(uid: str, pw: str):
         return None
 
 
-def _post_any(url, *, json_body=None, data=None, headers=None, timeout=15):
-    """POST with httpx, falling back to requests if httpx cannot connect.
-
-    On the owner's phone httpx raised ConnectError for the grant endpoint while a
-    raw TLS handshake and plain requests reached it, so one HTTP library must not
-    be a single point of failure on the mint path.
-    """
-    px = _proxy()
-    try:
-        return httpx.post(url, json=json_body, data=data, headers=headers,
-                          timeout=timeout, verify=False, **_pxkw())
-    except Exception as first:
-        try:
-            import requests
-            import urllib3
-            urllib3.disable_warnings()
-            kw = {"proxies": {"http": px, "https": px}} if px else {}
-            return requests.post(url, json=json_body, data=data, headers=headers,
-                                 timeout=timeout, verify=False, **kw)
-        except Exception:
-            raise first
-
-
-def grant_any(uid: str, pw: str) -> tuple[tuple[str, str] | None, str]:
-    """(access_token, open_id) from whichever grant host answers, or (None, why)."""
-    errs = []
-    for host in GRANT_HOSTS:
-        try:
-            r = _post_any(host + GRANT_PATH, json_body={
-                "client_id": 100067, "client_secret": CLIENT_SECRET, "client_type": 2,
-                "password": pw, "response_type": "token", "uid": int(uid)},
-                headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"},
-                timeout=15)
-        except Exception as ex:
-            errs.append(f"{host.split('//')[1]} {type(ex).__name__}")
-            continue
-        if r.status_code != 200:
-            errs.append(f"{host.split('//')[1]} http{r.status_code}")
-            continue
-        d = r.json().get("data", r.json())
-        at, oid = d.get("access_token"), d.get("open_id")
-        if at and oid:
-            return (at, oid), ""
-        errs.append(f"{host.split('//')[1]} no token")
-    return None, "grant failed: " + "; ".join(errs)
-
-
-def check_endpoints() -> list[tuple[str, str]]:
-    """DNS + TCP/TLS reachability of every endpoint the mint needs, from this device."""
-    import socket
-    out = []
-    for url in GRANT_HOSTS + ["https://" + _hosts.login_host(), "https://ffmconnect.live.gop.garenanow.com"]:
-        host = url.split("//")[1]
-        try:
-            ip = socket.gethostbyname(host)
-        except Exception as ex:
-            out.append((host, f"DNS failed ({type(ex).__name__})"))
-            continue
-        try:
-            c = socket.create_connection((ip, 443), timeout=8)
-            c.close()
-            out.append((host, f"ok -> {ip}"))
-        except Exception as ex:
-            out.append((host, f"ip {ip} but TCP 443 failed ({type(ex).__name__})"))
-    return out
-
-
 def _major_login_bytes(access_token: str, open_id: str):
     """Raw MajorLogin response, or None. The response carries both the JWT and
     the server_url that says WHICH REGION this account belongs to."""
@@ -283,7 +211,8 @@ def _major_login_bytes(access_token: str, open_id: str):
              "X-GA-SV": str(int(time.time())), "Content-Type": "application/x-www-form-urlencoded",
              "Expect": "100-continue", "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1",
              "ReleaseVersion": "OB55"}
-        r = _post_any(major_login_url(), headers=h, data=body, timeout=20)
+        r = httpx.post(major_login_url(), headers=h, data=body, timeout=20,
+                       verify=False, **_pxkw())
         if r.status_code != 200:
             return None
         return r.content
@@ -316,47 +245,6 @@ def major_login(access_token: str, open_id: str) -> str | None:
     """MajorLogin (OB55, current X-GA-SV) -> JWT or None."""
     full = major_login_full(access_token, open_id)
     return full["token"] if full else None
-
-
-def mint_jwt_detailed(uid: str, pw: str) -> tuple[dict | None, str]:
-    """mint_jwt plus the reason it failed - "failed" alone is unactionable."""
-    pair, why = grant_any(uid, pw)
-    if not pair:
-        return None, why
-    at, oid = pair
-
-    wire = (_pf_str(22, oid) + _pf_str(23, "4") + _pf_str(29, at) + _pf_str(99, "4"))
-    h = {"User-Agent": LOGIN_UA, "Connection": "Keep-Alive", "Accept-Encoding": "gzip",
-         "X-GA-SV": str(int(time.time())), "Content-Type": "application/x-www-form-urlencoded",
-         "Expect": "100-continue", "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1",
-         "ReleaseVersion": "OB55"}
-    try:
-        r2 = _post_any(major_login_url(), headers=h, data=_enc(wire), timeout=20)
-    except Exception as ex:
-        return None, f"majorlogin network error: {type(ex).__name__}"
-    if r2.status_code != 200:
-        return None, f"majorlogin http{r2.status_code}: {r2.content[:40]!r}"
-    m = _JWT_RE.search(r2.content)
-    if not m:
-        return None, f"majorlogin no jwt ({len(r2.content)}b): {r2.content[:40]!r}"
-
-    tok = m.group(1).decode()
-    pl = tok.split(".")[1]
-    pl += "=" * (-len(pl) % 4)
-    claims = json.loads(base64.urlsafe_b64decode(pl))
-    url = ""
-    for cand in _URL_RE.findall(r2.content):
-        u = cand.decode("utf-8", "replace")
-        if "freefiremobile.com" in u or "bp." in u:
-            url = u
-            break
-    if url and not _hosts.is_bd_host(url):
-        return None, f"logged in on {url} (not BD)"
-    return {"uid": uid, "pass": pw, "token": tok,
-            "account_id": claims.get("account_id"),
-            "region": claims.get("lock_region", "BD"),
-            "server_url": url,
-            "exp": claims.get("exp")}, ""
 
 
 def mint_jwt_self(uid: str, pw: str) -> dict | None:
@@ -483,7 +371,7 @@ def get_profile(account_id, jwt: str = None) -> dict | None:
     wire = _pb(1, int(account_id)) + _pb(2, 1)
     h = dict(_headers(t))
     h["ReleaseVersion"] = "OB53"
-    h["X-GA-SV"] = str(int(time.time()))
+    h["X-GA-SV"] = "1789556611"
     try:
         r = httpx.post(profile_url(), headers=h, data=_enc(wire), timeout=20,
                        verify=False, **_pxkw())
@@ -862,26 +750,6 @@ def _burned_add(uids):
         pass
 
 
-POOL_HEALTH_FILE = Path(__file__).parent / "pool_health.json"
-
-
-def _health_write(upd: dict) -> None:
-    """Persist why the pool is empty (or how the mint went) so it is inspectable
-    from the repo and shown by /pool without digging through runner logs."""
-    try:
-        old = {}
-        if POOL_HEALTH_FILE.exists():
-            try:
-                old = json.loads(POOL_HEALTH_FILE.read_text())
-            except Exception:
-                old = {}
-        old.update(upd)
-        old["ts"] = int(time.time())
-        POOL_HEALTH_FILE.write_text(json.dumps(old, indent=1))
-    except Exception:
-        pass
-
-
 def _exit_country() -> str:
     """Country code this machine (or its BD proxy) looks like from outside."""
     try:
@@ -921,29 +789,23 @@ def refresh_pool() -> list:
 
     # A guest account can be logged in ONCE and Garena stamps its region from the
     # IP that minted it. Minting from a non-BD machine therefore cannot produce a
-    # usable BD token, it only burns accounts. So probe the exit that will actually
-    # be used - including through the proxy - before spending anything.
-    global _BLOCK_CC, _BLOCK_TS
-    px = _proxy()
-    if time.time() - _BLOCK_TS < 60:
-        cc = _BLOCK_CC
-    else:
-        cc = _exit_country()
-        _BLOCK_CC, _BLOCK_TS = cc, time.time()
-    if cc.upper() != "BD":
-        src = f"proxy {px}" if px else "this machine"
-        if not cc:
-            reason = (f"{src} did not answer or gave no country, so nothing is known "
-                      f"about the exit region")
+    # usable BD token, it only burns accounts. Check before spending anything.
+    if not _proxy():
+        global _BLOCK_CC, _BLOCK_TS
+        cc = ""
+        if time.time() - _BLOCK_TS < 60:
+            cc = _BLOCK_CC
         else:
-            reason = f"{src} exits from {cc.upper()}"
-        print(f"[POOL] mint blocked: {reason}. A {cc.upper() or 'non-BD'} token can never "
-              f"like or read a BD player, so no account was spent.")
-        _health_write({"blocked": reason, "exit_country": cc, "proxy": px,
-                       "minted": 0, "tried": 0})
-        return []
+            cc = _exit_country()
+            _BLOCK_CC, _BLOCK_TS = cc, time.time()
+        if cc and cc.upper() != "BD":
+            print(f"[POOL] mint blocked: this machine exits from {cc.upper()} and a "
+                  f"{cc.upper()} token can never like or read a BD player.")
+            print("[POOL] no account was spent. Set LIKE_PROXY_URL to a BD proxy "
+                  "(the phone tunnel does this) or run the bot on the phone.")
+            return []
 
-    pool, touched, wrong_region, fails = [], [], 0, 0
+    pool, touched, wrong_region = [], [], 0
     for _n, uid, pw in cands:
         touched.append(uid)
         try:
@@ -951,22 +813,16 @@ def refresh_pool() -> list:
         except Exception:
             t = None
         if not t:
-            # a failed login on a BD exit means the network is refusing us, not
-            # that every remaining account is dead - stop before burning the batch
-            fails += 1
-            if fails >= 3:
-                print(f"[POOL] stopping mint after {fails} failed logins in a row "
-                      f"(last uid {uid}) - try again later instead of burning accounts")
-                break
             continue
         url = str(t.get("server_url") or "")
         if url and not _hosts.is_bd_host(url):
             wrong_region += 1
             print(f"[POOL] {uid} came back on {url} - wrong region for BD likes")
-            print("[POOL] stopping mint: every further account would land in the same "
-                  "wrong region and waste its one-time login")
-            break
-        fails = 0
+            if wrong_region >= 1:
+                print("[POOL] stopping mint: every further account would land in the same "
+                      "wrong region and waste its one-time login")
+                break
+            continue
         pool.append(t)
     _burned_add(touched)                           # login spent either way
     try:
@@ -974,11 +830,6 @@ def refresh_pool() -> list:
     except Exception:
         pass
     print(f"[POOL] minted {len(pool)}/{len(touched)} tokens (budget {POOL_MINT_BUDGET})")
-    _health_write({"blocked": "" if pool else (
-        f"minted 0 of {len(touched)} tried"
-        + (f", {wrong_region} came back in a foreign region" if wrong_region else "")),
-        "exit_country": _BLOCK_CC, "proxy": _proxy(),
-        "minted": len(pool), "tried": len(touched), "wrong_region": wrong_region})
     return pool
 
 
@@ -1176,6 +1027,9 @@ def _filter_activated(pool, cache, workers=32):
         return [t for t in ex.map(chk, pool) if t]
 
 
+LAST_LIKE_STATS = {"attempted": 0, "sent": 0, "reasons": {}, "accounts_tried": 0}
+
+
 def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> int:
     """Send likes to a target - PARALLEL version (fast).
     Only ACTIVATED accounts (with a live game profile) are used."""
@@ -1204,6 +1058,7 @@ def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> 
     payload = _enc(m.SerializeToString())
     cli = _client()
     done = {"sent": 0}
+    reasons = {}
     lock = _th.Lock()
 
     def fire(item):
@@ -1220,11 +1075,21 @@ def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> 
                 with lock:
                     used.add(key)
                     done["sent"] += 1
-        except Exception:
-            pass
+            else:
+                body = r.content[:60].decode("utf-8", "replace").strip() or f"HTTP {r.status_code}"
+                with lock:
+                    reasons[body] = reasons.get(body, 0) + 1
+        except Exception as e:
+            with lock:
+                nm = f"network: {type(e).__name__}"
+                reasons[nm] = reasons.get(nm, 0) + 1
 
     with _TPE(max_workers=min(workers, len(todo))) as ex:
         list(ex.map(fire, todo))
+    LAST_LIKE_STATS.update({"attempted": len(todo), "sent": done["sent"],
+                            "reasons": dict(reasons),
+                            "accounts_tried": len({t["account_id"] for t, _ in todo})})
+    print(f"[like] attempted={len(todo)} sent={done['sent']} reasons={reasons}")
     return done["sent"]
 
 
