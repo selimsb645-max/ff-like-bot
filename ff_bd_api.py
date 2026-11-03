@@ -483,7 +483,7 @@ def get_profile(account_id, jwt: str = None) -> dict | None:
     wire = _pb(1, int(account_id)) + _pb(2, 1)
     h = dict(_headers(t))
     h["ReleaseVersion"] = "OB53"
-    h["X-GA-SV"] = "1789556611"
+    h["X-GA-SV"] = str(int(time.time()))
     try:
         r = httpx.post(profile_url(), headers=h, data=_enc(wire), timeout=20,
                        verify=False, **_pxkw())
