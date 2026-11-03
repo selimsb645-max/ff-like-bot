@@ -157,14 +157,16 @@ code, and the message then turns into "✅ ভেরিফাইড".
 
 ### Seeing who has a code
 
-    /history              last 40 codes: total, bound, waiting, revoked
+    /history              five cards per page, newest first
+    /history 2            page two
     /history bound        only the phones that are welded
     /history revoked      only the ones that were switched off
 
-Each row is `CODE  NAME  DEV  WHEN`, with 🕓 waiting, 🔒 bound to a phone,
-🚫 revoked. The device column is the first 4 characters of that phone's
-fingerprint, so two codes on the same phone look the same. Owner-only, like
-`/revoke`; anyone else gets "শুধু owner দেখতে পারবে".
+Each code is its own card: the code in bold, who took it with their Telegram id,
+which phone it is welded to (first six characters of the fingerprint), when it
+was created, when it was welded, the IP it claimed from, and whether it is
+🕓 waiting, 🔒 bound or 🚫 revoked. Numbers and times are in Bengali and Dhaka
+time. Owner-only, like `/revoke`; anyone else gets "শুধু owner দেখতে পারবে".
 
 ### Revoking someone
 
