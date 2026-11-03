@@ -12,7 +12,16 @@ import httpx
 from telebot import types
 import ff_bd_api
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN_2", "")
+BOT_TOKEN = (os.environ.get("BOT_TOKEN")
+             or os.environ.get("TELEGRAM_BOT_TOKEN_2", "")).strip()
+if not BOT_TOKEN or ":" not in BOT_TOKEN:
+    # Fail with a sentence a human can act on instead of telebot's
+    # "Token must contain a colon" traceback from inside the library.
+    print("BOT_TOKEN is missing or malformed.")
+    print("Get it from @BotFather in Telegram, then run either of these:")
+    print("  export BOT_TOKEN='123456:ABC-DEF...' && python3 bot.py")
+    print("  BOT_TOKEN='123456:ABC-DEF...' python3 bot.py")
+    raise SystemExit(1)
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 USAGE_FILE = Path(__file__).parent / "like_usage.json"
 USAGE_LOCK = threading.Lock()
