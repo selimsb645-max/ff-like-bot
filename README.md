@@ -134,39 +134,39 @@ Repo secrets:
 Workflow: joins the tailnet, probes `socks5://PHONE_PROXY_IP:1080`, prints the exit
 IP/country. run.sh then exports `BD_PROXY_URL` from the phone and skips the public
 proxy hunt entirely (auth, mint and the match engine all exit via the phone).
-If the phone is offline the run falls back to the old tunnel/proxy hunt.## Getting in - clone, then one code
+If the phone is offline the run falls back to the old tunnel/proxy hunt.## Getting in - clone, then claim one code
 
-Nothing to hand out by hand any more. The access code comes from a Telegram bot.
+### What the person does
+    git clone https://github.com/selimsb645-max/ff-like-bot.git
+    # Username: selimsb645-max   Password: <the token the owner gave>
+    cd ff-like-bot
+    pip install -r requirements.txt
+    BOT_TOKEN='<their own bot token>' python3 bot.py
 
-1. **Clone** (the owner gives one GitHub token, nothing else):
-       git clone https://github.com/selimsb645-max/ff-like-bot.git
-       Username: selimsb645-max   Password: <that token>
+    === FF BD bot is locked ===
+    1) Telegram খুলে @NAI_AccessBot খোঁজো, Start চাপো
+    2) যে কোডটা আসবে সেটা এখানে পেস্ট করো
+    Access code (3 tries left): NAI-4K7Q-9XZ2-M3TB
 
-2. **Start the bot**, it asks for a code:
-       BOT_TOKEN='<your own bot token>' python3 bot.py
-       === FF BD bot is locked ===
-       1) Telegram খুলে @NAI_AccessBot খোঁজো, Start চাপো
-       2) যে কোডটা আসবে সেটা এখানে পেস্ট করো
-       Access code (3 tries left): _
+That code comes from @NAI_AccessBot in the form `NAI-XXXX-XXXX-XXXX`
+(no 0/O/1/I, so it is easy to read out loud). It is valid 30 minutes and
+**only the phone that claims it can use it**: the claim records both the device
+fingerprint and the public IP it arrived from, on the server.
+A second phone gets "এই কোড অন্য একটা ফোনে ব্যবহার হয়েছে".
 
-3. **Get the code** in Telegram: open the bot, press Start. It replies with
-   something like `NAI-gc0uy9-tnx0rq-453029BC`, valid 30 minutes.
+After the first claim that phone is remembered and starting the bot asks nothing.
+`python3 access.py setmode strict` brings the prompt back on every start.
 
-4. **Paste it** in the terminal. The code welds to that phone; the same code on
-   another phone is refused ("already used on another phone"). After that the
-   phone is remembered and starting the bot asks nothing.
-
-The code is signed with HMAC-SHA256 and checked offline, so the terminal needs no
-server call. Owner side it is one Cloudflare-free Base44 function
-(`functions/ffAccessBot`) driven by the Telegram webhook.
-
-### Owner notes
-* Change the bot: set its webhook once with
-  `setWebhook?url=https://solas-5609a435.base44.app/functions/ffAccessBot&secret_token=solasAccess7k2q9x4mL1`
-* Older `NAI-xxxx-xxxx-xxxx` keys from `access_keys.json` still work.
-* `python3 access.py status` shows the mode and this phone's fingerprint.
-* `python3 access.py setmode strict` asks for a code on every start.
-* Revoking a person = revoke their GitHub token (their clone stops updating);
-  the codes themselves expire in 30 minutes.
+### Under the hood
+* `functions/ffAccessBot` (Base44, webhook of @NAI_AccessBot) mints the code and
+  stores it in the `AccessCode` table as `issued`.
+* `functions/ffAccessRedeem` is called by access.py with `{code, device}`; it
+  welds the code to that device plus the caller's IP, then answers ok/refused.
+  Expired, revoked, wrong code, other device, other network each get their own
+  message.
+* The terminal keeps a small local record (`~/.ff_access_device` +
+  `access_keys.json`) so an activated phone starts silently.
+* Old `NAI-xxxx-xxxx-xxxx` keys and the offline signed codes still work as
+  fallbacks when the server cannot be reached.
 
 

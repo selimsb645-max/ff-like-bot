@@ -35,6 +35,8 @@ import secrets
 import socket
 import sys
 import time
+import urllib.error
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KEYS_FILE = os.path.join(HERE, "access_keys.json")
@@ -51,6 +53,7 @@ TOKEN_ENV = "BOT_ACCESS_KEY"
 # It signs short codes with this secret; we verify them offline, so the terminal
 # never needs to call a server to be let in.
 TG_BOT = "NAI_AccessBot"
+REDEEM_URL = "https://solas-5609a435.base44.app/functions/ffAccessRedeem"
 SIGN_SECRET = b"NAI-access-2026-q7Lm4xZ9pT2vRb6n"
 
 
@@ -115,6 +118,9 @@ def device_fingerprint() -> str:
     if not dev:
         dev = secrets.token_hex(16)
         try:
+            parent = os.path.dirname(DEVICE_FILE)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
             with open(DEVICE_FILE, "w", encoding="utf-8") as fh:
                 fh.write(dev)
             os.chmod(DEVICE_FILE, 0o600)
@@ -311,8 +317,57 @@ def redeem_signed(code: str, doc: dict) -> tuple[bool, str, dict | None]:
 
 
 
+
+# ── server claim: device + public IP binding ───────────────────────────────
+def redeem_remote(code: str) -> tuple[bool, str, dict | None]:
+    """Ask the access server to weld this code to this phone and network.
+
+    The code itself proves nothing on its own: the server checks it exists, is
+    unexpired, unclaimed, and records the device fingerprint plus the public IP
+    the request came from. A second phone gets a hard "already used".
+    """
+    code = (code or "").strip().upper()
+    if not code:
+        return False, "empty code", None
+    payload = json.dumps({"code": code, "device": device_fingerprint()}).encode()
+    req = urllib.request.Request(REDEEM_URL, data=payload,
+                                 headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=25) as res:
+            data = json.loads(res.read() or b"{}")
+    except urllib.error.HTTPError as ex:
+        try:
+            data = json.loads(ex.read() or b"{}")
+        except Exception:
+            data = {"ok": False, "message": f"server said HTTP {ex.code}"}
+    except Exception as ex:
+        return False, f"could not reach the access server ({str(ex)[:60]})", None
+
+    msg = data.get("message") or data.get("error") or "refused"
+    if not data.get("ok"):
+        return False, msg, None
+
+    doc = load()
+    fp_code = hashlib.sha256(code.encode()).hexdigest()[:16]
+    rec = next((r for r in doc.get("keys", []) if r.get("code_fp") == fp_code), None)
+    if not rec:
+        rec = {"label": f"code:{code[-4:]}", "code_fp": fp_code, "revoked": False}
+        doc.setdefault("keys", []).append(rec)
+    rec["bound_device"] = device_fingerprint()
+    rec["bound_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    rec["last_used"] = rec["bound_at"]
+    rec["uses"] = int(rec.get("uses") or 0) + 1
+    rec["ip"] = data.get("ip", "")
+    save(doc)
+    return True, msg, rec
+
+
 def _try_all(code: str) -> tuple[bool, str, dict | None]:
-    """Accept either a Telegram signed code or an older NAI-... key."""
+    """Accept a server-issued code, a signed code, or an older NAI-... key."""
+    ok, msg, rec = redeem_remote(code)
+    if ok:
+        return ok, msg, rec
+    server_msg = msg
     ok, msg, rec = redeem_signed(code, load())
     if ok:
         return ok, msg, rec
@@ -320,7 +375,10 @@ def _try_all(code: str) -> tuple[bool, str, dict | None]:
     if legacy_ok:
         return legacy_ok, legacy_msg, legacy_rec
     _, why, _tg, _exp = verify_signed(code)
-    return False, (msg if why != "not a signed access code" else legacy_msg), None
+    if why != "not a signed access code":
+        return False, msg, None
+    legit = code.strip().upper().startswith("NAI-")
+    return False, (legacy_msg if not legit else server_msg), None
 
 
 def require_access(purpose: str = "this program") -> None:
