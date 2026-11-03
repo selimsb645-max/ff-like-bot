@@ -155,8 +155,23 @@ def _fail(msg: str, code: int = 1):
     raise SystemExit(code)
 
 
+def _second_layer() -> None:
+    """Hand over to the shared-credential + device-bound access key gate."""
+    try:
+        import access
+    except Exception as ex:                      # pragma: no cover
+        print(f"[auth] access layer unavailable: {ex}")
+        return
+    access.require_access(access_purpose or "FF BD bot")
+
+
+access_purpose = ""
+
+
 def require_auth(purpose: str = "this program") -> None:
     """Gate the process. Returns only when the caller is authenticated."""
+    global access_purpose
+    access_purpose = purpose
     users = load_users()
 
     if not users:
@@ -172,6 +187,7 @@ def require_auth(purpose: str = "this program") -> None:
     if env_user and env_pass:
         if check(env_user, env_pass, users):
             print(f"[auth] {env_user} verified from environment")
+            _second_layer()
             return
         _fail("[auth] BOT_USERNAME / BOT_PASSWORD are wrong. Refusing to start.")
 

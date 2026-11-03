@@ -37,7 +37,7 @@ Password:
   scheduled runner (`GITHUB_ACTIONS=true`, no terminal) continues so the farm
   never stalls - set the secrets to close that last door as well.
 
-## Access control - who can run this bot
+## (old access note)
 
 The repo is private and the bot is locked. Cloning it is not enough: every entry
 point asks for a username and password first (`auth.require_auth()`), so only the
@@ -62,6 +62,41 @@ Servers and scheduled Actions runs authenticate with `BOT_USERNAME` +
 hashes, and a wrong pair refuses to start. A scheduled Actions job with no
 terminal and no secrets keeps running so the farm does not stall, which is why
 setting those two secrets is the way to close that door completely.
+
+## Access control - who can run this bot
+
+The repo is private and the bot is locked twice. Cloning it is not enough.
+
+*Layer 0 (GitHub):* only people you invite can clone. Password authentication is
+dead there; they use a fine-grained token (Contents: Read-only) as the password.
+
+*Layer 1 (`auth.py`):* per-person bot login.
+
+    python3 auth.py adduser rahim     # give access
+    python3 auth.py list              # who can run it
+    python3 auth.py deluser rahim     # take it back
+
+*Layer 2 (`access.py`):* one shared gate password + a personal, single-use,
+device-bound access key.
+
+    python3 access.py new rahim       # issue a key, printed once
+    python3 access.py list            # state: unused / active / revoked
+    python3 access.py revoke rahim    # kill it now
+    python3 access.py setgate         # change the shared username/password
+    python3 access.py status          # what the gate expects
+
+The start-up prompts, in order:
+
+    Username   : selimsb645-max
+    Password   : (the shared gate password)
+    Access key : NAI-XXXX-XXXX-XXXX
+
+The key welds itself to the first device that uses it. The same key on another
+phone, another Termux install or another account is refused with
+"this key is already activated on another device". 3 failed attempts and the
+program exits. Servers and Actions skip the prompt only when
+`BOT_USERNAME`/`BOT_PASSWORD` (and optionally `BOT_ACCESS_KEY`) are set as
+secrets, which are verified against the same hashes.
 
 ## Owner's phone as the BD proxy (best setup, free)
 
