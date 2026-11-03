@@ -91,6 +91,20 @@ def owner_token():
         return ""
 
 
+def token_status(tok):
+    """Is this token accepted by GitHub for this repo? Checked before pushing so a
+    bad copy-paste is reported as such instead of surfacing as a 403 mid-push."""
+    import urllib.request
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{SLUG}",
+        headers={"Authorization": f"Bearer {tok}", "User-Agent": "ff-phone"})
+    try:
+        with urllib.request.urlopen(req, timeout=12) as r:
+            return r.status == 200, "ok"
+    except Exception as ex:
+        return False, f"{type(ex).__name__}: {getattr(ex, 'code', ex)}"
+
+
 def push(msg):
     tok = owner_token()
     if not tok:
@@ -99,12 +113,19 @@ def push(msg):
         print("         echo 'github_pat_xxx' > ~/.ff_owner_token && chmod 600 ~/.ff_owner_token")
         print("       then run: python3 mint_pool_phone.py --push")
         return False
+    ok, why = token_status(tok)
+    if not ok:
+        print(f"[push] the saved token is not accepted by GitHub ({why}).")
+        print("       Re-save it exactly as GitHub shows it, one line, no extra prefix:")
+        print("         echo 'github_pat_...' > ~/.ff_owner_token && chmod 600 ~/.ff_owner_token")
+        return False
+    print(f"[push] token ok ({tok[:12]}...)")
     url = f"https://x-access-token:{tok}@github.com/{SLUG}.git"
     steps = [
         ["git", "add", "bd_pool.json", "like_burned.json"],
         ["git", "-c", "user.name=phone-mint", "-c", "user.email=phone@nextai.local",
          "commit", "-m", msg],
-        ["git", "pull", "--rebase", "--autostash", url, "main"],
+        ["git", "-c", "pull.rebase=true", "pull", "--rebase", "--autostash", url, "main"],
         ["git", "push", url, "HEAD:main"],
     ]
     for c in steps:
