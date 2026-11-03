@@ -229,6 +229,22 @@ so `/history` in @NAI_AccessBot is the register of who runs what, and `/revoke`
 is the off switch. A person who stops paying needs no remote access to their
 machine: revoke the code and their next start is refused.
 
+### Who runs what
+
+The owner's own bot is the one on GitHub Actions (`keep-bot-alive.yml`, its own
+`BOT_TOKEN` secret, redispatches itself hourly). That copy is never shared: no
+other person is ever given that token.
+
+Everyone else clones the repo with their own read-only token, makes their own
+bot with @BotFather and runs `join.py` on their own phone or server. Different
+tokens mean the two worlds never collide, and neither one needs the other's
+GitHub minutes.
+
+The only rule that follows from this: while the Actions copy holds the token,
+starting `bot.py` on the owner's phone with that same token will lose to it with
+409. Test on the phone with the Action cancelled, or with a second throwaway bot
+token.
+
 ### The lock screen
 
 The access gate prints in colour on a terminal (grey rule lines, cyan title,
