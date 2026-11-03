@@ -168,6 +168,19 @@ was created, when it was welded, the IP it claimed from, and whether it is
 🕓 waiting, 🔒 bound or 🚫 revoked. Numbers and times are in Bengali and Dhaka
 time. Owner-only, like `/revoke`; anyone else gets "শুধু owner দেখতে পারবে".
 
+
+### The lock screen
+
+The access gate prints in colour on a terminal (grey rule lines, cyan title,
+yellow prompt, green when a code is accepted, red when it is not) and in plain
+English without colour when the output is piped or `NO_COLOR` is set. The lines
+read:
+
+    1  Open Telegram, search @NAI_AccessBot and press START
+    2  Paste the code it sends you below
+
+    Access code (3 tries left):
+
 ### Revoking someone
 
 The owner writes this to @NAI_AccessBot from his own Telegram account:

@@ -207,6 +207,49 @@ def redeem(token: str, doc: dict | None = None) -> tuple[bool, str, dict | None]
     return True, f"welcome back, {rec['label']}", rec
 
 
+# ── terminal look: colour when someone is watching, plain when piped ────────
+def _use_colour() -> bool:
+    if os.environ.get("NO_COLOR"):
+        return False
+    if os.environ.get("TERM", "") == "dumb":
+        return False
+    try:
+        return sys.stdout.isatty()
+    except Exception:
+        return False
+
+
+COLOUR = _use_colour()
+
+GRAY, BOLD, CYAN, YELLOW, GREEN, RED = "90", "1", "96", "93", "92", "91"
+
+
+def C(text: str, code: str = "") -> str:
+    """Wrap text in an ANSI colour when colours are on."""
+    return f"\033[{code}m{text}\033[0m" if (COLOUR and code) else text
+
+
+def _english(msg: str) -> str:
+    """The redeem endpoint answers bilingually; a terminal line wants one tongue."""
+    return msg.split(" / ")[-1].strip() if " / " in msg else msg
+
+
+def _rule(times: int = 58) -> str:
+    return C("\u2500" * times, GRAY)
+
+
+def _show_gate(purpose: str) -> None:
+    print()
+    print(_rule())
+    print("  " + C("\U0001F512", BOLD) + "  " + C(f"{purpose} is locked", CYAN + ";1"))
+    print(_rule())
+    print("  " + C("1", BOLD) + "  Open Telegram, search " + C("@" + TG_BOT, YELLOW) + " and press "
+          + C("START", YELLOW))
+    print("  " + C("2", BOLD) + "  Paste the code it sends you below")
+    print(_rule())
+    print()
+
+
 def _fail(msg: str, code: int = 1):
     print(msg, file=sys.stderr)
     raise SystemExit(code)
@@ -446,7 +489,7 @@ def require_access(purpose: str = "this program") -> None:
         ok, msg, rec = _try_all(env_key)
         if not ok:
             _fail(f"[access] {TOKEN_ENV} rejected: {msg}")
-        print(f"[access] verified from environment ({rec.get('label')})")
+        print("  " + C(f"\u2713 activated from environment ({rec.get('label')})", GREEN))
         return
 
     if os.environ.get("GITHUB_ACTIONS") == "true" and not sys.stdin.isatty():
@@ -462,12 +505,12 @@ def require_access(purpose: str = "this program") -> None:
             if state == "ok":
                 _stamp_verified(known)
                 touch(known)
-                print(f"[access] this phone is activated ({known['label']}) - go ahead")
+                print("  " + C(f"\u2713 activated ({known['label']})", GREEN) + C(" - go ahead", GRAY))
                 return
             if state == "revoked":
                 _mark_local_revoked(known)
-                _fail(f"[access] access to this phone was revoked ({why}). "
-                      "Telegram-এ @NAI_AccessBot থেকে নতুন কোড নাও।")
+                _fail("  " + C(f"access to this phone was revoked ({_english(why)})", RED + ";1")
+                      + "\n  " + C(f"get a new code from @{TG_BOT}", GRAY))
             # server unreachable or the record is gone: allow a short grace period
             last = str(known.get("last_verified") or known.get("bound_at") or "")
             if last:
@@ -476,32 +519,34 @@ def require_access(purpose: str = "this program") -> None:
                 except Exception:
                     age_h = 999.0
                 if age_h <= OFFLINE_GRACE_HOURS:
-                    print(f"[access] server not reachable ({why}); last check {age_h:.1f}h ago - "
-                          f"allowing up to {OFFLINE_GRACE_HOURS}h offline")
+                    print("  " + C(f"server not reachable ({_english(why)}); last check {age_h:.1f}h ago", YELLOW)
+                          + " " + C(f"- allowing up to {OFFLINE_GRACE_HOURS}h offline", GRAY))
                     touch(known)
                     return
-                _fail(f"[access] {OFFLINE_GRACE_HOURS}h ধরে সার্ভারে যোগাযোগ হচ্ছে না ({why}). "
-                      "একবার ইন্টারনেট দিয়ে চালাও, তারপর আবার চেষ্টা করো।")
-            print(f"[access] server not reachable ({why}) and no earlier check - asking for a code")
+                _fail("  " + C(f"no contact with the server for {OFFLINE_GRACE_HOURS}h ({_english(why)})", RED + ";1")
+                      + "\n  " + C("start once with internet, then try again", GRAY))
+            print("  " + C(f"server not reachable ({_english(why)}) - asking for a code", YELLOW))
 
-    print(f"\n=== {purpose} is locked ===")
-    print(f"1) Telegram খুলে @{TG_BOT} খোঁজো, Start চাপো")
-    print(f"2) যে কোডটা আসবে সেটা এখানে পেস্ট করো")
+    _show_gate(purpose)
     for attempt in range(1, ATTEMPTS + 1):
         left = ATTEMPTS - attempt + 1
+        label = "try" if left == 1 else "tries"
         try:
-            code = input(f"Access code ({left} tries left): ").strip()
+            code = input("  " + C(f"Access code ({left} {label} left): ", YELLOW + ";1")).strip()
         except (EOFError, KeyboardInterrupt):
-            print("\n[access] cancelled.")
+            print("\n  " + C("cancelled", RED))
             raise SystemExit(1)
         if not code:
             continue
         ok, msg, rec = _try_all(code)
         if ok:
-            print(f"[access] {msg}")
+            print("  " + C("\u2713 " + _english(msg), GREEN + ";1"))
+            print(_rule())
+            print()
             return
-        print(f"[access] {msg}")
-    _fail("[access] too many failed attempts - not starting.")
+        print("  " + C("\u2715 " + _english(msg), RED))
+        print()
+    _fail("  " + C("too many failed attempts - not starting", RED))
 
 
 # ── CLI ────────────────────────────────────────────────────────────────────
