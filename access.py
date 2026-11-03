@@ -47,6 +47,12 @@ DEFAULT_GATE_PASS = "selimsb645-max Bangladesh"
 
 TOKEN_ENV = "BOT_ACCESS_KEY"
 
+# Telegram access bot (functions/ffAccessBot in the agent app).
+# It signs short codes with this secret; we verify them offline, so the terminal
+# never needs to call a server to be let in.
+TG_BOT = "ff_new_top_up_bot"
+SIGN_SECRET = b"NAI-access-2026-q7Lm4xZ9pT2vRb6n"
+
 
 # ── hashing / storage ──────────────────────────────────────────────────────
 def _hash(value: str, salt_hex: str) -> str:
@@ -151,7 +157,8 @@ def find_key(token: str, doc: dict) -> dict | None:
     if not token:
         return None
     for rec in doc.get("keys", []):
-        if rec.get("revoked"):
+        # signed-code records carry code_fp instead of salt/hash - skip them
+        if rec.get("revoked") or not rec.get("salt") or not rec.get("hash"):
             continue
         got = _hash(token, rec["salt"])
         if hmac.compare_digest(got, rec["hash"]):
@@ -229,46 +236,138 @@ def touch(rec: dict) -> None:
     save(doc)
 
 
-def require_access(purpose: str = "this program") -> None:
-    """Ask for the access key only. Returns only when the key is accepted.
 
-    Simple on purpose: one prompt, one key. The shared username/password pair is
-    no longer part of the start-up; the key is what proves access, and it stays
-    welded to the phone that first used it (remember mode) or is demanded on
-    every start (strict mode).
+# ── signed codes from the Telegram access bot ──────────────────────────────
+def _b36decode(text: str) -> int:
+    return int(text, 36)
+
+
+def verify_signed(code: str) -> tuple[bool, str, str, int]:
+    """Check NAI-<tgid36>-<exp36>-<sig8>. Offline: HMAC, no network.
+
+    Returns (ok, message, tgid, expires_at).
+    """
+    parts = (code or "").strip().split("-")
+    if len(parts) != 4 or parts[0].upper() != "NAI":
+        return False, "not a signed access code", "", 0
+    tg36, exp36, sig = parts[1], parts[2], parts[3].upper()
+    try:
+        tg_id = _b36decode(tg36)
+        exp = _b36decode(exp36)
+    except ValueError:
+        return False, "malformed access code", "", 0
+    payload = f"{tg36}.{exp36}"
+    want = hmac.new(SIGN_SECRET, payload.encode(), hashlib.sha256).hexdigest()[:8].upper()
+    if not hmac.compare_digest(want, sig):
+        return False, "this access code is not valid (signature)", "", 0
+    now = int(time.time())
+    if exp < now:
+        mins = int((now - exp) / 60)
+        return False, f"this access code expired {mins} minute(s) ago - send /start again", "", exp
+    return True, "ok", str(tg_id), exp
+
+
+def _code_record(doc: dict, tg_id: str, code: str) -> dict:
+    """Find or create the record that remembers which phone used this code."""
+    fp_code = hashlib.sha256(code.strip().encode()).hexdigest()[:16]
+    for rec in doc.get("keys", []):
+        if rec.get("code_fp") == fp_code:
+            return rec
+    rec = {
+        "label": f"tg:{tg_id}",
+        "code_fp": fp_code,
+        "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "bound_device": "",
+        "bound_at": "",
+        "last_used": "",
+        "uses": 0,
+        "revoked": False,
+    }
+    doc.setdefault("keys", []).append(rec)
+    return rec
+
+
+def redeem_signed(code: str, doc: dict) -> tuple[bool, str, dict | None]:
+    """Verify a Telegram code and weld it to this device."""
+    ok, msg, tg_id, _exp = verify_signed(code)
+    if not ok:
+        return False, msg, None
+    rec = _code_record(doc, tg_id, code)
+    if rec.get("revoked"):
+        return False, "this access code was revoked by the owner", rec
+    fp = device_fingerprint()
+    if not rec.get("bound_device"):
+        rec.update(bound_device=fp, uses=1,
+                   bound_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        rec["last_used"] = rec["bound_at"]
+        save(doc)
+        return True, "code accepted and locked to this phone", rec
+    if rec["bound_device"] != fp:
+        return False, "this code was already used on another phone - get a new one", rec
+    rec["uses"] = int(rec.get("uses") or 0) + 1
+    rec["last_used"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    save(doc)
+    return True, "welcome back", rec
+
+
+
+def _try_all(code: str) -> tuple[bool, str, dict | None]:
+    """Accept either a Telegram signed code or an older NAI-... key."""
+    ok, msg, rec = redeem_signed(code, load())
+    if ok:
+        return ok, msg, rec
+    legacy_ok, legacy_msg, legacy_rec = redeem(code, load())
+    if legacy_ok:
+        return legacy_ok, legacy_msg, legacy_rec
+    _, why, _tg, _exp = verify_signed(code)
+    return False, (msg if why != "not a signed access code" else legacy_msg), None
+
+
+def require_access(purpose: str = "this program") -> None:
+    """Let the person in with a Telegram access code. Nothing else.
+
+    The prompt shows which bot to open. They press Start there, the bot sends a
+    signed code valid 30 minutes, they paste it here. The first phone to use a
+    code keeps it; the same code on another phone is refused. Once this phone is
+    activated it is remembered and stops asking (setmode strict to ask always).
+    Older NAI-xxxx-xxxx-xxxx keys from access_keys.json still work.
     """
     doc = load()
 
     env_key = os.environ.get(TOKEN_ENV, "").strip()
     if env_key:
-        ok, msg, rec = redeem(env_key, doc)
+        ok, msg, rec = _try_all(env_key)
         if not ok:
             _fail(f"[access] {TOKEN_ENV} rejected: {msg}")
-        print(f"[access] {rec['label']} verified from environment")
+        print(f"[access] verified from environment ({rec.get('label')})")
         return
 
     if os.environ.get("GITHUB_ACTIONS") == "true" and not sys.stdin.isatty():
-        print("[access] headless runner - skipping the interactive key check. "
+        print("[access] headless runner - skipping the interactive code check. "
               "Set BOT_ACCESS_KEY to require it there too.")
         return
 
     fp = device_fingerprint()
-    known = bound_for(fp, doc) if is_remember(doc) else None
-    if known:
-        # this phone already redeemed an active key: nothing to type
-        print(f"[access] this device is activated for '{known['label']}'")
-        touch(known)
-        return
+    if is_remember(doc):
+        known = bound_for(fp, doc)
+        if known:
+            print(f"[access] this phone is activated ({known['label']}) - go ahead")
+            touch(known)
+            return
 
     print(f"\n=== {purpose} is locked ===")
+    print(f"1) Telegram খুলে @{TG_BOT} খোঁজো, Start চাপো")
+    print(f"2) যে কোডটা আসবে সেটা এখানে পেস্ট করো")
     for attempt in range(1, ATTEMPTS + 1):
         left = ATTEMPTS - attempt + 1
         try:
-            key = input(f"Access key ({left} tries left): ").strip()
+            code = input(f"Access code ({left} tries left): ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\n[access] cancelled.")
             raise SystemExit(1)
-        ok, msg, rec = redeem(key, load())
+        if not code:
+            continue
+        ok, msg, rec = _try_all(code)
         if ok:
             print(f"[access] {msg}")
             return

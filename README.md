@@ -134,4 +134,39 @@ Repo secrets:
 Workflow: joins the tailnet, probes `socks5://PHONE_PROXY_IP:1080`, prints the exit
 IP/country. run.sh then exports `BD_PROXY_URL` from the phone and skips the public
 proxy hunt entirely (auth, mint and the match engine all exit via the phone).
-If the phone is offline the run falls back to the old tunnel/proxy hunt.
+If the phone is offline the run falls back to the old tunnel/proxy hunt.## Getting in - clone, then one code
+
+Nothing to hand out by hand any more. The access code comes from a Telegram bot.
+
+1. **Clone** (the owner gives one GitHub token, nothing else):
+       git clone https://github.com/selimsb645-max/ff-like-bot.git
+       Username: selimsb645-max   Password: <that token>
+
+2. **Start the bot**, it asks for a code:
+       BOT_TOKEN='<your own bot token>' python3 bot.py
+       === FF BD bot is locked ===
+       1) Telegram খুলে @ff_new_top_up_bot খোঁজো, Start চাপো
+       2) যে কোডটা আসবে সেটা এখানে পেস্ট করো
+       Access code (3 tries left): _
+
+3. **Get the code** in Telegram: open the bot, press Start. It replies with
+   something like `NAI-gc0uy9-tnx0rq-453029BC`, valid 30 minutes.
+
+4. **Paste it** in the terminal. The code welds to that phone; the same code on
+   another phone is refused ("already used on another phone"). After that the
+   phone is remembered and starting the bot asks nothing.
+
+The code is signed with HMAC-SHA256 and checked offline, so the terminal needs no
+server call. Owner side it is one Cloudflare-free Base44 function
+(`functions/ffAccessBot`) driven by the Telegram webhook.
+
+### Owner notes
+* Change the bot: set its webhook once with
+  `setWebhook?url=https://solas-5609a435.base44.app/functions/ffAccessBot&secret_token=solasAccess7k2q9x4mL1`
+* Older `NAI-xxxx-xxxx-xxxx` keys from `access_keys.json` still work.
+* `python3 access.py status` shows the mode and this phone's fingerprint.
+* `python3 access.py setmode strict` asks for a code on every start.
+* Revoking a person = revoke their GitHub token (their clone stops updating);
+  the codes themselves expire in 30 minutes.
+
+
