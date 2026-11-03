@@ -3411,6 +3411,8 @@ async def main():
         except Exception: pass
 
 if __name__ == "__main__":
+    import auth
+    auth.require_auth("FF app")
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

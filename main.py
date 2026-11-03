@@ -2941,6 +2941,8 @@ async def main():
         print_success("Closed.")
 
 if __name__ == "__main__":
+    import auth
+    auth.require_auth("FF glory engine (main.py)")
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

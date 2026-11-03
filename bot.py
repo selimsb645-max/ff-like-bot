@@ -1936,6 +1936,8 @@ def cmd_pool(m):
 
 
 if __name__ == "__main__":
+    import auth
+    auth.require_auth("FF BD bot")
     if not BOT_TOKEN:
         print("BOT_TOKEN env var missing! Get a token from @BotFather and set it:")
         print("  export BOT_TOKEN=123:ABC... && python3 bot.py")

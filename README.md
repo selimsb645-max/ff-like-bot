@@ -9,6 +9,34 @@ Files:
 
 Secrets required: BOT_TOKEN (Telegram), BD_CREDS_B64 (base64 of bd_creds.txt)
 
+## Login (required before the bot starts)
+
+This repository is locked. Cloning it is not enough to run it: every entry point
+(`bot.py`, `main.py`, `app.py`, `auto_start.py`, `levelbot/run_level.py`) asks for
+a username and password first.
+
+```
+python3 bot.py
+=== FF BD bot is locked ===
+Username (3 tries left): selim
+Password:
+[auth] welcome, selim
+```
+
+* The check is a salted **PBKDF2-HMAC-SHA256** hash in `auth.json` (260,000
+  rounds). The plain text password is never written anywhere.
+* Three wrong attempts and the process exits with no bot, no error output that
+  helps guessing.
+* Change the login any time with `python3 set_login.py` (it asks for the new
+  username and password, then rewrites the hash).
+* Check the current state with `python3 auth.py status`, or test a login with
+  `python3 auth.py check`.
+* For servers and CI, skip the prompt by exporting the same credentials:
+  `BOT_USERNAME=... BOT_PASSWORD=... python3 bot.py`. GitHub Actions secrets with
+  those two names verify against the same hash. When no secrets are set, the
+  scheduled runner (`GITHUB_ACTIONS=true`, no terminal) continues so the farm
+  never stalls - set the secrets to close that last door as well.
+
 ## Owner's phone as the BD proxy (best setup, free)
 
 Public BD proxies keep dying and get flagged. The owner's own phone on mobile data

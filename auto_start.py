@@ -56,6 +56,8 @@ async def runner():
 
 
 if __name__ == "__main__":
+    import auth
+    auth.require_auth("FF auto start")
     try:
         asyncio.run(runner())
     except KeyboardInterrupt:
