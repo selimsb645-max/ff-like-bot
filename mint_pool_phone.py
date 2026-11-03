@@ -16,6 +16,7 @@ uses them. Tokens live about 7 hours, so running this twice a day keeps /like an
 /profile working with nothing else to do.
 """
 import json
+import os
 import subprocess
 import sys
 import time
@@ -31,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from guests_manager import game_register as gr  # noqa: E402
 
 ARGS = [a for a in sys.argv[1:] if not a.startswith("-")]
+PUSH_ONLY = "--push" in sys.argv
 CHECK = "--check" in sys.argv
 DO_REGISTER = "--register" in sys.argv
 N = int(ARGS[0]) if ARGS else 6
@@ -73,21 +75,58 @@ def register_and_mint(n):
     return made
 
 
+SLUG = "selimsb645-max/ff-like-bot"
+
+
+def owner_token():
+    """The repo's existing owner-token convention: env first, then ~/.ff_owner_token."""
+    for env in ("GITHUB_USAGE_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        v = os.environ.get(env, "").strip()
+        if v:
+            return v
+    f = Path.home() / ".ff_owner_token"
+    try:
+        return f.read_text().strip()
+    except Exception:
+        return ""
+
+
 def push(msg):
-    cmds = [
+    tok = owner_token()
+    if not tok:
+        print("[push] no token found. Save a fine-grained PAT with Contents: Read and")
+        print("       write on this repo once:")
+        print("         echo 'github_pat_xxx' > ~/.ff_owner_token && chmod 600 ~/.ff_owner_token")
+        print("       then run: python3 mint_pool_phone.py --push")
+        return False
+    url = f"https://x-access-token:{tok}@github.com/{SLUG}.git"
+    steps = [
         ["git", "add", "bd_pool.json", "like_burned.json"],
         ["git", "-c", "user.name=phone-mint", "-c", "user.email=phone@nextai.local",
          "commit", "-m", msg],
-        ["git", "pull", "--rebase", "--autostash"],
-        ["git", "push"],
+        ["git", "pull", "--rebase", "--autostash", url, "main"],
+        ["git", "push", url, "HEAD:main"],
     ]
-    for c in cmds:
+    for c in steps:
         r = subprocess.run(c, capture_output=True, text=True)
-        if r.returncode != 0 and "nothing to commit" not in (r.stdout + r.stderr):
-            print(f"[push] {c[1]} -> {r.stderr.strip()[:200]}")
+        out = (r.stdout + r.stderr)
+        if r.returncode != 0:
+            if "nothing to commit" in out:
+                continue
+            print(f"[push] {c[1] if len(c) > 1 else c[0]} failed: {out.strip()[:220]}")
+            return False
+    print("[push] bd_pool.json is on GitHub - the 24/7 bot can use these tokens now")
+    return True
 
 
 def main():
+    if PUSH_ONLY:
+        try:
+            n = len([t for t in json.loads(POOL.read_text()) if (t.get("exp") or 0) > time.time()])
+        except Exception:
+            n = 0
+        print(f"local pool holds {n} live tokens")
+        return 0 if push("phone mint: pool tokens") else 3
     if CHECK:
         print("connection exits in:", (api._exit_country() or "unknown").upper())
         print("endpoint reachability from this phone:")
