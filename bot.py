@@ -268,6 +268,11 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
     if sent == 0:
         st = getattr(ff_bd_api, "LAST_LIKE_STATS", {}) or {}
         reasons = st.get("reasons") or {}
+        if "pool_empty" in reasons:
+            bot.send_message(chat_id, "⏳ The token pool is empty right now (tokens expire "
+                             "every few hours and the refresh is in progress). Try again "
+                             "in 1–2 minutes.")
+            return
         lines = [f"⚠️ No like landed on <code>{target}</code>.", ""]
         if st.get("attempted"):
             lines.append(f"Tried {st.get('attempted')} pool accounts, 0 accepted.")
@@ -1246,6 +1251,13 @@ def cmd_like(m):
         else:
             st = getattr(ff_bd_api, "LAST_LIKE_STATS", {}) or {}
             reasons = st.get("reasons") or {}
+            if "pool_empty" in reasons:
+                bot.edit_message_text(
+                    "⏳ The token pool is empty right now (pool tokens expire every few hours "
+                    "and the refresh is in progress).\nNothing is wrong with "
+                    f"<code>{target}</code> — try again in 1–2 minutes.",
+                    msg.chat.id, msg.message_id)
+                return
             lines = [f"⚠️ No like landed on <code>{target}</code>."]
             if st.get("attempted"):
                 lines.append(f"Tried {st.get('attempted')} pool accounts, 0 accepted.")
