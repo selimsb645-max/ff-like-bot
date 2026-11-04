@@ -1076,9 +1076,23 @@ LAST_LIKE_STATS = {"attempted": 0, "sent": 0, "reasons": {}, "accounts_tried": 0
 
 def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> int:
     """Send likes to a target - PARALLEL version (fast).
-    Only ACTIVATED accounts (with a live game profile) are used."""
+    Only ACTIVATED accounts (with a live game profile) are used.
+
+    Refuses to fire unless the egress really is Bangladesh. Garena answers 200 for a
+    like that comes from the wrong region and silently drops it, so sending anyway
+    produces the worst possible outcome: a confident "requests accepted" report and a
+    counter that never moves.
+    """
     import like_pb2 as lpb
     import random as _rnd
+    cc = _exit_country()
+    LAST_LIKE_STATS.update({"attempted": 0, "sent": 0, "reasons": {}, "accounts_tried": 0,
+                            "blocked": "" if cc == "BD" else
+                            f"exit country is {cc or 'unknown'}, not BD"})
+    if cc != "BD":
+        print(f"[like] blocked: {LAST_LIKE_STATS['blocked']}")
+        return 0
+    LAST_LIKE_STATS.pop("blocked", None)
     cache = ready_uids()
     raw_pool = get_pool()
     pool = _filter_activated(raw_pool, cache)

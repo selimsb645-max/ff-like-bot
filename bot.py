@@ -334,6 +334,11 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
                      "that the pool already liked today cannot gain more until the reset. "
                      "Send a different UID meanwhile — the pool has plenty of accounts left.")
         bot.send_message(chat_id, "\n".join(lines))
+    elif delta == 0 and ff_bd_api.LAST_LIKE_STATS.get("blocked"):
+        bot.send_message(chat_id,
+                        "🚫 Likes were *not* sent: " + ff_bd_api.LAST_LIKE_STATS["blocked"] + ".\n"
+                        "Garena would accept them and count nothing. Turn on the phone proxy "
+                        "(Tailscale + microsocks) and try again.")
     elif delta == 0:
         bot.send_message(chat_id,
                         f"⚠️ {sent} like requests were accepted, but the counter on "
@@ -1330,6 +1335,12 @@ def cmd_like(m):
     delta = None
     if isinstance(likes_before, int) and isinstance(likes_after, int):
         delta = likes_after - likes_before
+    if delta == 0 and ff_bd_api.LAST_LIKE_STATS.get("blocked"):
+        bot.edit_message_text("🚫 Likes were *not* sent: " + ff_bd_api.LAST_LIKE_STATS["blocked"]
+                              + ".\nGarena would accept them and count nothing. Turn on the "
+                                "phone proxy (Tailscale + microsocks) and try again.",
+                              msg.chat.id, msg.message_id)
+        return
     if delta == 0:
         prev_t = _target_today(usage, target)
         when = time.strftime("%H:%M", time.localtime(prev_t.get("last") or 0))
