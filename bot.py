@@ -1132,6 +1132,7 @@ def cmd_help(m):
             "<b>/admin</b> — ইউজার অ্যানালিটিক্স\n"
             "<b>/pool</b> — লাইক পুল স্ট্যাটাস\n"
             "<b>/guests</b> — গেস্ট অ্যাকাউন্ট স্ট্যাটাস\n"
+            "<b>/diag</b> — বটের ভেতরের অবস্থা (ডিবাগ)\n"
             "<b>/broadcast</b> <code>msg</code> — সবাইকে মেসেজ\n"
             "<b>/addcode</b> <code>CODE | reward | days</code> — কোড যোগ\n"
             "<b>/delcode</b> <code>CODE</code> — কোড বাদ\n"
@@ -2085,6 +2086,48 @@ def cmd_guild(m):
         f"📌 Save this guild: /setguild {g.get('clan_id')}"
     )
     bot.edit_message_text(card, m.chat.id, msg.message_id)
+
+
+@bot.message_handler(commands=["diag"])
+def cmd_diag(m):
+    if not is_admin(m.from_user.id if m.from_user else 0):
+        bot.reply_to(m, "⛔ Admin-only command.")
+        return
+    lines = ["🩺 <b>BOT DIAGNOSTICS</b>"]
+    try:
+        pool = ff_bd_api.get_pool()
+        lines.append(f"pool: <b>{len(pool)}</b> tokens")
+    except Exception as e:
+        lines.append(f"pool: ERROR {str(e)[:60]}")
+        pool = []
+    try:
+        cache = ff_bd_api.ready_uids()
+        ready = sum(1 for v in cache.values() if isinstance(v, dict) and v.get("ready"))
+        lines.append(f"ready cache: {ready}/{len(cache)}")
+    except Exception as e:
+        lines.append(f"ready cache: ERROR {str(e)[:40]}")
+    try:
+        act = ff_bd_api._filter_activated(pool[:60], ff_bd_api.ready_uids()) if pool else []
+        lines.append(f"activated (sample): {len(act)}/{min(len(pool), 60)}")
+    except Exception as e:
+        lines.append(f"activated: ERROR {str(e)[:40]}")
+    try:
+        lines.append(f"proxy: <code>{ff_bd_api._proxy() or 'none'}</code>")
+        lines.append(f"exit country: {ff_bd_api._exit_country()}")
+    except Exception:
+        pass
+    try:
+        st = getattr(ff_bd_api, "LAST_LIKE_STATS", {}) or {}
+        lines.append(f"last like: attempted={st.get('attempted')} sent={st.get('sent')} "
+                     f"reasons={st.get('reasons')}")
+    except Exception:
+        pass
+    try:
+        lines.append(f"burned: {len(ff_bd_api._burned_load())} | mint tries: "
+                     f"{len(ff_bd_api._tries_load())}")
+    except Exception:
+        pass
+    bot.reply_to(m, "\n".join(lines))
 
 @bot.message_handler(commands=["guests"])
 def cmd_guests(m):
