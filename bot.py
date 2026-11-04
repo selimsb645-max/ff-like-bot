@@ -340,6 +340,16 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
                         "Garena would accept them and count nothing. Turn on the phone proxy "
                         "(Tailscale + microsocks) and try again.")
     elif delta == 0:
+        try:
+            remember_pending(chat_id, target, likes_before, sent)
+        except Exception:
+            pass
+        bot.send_message(chat_id,
+                        f"⏳ {sent} likes sent. The counter on <code>{target}</code> still "
+                        f"reads <b>{likes_after}</b>, but Garena's profile count lags — "
+                        "I will re-check at 10 and 45 minutes and tell you what really landed.")
+        return
+    elif False:
         bot.send_message(chat_id,
                         f"⚠️ {sent} like requests were accepted, but the counter on "
                         f"<code>{target}</code> has not moved after ~90s "
@@ -752,6 +762,84 @@ def reminder_loop():
         except Exception as e:
             print("reminder loop error:", e)
         time.sleep(30)
+
+
+PENDING_FILE = Path(__file__).parent / "pending_like_checks.json"
+# Garena's profile counter is not live: it lags, so a 90-second look is not evidence
+# that a like failed. The bot re-reads the target later and reports what really landed.
+PENDING_STAGES = ((600, "10 min"), (2700, "45 min"))
+
+
+def _load_pending():
+    try:
+        return json.loads(PENDING_FILE.read_text())
+    except Exception:
+        return []
+
+
+def _save_pending(items):
+    try:
+        PENDING_FILE.write_text(json.dumps(items, indent=1))
+    except Exception:
+        pass
+
+
+def remember_pending(chat_id, target, before, sent):
+    if not isinstance(before, int):
+        return
+    items = _load_pending()
+    items.append({"chat_id": chat_id, "target": str(target), "before": before,
+                  "sent": sent, "t": time.time(), "stage": 0})
+    _save_pending(items[-200:])
+
+
+def verify_loop():
+    """Re-read targets we liked earlier and tell the user what actually landed."""
+    while True:
+        time.sleep(120)
+        try:
+            items = _load_pending()
+            if not items:
+                continue
+            pool = ff_bd_api.get_pool()
+            jwt = pool[0]["token"] if pool else None
+            keep = []
+            for it in items:
+                age = time.time() - it["t"]
+                if it["stage"] >= len(PENDING_STAGES):
+                    continue
+                due_age, label = PENDING_STAGES[it["stage"]]
+                if age < due_age:
+                    keep.append(it)
+                    continue
+                st = ff_bd_api.get_stats(int(it["target"]), jwt)
+                now_likes = st.get("likes") if st else None
+                it["stage"] += 1
+                if isinstance(now_likes, int):
+                    delta = now_likes - it["before"]
+                    if delta > 0:
+                        try:
+                            bot.send_message(it["chat_id"],
+                                             f"✅ Late confirmation for <code>{it['target']}</code>: "
+                                             f"*+{delta}* likes landed (after {label}). "
+                                             f"Total now <b>{now_likes}</b>.\n"
+                                             "The counter lags, so the earlier warning was too early.")
+                        except Exception:
+                            pass
+                        continue          # settled
+                    if it["stage"] >= len(PENDING_STAGES):
+                        try:
+                            bot.send_message(it["chat_id"],
+                                             f"❌ <code>{it['target']}</code> still shows "
+                                             f"<b>{now_likes}</b> after {label} — those "
+                                             f"{it['sent']} likes really did not land.")
+                        except Exception:
+                            pass
+                        continue
+                keep.append(it)
+            _save_pending(keep)
+        except Exception:
+            continue
 
 
 def health_loop():
@@ -2316,6 +2404,7 @@ if __name__ == "__main__":
     print("bot running... [spam shield + like cooldown + token health active]")
     threading.Thread(target=reminder_loop, daemon=True).start()
     threading.Thread(target=health_loop, daemon=True).start()
+    threading.Thread(target=verify_loop, daemon=True).start()
     threading.Thread(target=rank_watch_loop, daemon=True).start()
 
     # one token, one running copy: Telegram allows a single getUpdates consumer,

@@ -20,6 +20,19 @@ import ff_bd_api as api
 from guests_manager import game_register as gr
 
 DEVICES = Path("/tmp/ug/UNFAIR GLORY BOT /guildglory/devices.json")
+import httpx
+
+
+def _post(url: str, headers: dict, data: bytes, timeout: int = 25):
+    """POST with trust_env so HTTPS_PROXY (the phone tunnel) is honoured.
+
+    Kept local instead of reaching into ff_bd_api: the repo gets pulled by several
+    runners and a helper that exists today can be gone tomorrow, which is exactly how
+    the generator silently stopped logging in.
+    """
+    return httpx.post(url, headers=headers, content=data, timeout=timeout,
+                      verify=False, trust_env=True)
+
 FALLBACK_DEVS = [
     ("Samsung", "SM-G998B", "Adreno (TM) 660", "Android OS 12 / API-31", 1440, 3200, 480),
     ("Xiaomi", "M2007J20CG", "Adreno (TM) 618", "Android OS 12 / API-31", 1080, 2340, 395),
@@ -88,7 +101,7 @@ def full_major_login(uid, open_id, access_token, host=None, release="OB55", dev=
     for base in hosts:
         for attempt in (1, 2):
             try:
-                r = api._post_any(base.rstrip("/") + "/MajorLogin", headers=h, data=blob, timeout=25)
+                r = _post(base.rstrip("/") + "/MajorLogin", h, blob, 25)
                 if r.status_code != 200:
                     last = f"HTTP {r.status_code} {r.content[:40]!r}"
                     continue

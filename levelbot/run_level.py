@@ -559,6 +559,16 @@ def get_login_data(login):
     """GetLoginData -> (whisper_ip, whisper_port, online_ip, online_port)."""
     pair = _grant_direct(login["uid"], login["pw"])
     if not pair:
+        # _grant_direct posts the older wire; the game_register grant still answers,
+        # and without a fresh pair GetLoginData silently returns nothing at all.
+        try:
+            from guests_manager import game_register as _gr
+            _s = _gr.new_session()
+            _pair = _gr.token_grant(_s, login["uid"], login["pw"])
+            pair = _pair if _pair and _pair[0] else None
+        except Exception:
+            pair = None
+    if not pair:
         return None
     at2, oid2 = pair
     wire = (api._pf_str(22, oid2) + api._pf_str(23, "4")

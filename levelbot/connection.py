@@ -14,6 +14,8 @@ from typing import Optional, Callable, Any
 logger = logging.getLogger("levelbot.connection")
 
 # Region → packet type (same as ClanGloryBot)
+GATEWAY_KA = {"BD": "0215", "IND": "0214", "ID": "0219", "PK": "0215", "ME": "0215"}
+
 REGION_PACKETS = {"ind": "0514", "bd": "0519"}
 DEFAULT_PACKET = "0515"
 
@@ -105,6 +107,18 @@ class GameConnection:
         self.whisper_writer.write(chat_bytes)
         await self.whisper_writer.drain()
 
+        # The gateway expects its 2-byte keepalive straight after the auth packet,
+        # not 15 seconds later: when it arrives late the server answers with a short
+        # error frame and drops the online channel, which is why sessions looked
+        # "online" for a second and why likes from them were never counted.
+        self._gw_ka = bytes.fromhex(GATEWAY_KA.get(self._region.upper(), "0219"))
+        try:
+            self.online_writer.write(self._gw_ka)
+            await self.online_writer.drain()
+            logger.info(f"gateway keepalive {self._gw_ka.hex()} sent immediately")
+        except Exception as e:
+            logger.warning(f"gateway keepalive failed: {e}")
+
         logger.info("TCP connected + auth token sent")
 
         # Send AutH_GlobAl on chat channel (required by Garena)
@@ -151,7 +165,7 @@ class GameConnection:
                 pkt_type = REGION_PACKETS.get(self._region, DEFAULT_PACKET)
                 pkt_online = await GeneRaTePk(proto.hex(), pkt_type, self._key, self._iv)
                 if self.online_writer and not self.online_writer.is_closing():
-                    self.online_writer.write(pkt_online)
+                    self.online_writer.write(getattr(self, "_gw_ka", bytes.fromhex("0215")))
                     await self.online_writer.drain()
                 # Chat channel: 1215 packet type
                 pkt_chat = await GeneRaTePk(proto.hex(), "1215", self._key, self._iv)
@@ -169,7 +183,7 @@ class GameConnection:
                     logger.warning(f"Keepalive error: {e}")
                     self.connected = False
                     break
-            await asyncio.sleep(15)
+            await asyncio.sleep(5)
 
     def reset_ka_watchdog(self):
         """Call when any data is received from server."""

@@ -65,6 +65,7 @@ def record(uid, pw, info, nick=None, profiled=None):
         "key": info["key"].hex() if isinstance(info.get("key"), (bytes, bytearray)) else info.get("key"),
         "iv": info["iv"].hex() if isinstance(info.get("iv"), (bytes, bytearray)) else info.get("iv"),
         "server_url": info.get("url"), "region": info.get("region") or "BD",
+        "ts": info.get("ts"),
         "nick": nick, "exp": time.time() + TOKEN_LIFE,
         "created": time.time(), "profiled": profiled, "last_ok": time.time(),
     }
@@ -79,8 +80,15 @@ def renew(rec: dict, sess) -> bool:
         info = full_major_login(rec["uid"], oid, at)
         if not info:
             return False
+        for _ in range(2):
+            again = full_major_login(rec["uid"], oid, at)
+            if again and len(again.get("jwt", "")) > len(info.get("jwt", "")):
+                info = again
+            if len(info.get("jwt", "")) >= 815:
+                break
         rec.update({"token": info["jwt"], "account_id": info.get("account_id") or rec.get("account_id"),
                     "server_url": info.get("url") or rec.get("server_url"),
+                    "ts": info.get("ts") or rec.get("ts"),
                     "key": info["key"].hex() if isinstance(info.get("key"), (bytes, bytearray)) else info.get("key"),
                     "iv": info["iv"].hex() if isinstance(info.get("iv"), (bytes, bytearray)) else info.get("iv"),
                     "exp": time.time() + TOKEN_LIFE, "last_ok": time.time()})
@@ -96,7 +104,8 @@ async def enter_game(rec: dict) -> bool:
     key = bytes.fromhex(rec["key"]) if isinstance(rec["key"], str) else rec["key"]
     iv = bytes.fromhex(rec["iv"]) if isinstance(rec["iv"], str) else rec["iv"]
     login = {"uid": rec["uid"], "pw": rec["pass"], "jwt": rec["token"], "key": key, "iv": iv,
-             "account_id": rec.get("account_id") or int(rec["uid"]), "ts": int(time.time()),
+             "account_id": rec.get("account_id") or int(rec["uid"]),
+             "ts": rec.get("ts") or int(time.time()),
              "region": "BD", "url": rec.get("server_url")}
     data = get_login_data(login)
     if not data:
@@ -140,6 +149,14 @@ def create_one(sess, tries=3):
         info = full_major_login(uid, oid, at)
         if not info:
             continue
+        # The first login returns the short stage-1 JWT; the game only accepts the
+        # longer one that the second pass yields, and GetLoginData needs it.
+        for _ in range(2):
+            again = full_major_login(uid, oid, at)
+            if again and len(again.get("jwt", "")) > len(info.get("jwt", "")):
+                info = again
+            if len(info.get("jwt", "")) >= 815:
+                break
         return record(uid, pw, info, nick=nick, profiled=False)
     return None
 
