@@ -764,6 +764,33 @@ _BLOCK_CC = ""
 _BLOCK_TS = 0.0
 
 
+_LAST_HARD_FAIL = set()
+MINT_TRIES = Path(__file__).parent / "mint_attempts.json"
+MINT_RETRY_AFTER = 6 * 3600   # a failed account is retried after 6h, not burned forever
+
+
+def _tries_load() -> dict:
+    try:
+        return json.loads(MINT_TRIES.read_text())
+    except Exception:
+        return {}
+
+
+def _tries_mark(uids, ok=False):
+    d = _tries_load()
+    now = time.time()
+    for u in uids:
+        rec = d.get(str(u)) or {}
+        rec["last"] = now
+        rec["ok"] = bool(ok)
+        rec["fails"] = 0 if ok else int(rec.get("fails") or 0) + 1
+        d[str(u)] = rec
+    try:
+        MINT_TRIES.write_text(json.dumps(d))
+    except Exception:
+        pass
+
+
 def refresh_pool() -> list:
     """Mint JWTs for the NEWEST unused pool accounts only.
 
@@ -775,9 +802,14 @@ def refresh_pool() -> list:
     it is never attempted again.
     """
     burned = _burned_load()
+    tries = _tries_load()
+    now_ts = time.time()
     cands = []
     for uid, pw in load_creds() + load_registered_bd():
         if str(uid) in burned:
+            continue
+        rec = tries.get(str(uid)) or {}
+        if rec and not rec.get("ok") and now_ts - float(rec.get("last") or 0) < MINT_RETRY_AFTER:
             continue
         try:
             n = int(str(uid))
@@ -799,19 +831,19 @@ def refresh_pool() -> list:
             cc = _exit_country()
             _BLOCK_CC, _BLOCK_TS = cc, time.time()
         if cc and cc.upper() != "BD":
-            print(f"[POOL] mint blocked: this machine exits from {cc.upper()} and a "
-                  f"{cc.upper()} token can never like or read a BD player.")
-            print("[POOL] no account was spent. Set LIKE_PROXY_URL to a BD proxy "
-                  "(the phone tunnel does this) or run the bot on the phone.")
-            return []
+            print(f"[POOL] note: this machine exits from {cc.upper()}. Existing BD accounts "
+                  "keep their region (it is stamped when the account is created), so their "
+                  "tokens still work - minting continues.")
 
     pool, touched, wrong_region = [], [], 0
     for _n, uid, pw in cands:
         touched.append(uid)
         try:
             t = mint_jwt(uid, pw)
-        except Exception:
+        except Exception as e:
             t = None
+            if any(k in str(e).lower() for k in ("not_found", "banned", "invalid_pass")):
+                _LAST_HARD_FAIL.add(str(uid))
         if not t:
             continue
         url = str(t.get("server_url") or "")
@@ -824,7 +856,10 @@ def refresh_pool() -> list:
                 break
             continue
         pool.append(t)
-    _burned_add(touched)                           # login spent either way
+    hard = [u for u in touched if str(u) in _LAST_HARD_FAIL]
+    if hard:
+        _burned_add(hard)
+    _tries_mark([u for u in touched if u not in hard], ok=bool(pool))
     try:
         POOL_FILE.write_text(json.dumps(pool, indent=1))
     except Exception:
