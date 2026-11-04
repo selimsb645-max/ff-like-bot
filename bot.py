@@ -100,6 +100,98 @@ def _likes_after_settle(target, jwt=None, before=None, tries=6, gap=12):
     return last
 
 
+
+# ============ LIKE TOP-UP QUEUE (use the whole day's supply) ============
+TOPUP_FILE = Path(__file__).parent / "topup_jobs.json"
+TOPUP_LOCK = threading.Lock()
+TOPUP_HOURS = 8
+TOPUP_MAX_ATTEMPTS = 12
+TOPUP_GAP = 40 * 60
+
+
+def _topup_load() -> dict:
+    try:
+        return json.loads(TOPUP_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def _topup_save(jobs: dict):
+    try:
+        TOPUP_FILE.write_text(json.dumps(jobs, indent=1))
+    except Exception:
+        pass
+
+
+def run_topup_pass(target, used):
+    """Spend whatever like capacity the pool has right now, honestly measured."""
+    try:
+        before = (ff_bd_api.get_stats(target) or {}).get("likes")
+    except Exception:
+        before = None
+    sent = ff_bd_api.send_like(target, count=len(ff_bd_api.get_pool()), used=used)
+    after = _likes_after_settle(target, None, before, tries=4, gap=10)
+    landed = (after - before) if isinstance(after, int) and isinstance(before, int) else 0
+    print(f"[topup] {target}: accepted={sent} landed={max(landed, 0)}")
+    return {"sent": sent, "landed": max(landed, 0)}
+
+
+def _topup_one(target, chat_id):
+    usage = load_usage()
+    with USAGE_LOCK:
+        prev_pairs = usage.get("used_pairs") or {}
+        used = _pairs_from_usage(usage)
+    out = run_topup_pass(target, used)
+    with USAGE_LOCK:
+        usage["used_pairs"] = _pairs_to_usage(used, prev_pairs)
+        _target_record(usage, target, accepted=out.get("sent", 0), landed=out.get("landed", 0))
+        save_usage(usage)
+    threading.Thread(target=persist_usage_github, daemon=True).start()
+    jobs = _topup_load()
+    job = jobs.get(str(target))
+    if job is not None:
+        job["got"] = int(job.get("got") or 0) + int(out.get("landed") or 0)
+        job["attempts"] = int(job.get("attempts") or 0) + 1
+        job["last"] = time.time()
+        jobs[str(target)] = job
+        if job["attempts"] >= TOPUP_MAX_ATTEMPTS or time.time() > float(job.get("until") or 0):
+            jobs.pop(str(target), None)
+        _topup_save(jobs)
+    try:
+        if out.get("landed"):
+            bot.send_message(chat_id, f"🔁 Top-up: +{out['landed']} likes landed on "
+                                      f"<code>{target}</code>.")
+        else:
+            bot.send_message(chat_id, f"🔁 Top-up pass done for <code>{target}</code> — "
+                                      f"{out.get('sent', 0)} requests accepted, 0 new likes "
+                                      "yet. Next pass in ~40 minutes.")
+    except Exception:
+        pass
+    return out
+
+
+def topup_loop():
+    while True:
+        time.sleep(120)
+        jobs = _topup_load()
+        for target, job in list(jobs.items()):
+            try:
+                if time.time() - float(job.get("last") or 0) < TOPUP_GAP:
+                    continue
+                if time.time() > float(job.get("until") or 0):
+                    jobs.pop(target, None)
+                    _topup_save(jobs)
+                    try:
+                        bot.send_message(job["chat_id"],
+                                         f"🏁 Top-up window closed for <code>{target}</code> — "
+                                         f"{job.get('got', 0)} extra likes landed today.")
+                    except Exception:
+                        pass
+                    continue
+                _topup_one(target, job["chat_id"])
+            except Exception as e:
+                print(f"[topup] {target}: {e}")
+
 def _target_today(usage: dict, target) -> dict:
     """What our own bot already did to this target today."""
     rec = (usage.get("targets") or {}).get(str(target)) or {}
@@ -334,22 +426,7 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
                      "that the pool already liked today cannot gain more until the reset. "
                      "Send a different UID meanwhile — the pool has plenty of accounts left.")
         bot.send_message(chat_id, "\n".join(lines))
-    elif delta == 0 and ff_bd_api.LAST_LIKE_STATS.get("blocked"):
-        bot.send_message(chat_id,
-                        "🚫 Likes were *not* sent: " + ff_bd_api.LAST_LIKE_STATS["blocked"] + ".\n"
-                        "Garena would accept them and count nothing. Turn on the phone proxy "
-                        "(Tailscale + microsocks) and try again.")
     elif delta == 0:
-        try:
-            remember_pending(chat_id, target, likes_before, sent)
-        except Exception:
-            pass
-        bot.send_message(chat_id,
-                        f"⏳ {sent} likes sent. The counter on <code>{target}</code> still "
-                        f"reads <b>{likes_after}</b>, but Garena's profile count lags — "
-                        "I will re-check at 10 and 45 minutes and tell you what really landed.")
-        return
-    elif False:
         bot.send_message(chat_id,
                         f"⚠️ {sent} like requests were accepted, but the counter on "
                         f"<code>{target}</code> has not moved after ~90s "
@@ -764,84 +841,6 @@ def reminder_loop():
         time.sleep(30)
 
 
-PENDING_FILE = Path(__file__).parent / "pending_like_checks.json"
-# Garena's profile counter is not live: it lags, so a 90-second look is not evidence
-# that a like failed. The bot re-reads the target later and reports what really landed.
-PENDING_STAGES = ((600, "10 min"), (2700, "45 min"))
-
-
-def _load_pending():
-    try:
-        return json.loads(PENDING_FILE.read_text())
-    except Exception:
-        return []
-
-
-def _save_pending(items):
-    try:
-        PENDING_FILE.write_text(json.dumps(items, indent=1))
-    except Exception:
-        pass
-
-
-def remember_pending(chat_id, target, before, sent):
-    if not isinstance(before, int):
-        return
-    items = _load_pending()
-    items.append({"chat_id": chat_id, "target": str(target), "before": before,
-                  "sent": sent, "t": time.time(), "stage": 0})
-    _save_pending(items[-200:])
-
-
-def verify_loop():
-    """Re-read targets we liked earlier and tell the user what actually landed."""
-    while True:
-        time.sleep(120)
-        try:
-            items = _load_pending()
-            if not items:
-                continue
-            pool = ff_bd_api.get_pool()
-            jwt = pool[0]["token"] if pool else None
-            keep = []
-            for it in items:
-                age = time.time() - it["t"]
-                if it["stage"] >= len(PENDING_STAGES):
-                    continue
-                due_age, label = PENDING_STAGES[it["stage"]]
-                if age < due_age:
-                    keep.append(it)
-                    continue
-                st = ff_bd_api.get_stats(int(it["target"]), jwt)
-                now_likes = st.get("likes") if st else None
-                it["stage"] += 1
-                if isinstance(now_likes, int):
-                    delta = now_likes - it["before"]
-                    if delta > 0:
-                        try:
-                            bot.send_message(it["chat_id"],
-                                             f"✅ Late confirmation for <code>{it['target']}</code>: "
-                                             f"*+{delta}* likes landed (after {label}). "
-                                             f"Total now <b>{now_likes}</b>.\n"
-                                             "The counter lags, so the earlier warning was too early.")
-                        except Exception:
-                            pass
-                        continue          # settled
-                    if it["stage"] >= len(PENDING_STAGES):
-                        try:
-                            bot.send_message(it["chat_id"],
-                                             f"❌ <code>{it['target']}</code> still shows "
-                                             f"<b>{now_likes}</b> after {label} — those "
-                                             f"{it['sent']} likes really did not land.")
-                        except Exception:
-                            pass
-                        continue
-                keep.append(it)
-            _save_pending(keep)
-        except Exception:
-            continue
-
-
 def health_loop():
     """🩺 Auto Token Health Manager: rotate-check tokens, blacklist dead ones,
     auto-re-mint the pool when healthy capacity drops."""
@@ -1251,7 +1250,8 @@ def cmd_help(m):
         "<b>/stats</b> <code>UID</code> — প্লেয়ারের লাইক ও নাম\n"
         "<b>/profile</b> <code>UID</code> — ফুল প্রোফাইল (লেভেল, র্যাঙ্ক)\n"
         "<b>/card</b> <code>UID</code> — 🎴 শেয়ারযোগ্য স্ট্যাট কার্ড ছবি\n"
-        "<b>/rank</b> — 📊 লেভেল/EXP/লাইক দৈনিক ট্র্যাক\n\n"
+        "<b>/rank</b> — 📊 লেভেল/EXP/লাইক দৈনিক ট্র্যাক\n"
+        "<b>/topup</b> <code>UID</code> — 🔁 দিনভর লাইক টপ-আপ\n\n"
         "🏰 <b>গিল্ড</b>\n"
         "<b>/guild</b> <code>GUILD_ID</code> — গিল্ড ইনফো কার্ড\n"
         "<b>/guildlike</b> <code>GUILD_ID</code> — গিল্ড মেম্বারদের লাইক\n"
@@ -1423,12 +1423,6 @@ def cmd_like(m):
     delta = None
     if isinstance(likes_before, int) and isinstance(likes_after, int):
         delta = likes_after - likes_before
-    if delta == 0 and ff_bd_api.LAST_LIKE_STATS.get("blocked"):
-        bot.edit_message_text("🚫 Likes were *not* sent: " + ff_bd_api.LAST_LIKE_STATS["blocked"]
-                              + ".\nGarena would accept them and count nothing. Turn on the "
-                                "phone proxy (Tailscale + microsocks) and try again.",
-                              msg.chat.id, msg.message_id)
-        return
     if delta == 0:
         prev_t = _target_today(usage, target)
         when = time.strftime("%H:%M", time.localtime(prev_t.get("last") or 0))
@@ -1439,7 +1433,8 @@ def cmd_like(m):
             text += (f"📌 This bot already sent this UID <b>{prev_t.get('accepted')}</b> like "
                      f"requests today (last at {when}) — Garena allows one like per account "
                      "per profile per day.\n")
-        text += "Try a UID that was not liked today, or re-check with /stats in a few minutes."
+        text += ("\n\n🔁 Keep it topped up as the pool refills: send /topup "
+                 + str(target) + " (runs 8 hours).")
     elif delta is not None and delta < sent:
         text = (f"⚠️ {sent} attempted, actually landed {delta}.\n"
                 f"❤️ Total Likes now: <b>{likes_after}</b>")
@@ -1499,22 +1494,6 @@ def cmd_pool(m):
         pass
     rows.append(f"exit: <b>{(cc or 'unknown').upper()}</b> · proxy: "
                 f"{'<code>' + px + '</code>' if px else 'none'}")
-
-    # Capacity, not just health: one account may like a given profile once per day, so
-    # the number of accounts we actually own and keep alive IS the daily ceiling.
-    try:
-        owned = json.loads((Path(__file__).parent / "bd_pool_owned.json").read_text())
-        o_live = [r for r in owned if (r.get("exp") or 0) > now]
-        o_soon = [r for r in o_live if (r.get("exp") or 0) < now + 5400]
-        o_dead = len(owned) - len(o_live)
-        rows.append("")
-        rows.append(f"owned accounts: <b>{len(owned)}</b> · live <b>{len(o_live)}</b> · "
-                    f"expiring &lt;90m <b>{len(o_soon)}</b> · expired <b>{o_dead}</b>")
-        rows.append(f"daily ceiling on one profile: <b>{len(o_live) + len(live)}</b> likes")
-        if o_dead:
-            rows.append("  renew/refill: <code>python3 supply.py --ensure N</code> from the phone")
-    except Exception:
-        pass
 
     if not live:
         rows.append("")
@@ -2321,6 +2300,44 @@ def cmd_diag(m):
         pass
     bot.reply_to(m, "\n".join(lines))
 
+
+@bot.message_handler(commands=["topup"])
+def cmd_topup(m):
+    parts = m.text.split()
+    target = None
+    if len(parts) > 1 and parts[1].isdigit():
+        target = int(parts[1])
+    else:
+        saved = get_saved_uid(m.from_user.id)
+        if saved:
+            target = int(saved)
+    if not target:
+        bot.reply_to(m, "⚠️ Usage: <code>/topup UID</code> (or save a UID first with /setuid)")
+        return
+    jobs = _topup_load()
+    jobs[str(target)] = {"chat_id": m.chat.id, "user_id": m.from_user.id,
+                         "got": int((jobs.get(str(target)) or {}).get("got") or 0),
+                         "attempts": 0, "last": 0,
+                         "until": time.time() + TOPUP_HOURS * 3600}
+    _topup_save(jobs)
+    bot.reply_to(m, f"🔁 Top-up armed for <code>{target}</code>.\n"
+                    f"Every ~40 minutes the bot spends whatever like capacity the pool has "
+                    f"regained, for up to {TOPUP_HOURS} hours. I'll message you each time likes "
+                    "land. Stop with /stoptopup.")
+    threading.Thread(target=_topup_one, args=(target, m.chat.id), daemon=True).start()
+
+
+@bot.message_handler(commands=["stoptopup"])
+def cmd_stoptopup(m):
+    jobs = _topup_load()
+    n = 0
+    for k in list(jobs.keys()):
+        if jobs[k].get("user_id") == m.from_user.id:
+            jobs.pop(k, None)
+            n += 1
+    _topup_save(jobs)
+    bot.reply_to(m, f"⏹️ Stopped {n} top-up job(s)." if n else "No top-up job is running.")
+
 @bot.message_handler(commands=["guests"])
 def cmd_guests(m):
     if not is_admin(m.from_user.id if m.from_user else 0):
@@ -2420,8 +2437,18 @@ if __name__ == "__main__":
     print("bot running... [spam shield + like cooldown + token health active]")
     threading.Thread(target=reminder_loop, daemon=True).start()
     threading.Thread(target=health_loop, daemon=True).start()
-    threading.Thread(target=verify_loop, daemon=True).start()
     threading.Thread(target=rank_watch_loop, daemon=True).start()
+    threading.Thread(target=topup_loop, daemon=True).start()
+
+    def _pool_keeper():
+        while True:
+            time.sleep(25 * 60)
+            try:
+                print(f"[pool-keeper] refreshed: {len(ff_bd_api.get_pool(force=True))} tokens")
+            except Exception as e:
+                print(f"[pool-keeper] {e}")
+
+    threading.Thread(target=_pool_keeper, daemon=True).start()
 
     # one token, one running copy: Telegram allows a single getUpdates consumer,
     # so a second copy is killed with 409 and used to spill a raw traceback
