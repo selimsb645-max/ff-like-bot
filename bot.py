@@ -1500,6 +1500,22 @@ def cmd_pool(m):
     rows.append(f"exit: <b>{(cc or 'unknown').upper()}</b> · proxy: "
                 f"{'<code>' + px + '</code>' if px else 'none'}")
 
+    # Capacity, not just health: one account may like a given profile once per day, so
+    # the number of accounts we actually own and keep alive IS the daily ceiling.
+    try:
+        owned = json.loads((Path(__file__).parent / "bd_pool_owned.json").read_text())
+        o_live = [r for r in owned if (r.get("exp") or 0) > now]
+        o_soon = [r for r in o_live if (r.get("exp") or 0) < now + 5400]
+        o_dead = len(owned) - len(o_live)
+        rows.append("")
+        rows.append(f"owned accounts: <b>{len(owned)}</b> · live <b>{len(o_live)}</b> · "
+                    f"expiring &lt;90m <b>{len(o_soon)}</b> · expired <b>{o_dead}</b>")
+        rows.append(f"daily ceiling on one profile: <b>{len(o_live) + len(live)}</b> likes")
+        if o_dead:
+            rows.append("  renew/refill: <code>python3 supply.py --ensure N</code> from the phone")
+    except Exception:
+        pass
+
     if not live:
         rows.append("")
         rows.append("⚠️ No usable token. Likes and /profile cannot work until the pool can "
