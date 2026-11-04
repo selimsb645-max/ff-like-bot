@@ -913,6 +913,15 @@ def get_pool(force: bool = False) -> list:
         ext = fetch_external_tokens()
     except Exception:
         ext = []
+    # Accounts we created and keep alive ourselves come first: a public token is
+    # shared with other bots, so it is worth less than ours at the same age.
+    try:
+        owned = json.loads((POOL_FILE.parent / "bd_pool_owned.json").read_text())
+        owned = [t for t in owned if t.get("exp", 0) > time.time() + 60]
+    except Exception:
+        owned = []
+    seen = {t.get("account_id") for t in owned}
+    base = [t for t in base if t.get("account_id") not in seen] + owned
     seen = {t.get("account_id") for t in base}
     merged = base + [t for t in ext if t["account_id"] not in seen]
     dead = load_dead()
