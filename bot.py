@@ -11,6 +11,7 @@ import telebot
 import httpx
 from telebot import types
 import ff_bd_api
+import ff_ext_api
 
 # ── the token lives in .env next to the code, so each person's own bot stays
 #    on their own machine and nobody has to edit ~/.bashrc ──────────────────
@@ -1440,9 +1441,31 @@ def cmd_profile(m):
             _has_pool = bool(ff_bd_api.get_pool())
         except Exception:
             _has_pool = False
+        if not _has_pool or True:
+            ext = None
+            try:
+                ext = ff_ext_api.profile(target) if ff_ext_api.available() else None
+            except Exception:
+                ext = None
+            if ext and not ext.get("error") and ext.get("name"):
+                bot.edit_message_text(
+                    f"👤 <b>Player Profile</b>\n"
+                    f"━━━━━━━━━━━━━━━\n"
+                    f"🎯 Name: {(ext.get('name') or '—')[:24]}\n"
+                    f"🆔 UID: <code>{ext.get('uid')}</code>\n"
+                    f"💎 Region: {ext.get('region') or 'BD'}\n"
+                    f"⭐ Level: <b>{ext.get('level') if ext.get('level') is not None else '—'}</b>\n"
+                    f"❤️ Likes: <b>{ext.get('likes') if ext.get('likes') is not None else '—'}</b>\n"
+                    f"🎖 BR: {ext.get('br_rank') or '—'} ({ext.get('br_points') or 0} RP)\n"
+                    f"⚔️ CS: {ext.get('cs_rank') or '—'} ({ext.get('cs_points') or 0}★)\n"
+                    f"━━━━━━━━━━━━━━━\n"
+                    f"📡 source: free-tier API (token pool refreshing)",
+                    msg.chat.id, msg.message_id)
+                return
         if not _has_pool:
             bot.edit_message_text(
                 "⏳ The token pool is refreshing (pool tokens expire every few hours).\n"
+                "Add a free API key (FF_API_KEY) and this command will work even then.\n"
                 "Try again in 1–2 minutes — no UID is lost, nothing is broken.",
                 msg.chat.id, msg.message_id)
             return
