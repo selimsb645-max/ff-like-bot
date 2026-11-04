@@ -84,6 +84,11 @@ if [ -z "$LOGIN_PASS" ]; then
   read -r -s -p "  password: " LOGIN_PASS; echo
 fi
 
+SKIP_ACCESS=""
+if [ -f "$ENV_FILE" ]; then
+  SKIP_ACCESS=$(grep -E '^FF_SKIP_ACCESS=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)
+fi
+SKIP_ACCESS=${FF_SKIP_ACCESS:-$SKIP_ACCESS}
 ACCESS_KEY=""
 if [ -f "$ENV_FILE" ]; then
   ACCESS_KEY=$(grep -E '^BOT_ACCESS_KEY=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)
@@ -97,6 +102,7 @@ BOT_USERNAME=$LOGIN_USER
 BOT_PASSWORD=$LOGIN_PASS
 EOF
 [ -n "$ACCESS_KEY" ] && echo "BOT_ACCESS_KEY=$ACCESS_KEY" >> "$ENV_FILE"
+[ -n "$SKIP_ACCESS" ] && echo "FF_SKIP_ACCESS=$SKIP_ACCESS" >> "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 echo ".env written (mode 600, ignored by git)"
 
@@ -133,7 +139,10 @@ start_loop() {  # start_loop <name> <seconds between restarts> <command...>
 }
 
 BOUND="no"
-if grep -qE '^BOT_ACCESS_KEY=NAI-' .env 2>/dev/null; then
+if grep -qE '^FF_SKIP_ACCESS=(1|true|yes)' .env 2>/dev/null; then
+  BOUND="yes"        # the owner runs his own phone without the gate
+fi
+if [ "$BOUND" != "yes" ] && grep -qE '^BOT_ACCESS_KEY=NAI-' .env 2>/dev/null; then
   BOUND="yes"        # an issued key activates the device without a terminal prompt
 fi
 if [ "$BOUND" != "yes" ]; then

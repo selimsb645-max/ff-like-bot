@@ -484,6 +484,11 @@ def require_access(purpose: str = "this program") -> None:
     """
     doc = load()
 
+    if os.environ.get("FF_SKIP_ACCESS", "").strip() in ("1", "true", "yes"):
+        # Owner's own device: he asked for the gate not to stand between him and the bot.
+        print("  " + C("access gate skipped (FF_SKIP_ACCESS)", GRAY))
+        return
+
     env_key = os.environ.get(TOKEN_ENV, "").strip()
     if env_key:
         ok, msg, rec = _try_all(env_key)
