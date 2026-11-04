@@ -130,10 +130,10 @@ start_loop activate 600 python3 activate.py --pending 6
 
 say "done"
 python3 activate.py --report 2>/dev/null | head -5
-cat <<'TXT'
+cat <<TXT
 
 Next:
-  Telegram-এ আপনার বটে /start দিন          (bot: @BOT_USER)
+  Telegram-এ আপনার বটে /start দিন          (bot: @$BOT_USER)
   লগ দেখতে:      tail -f bot.log
   অ্যাকাউন্ট দেখতে: tail -f activate.log
   সব বন্ধ করতে:   pkill -f bot.py; pkill -f activate.py
