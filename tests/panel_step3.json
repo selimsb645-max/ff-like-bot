@@ -1,0 +1,222 @@
+[
+  {
+    "case": "dashboard API refuses a request with no session",
+    "result": "PASS",
+    "detail": "HTTP 401"
+  },
+  {
+    "case": "user list refused without session",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "panel HTML never renders without a session",
+    "result": "PASS",
+    "detail": "HTTP 200"
+  },
+  {
+    "case": "a 'link' token cannot be used as a session cookie",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "garbage cookie refused",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "forged signature refused",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "expired session refused",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "session for another Telegram id is refused",
+    "result": "PASS",
+    "detail": "HTTP 401"
+  },
+  {
+    "case": "login page is served",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "login page exposes no shared secret",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "signed link signs the admin in",
+    "result": "PASS",
+    "detail": "HTTP 200"
+  },
+  {
+    "case": "dashboard opens with the session",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "dashboard HTML contains no shared secret",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "stats returns every KPI",
+    "result": "PASS",
+    "detail": "23 users, 11 active"
+  },
+  {
+    "case": "profile reports the super admin",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "user list loads",
+    "result": "PASS",
+    "detail": "23 users"
+  },
+  {
+    "case": "installation list loads",
+    "result": "PASS",
+    "detail": "17 installs"
+  },
+  {
+    "case": "installation ids are masked in the list",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "IPs are masked",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "code list loads and never shows a hash",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "security events load",
+    "result": "PASS",
+    "detail": "43 events"
+  },
+  {
+    "case": "event type filter works",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "login events are recorded",
+    "result": "PASS",
+    "detail": "4 logins"
+  },
+  {
+    "case": "settings load with server bounds",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "out of range setting is refused",
+    "result": "PASS",
+    "detail": "max_active_installations: must be between 1 "
+  },
+  {
+    "case": "unknown setting is refused",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "valid setting is saved",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "setting persists",
+    "result": "PASS",
+    "detail": "value=3"
+  },
+  {
+    "case": "action without confirmation is refused",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "action without a session is refused",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "POST without the panel header is refused",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "block works from the panel",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "blocked user cannot get a code",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "unblock works",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "revoke works from the panel",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "revoked device is refused at the next verification",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "reset works",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "reset device must activate again",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "unused code can be revoked",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "revoked code cannot activate",
+    "result": "PASS",
+    "detail": "REVOKED"
+  },
+  {
+    "case": "user detail returns history",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "admin actions are written to the audit trail",
+    "result": "PASS",
+    "detail": "admin_action present"
+  },
+  {
+    "case": "Telegram bot still answers /start",
+    "result": "PASS",
+    "detail": ""
+  },
+  {
+    "case": "access API still answers status",
+    "result": "PASS",
+    "detail": ""
+  }
+]
