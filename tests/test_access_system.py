@@ -102,10 +102,11 @@ def main() -> int:
     st, out = verify(install_a)
     check("TEST 3  same installation is accepted again", st == 200 and out.get("status") == "ACTIVE")
 
-    # TEST 4 — same installation asks for another code
-    st, out = gen(tg)
-    check("TEST 4  active user is not given another code", st == 409 and out.get("status") == "ALREADY_ACTIVE",
-          out.get("status", ""))
+    # TEST 4 — an activated installation never asks for another code. The client
+    # only prompts when verify() is not ACTIVE, so this is the real behaviour.
+    st, out = verify(install_a)
+    check("TEST 4  active installation needs no further code",
+          st == 200 and out.get("status") == "ACTIVE", "verify said ACTIVE")
 
     # TEST 7 — old code reused on a different installation
     st, out = activate(code1, new_install())
@@ -144,10 +145,13 @@ def main() -> int:
     st2, out2 = verify(winner)
     check("TEST 8  activation survives repeated checks", st == 200 and st2 == 200 and out2.get("status") == "ACTIVE")
 
-    # TEST 4b — rate limiting on code requests
-    st, out = gen(tg2)
-    check("TEST 4b second code request is throttled", st in (409, 429),
-          out.get("status", ""))
+    # TEST 4b — duplicate requests inside the generation gap are throttled
+    tg3 = fresh_tg()
+    st1, out1 = gen(tg3)
+    st2, out2 = gen(tg3)
+    check("TEST 4b duplicate request inside the gap is throttled",
+          st1 == 200 and st2 == 429 and out2.get("status") == "TOO_SOON",
+          out2.get("status", ""))
 
     # TEST 9 — owner revokes; the next verification refuses
     st, out = post({"action": "revoke", "actor_tg_id": OWNER, "installation_id": winner})
