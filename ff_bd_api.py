@@ -1073,6 +1073,10 @@ def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> 
     cache = ready_uids()
     raw_pool = get_pool()
     pool = _filter_activated(raw_pool, cache)
+    if not pool and raw_pool:
+        # activation is only a heuristic - never block a like run on it
+        print(f"[like] activation filter found none of {len(raw_pool)}; trying them anyway")
+        pool = raw_pool[:150]
     if not pool:
         LAST_LIKE_STATS.update({"attempted": 0, "sent": 0, "accounts_tried": 0,
                                 "reasons": {"pool_empty": len(raw_pool)}})
