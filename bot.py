@@ -46,7 +46,7 @@ if not BOT_TOKEN or ":" not in BOT_TOKEN:
 bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
 USAGE_FILE = Path(__file__).parent / "like_usage.json"
 USAGE_LOCK = threading.Lock()
-LIKE_PER_TARGET = int(os.environ.get('LIKE_PER_TARGET', '100'))  # pool is shared across targets/day
+LIKE_PER_TARGET = int(os.environ.get('LIKE_PER_TARGET', '0'))  # 0 = whole pool per target
 MAX_LIKES_PER_REQUEST = 500
 ADMIN_IDS = set(int(x) for x in os.environ.get("ADMIN_IDS", "").split(",") if x.strip())
 
@@ -242,7 +242,7 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
     try:
         s0 = ff_bd_api.get_stats(target, jwt)
         likes_before = s0.get("likes") if s0 else None
-        cap = min(pool_size, LIKE_PER_TARGET) if not skip_slot else pool_size
+        cap = min(pool_size, LIKE_PER_TARGET) if LIKE_PER_TARGET > 0 else pool_size
         sent = ff_bd_api.send_like(target, count=cap, used=used)
     except Exception as e:
         bot.send_message(chat_id, f"❌ Error: {e}")
@@ -280,9 +280,9 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
         if not reasons:
             lines.append("• every usable account is already recorded for this target today")
         lines.append("")
-        lines.append("The pool refills by itself when Garena resets the daily limits. "
-                     "To serve more UIDs in one day, the bot now spends at most "
-                     f"{LIKE_PER_TARGET} accounts per target.")
+        lines.append("Garena allows one like per account per profile per day, so a target "
+                     "that the pool already liked today cannot gain more until the reset. "
+                     "Send a different UID meanwhile — the pool has plenty of accounts left.")
         bot.send_message(chat_id, "\n".join(lines))
     elif delta == 0:
         bot.send_message(chat_id, "⚠️ This UID was already liked today — try again tomorrow.")
@@ -1208,7 +1208,8 @@ def cmd_like(m):
         pool_size = len(ff_bd_api.get_pool())
     except Exception:
         pool_size = MAX_LIKES_PER_REQUEST
-    want = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else min(pool_size, LIKE_PER_TARGET)
+    want = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else (
+        min(pool_size, LIKE_PER_TARGET) if LIKE_PER_TARGET > 0 else pool_size)
     count = min(want, MAX_LIKES_PER_REQUEST)
     msg = bot.reply_to(m, f"🔄 {target} → {count} likes being sent...")
     usage = load_usage()
