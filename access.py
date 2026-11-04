@@ -477,7 +477,7 @@ def require_access(purpose: str = "this program") -> None:
     """Let the person in with a Telegram access code. Nothing else.
 
     The prompt shows which bot to open. They press Start there, the bot sends a
-    signed code valid 30 minutes, they paste it here. The first phone to use a
+    signed code valid 5 minutes, they paste it here. The first phone to use a
     code keeps it; the same code on another phone is refused. Once this phone is
     activated it is remembered and stops asking (setmode strict to ask always).
     Older NAI-xxxx-xxxx-xxxx keys from access_keys.json still work.
