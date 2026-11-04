@@ -82,6 +82,22 @@ def persist_usage_github():
 LIKE_PAIR_TTL = 20 * 3600
 
 
+
+def _likes_after_settle(target, jwt=None, before=None, tries=6, gap=12):
+    """Garena updates the like counter 10-20s after the requests are accepted.
+    Poll until it moves instead of judging after 3 seconds."""
+    last = None
+    for i in range(tries):
+        time.sleep(gap)
+        try:
+            s = ff_bd_api.get_stats(target, jwt)
+            last = s.get("likes") if s else None
+        except Exception:
+            last = None
+        if isinstance(before, int) and isinstance(last, int) and last > before:
+            return last
+    return last
+
 def _pairs_from_usage(usage: dict) -> set:
     now = time.time()
     raw = usage.get("used_pairs") or []
@@ -251,12 +267,7 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
         usage["used_pairs"] = _pairs_to_usage(used, prev_pairs)
         save_usage(usage)
     threading.Thread(target=persist_usage_github, daemon=True).start()
-    time.sleep(3)
-    try:
-        s1 = ff_bd_api.get_stats(target, jwt)
-        likes_after = s1.get("likes") if s1 else None
-    except Exception:
-        likes_after = None
+    likes_after = _likes_after_settle(target, jwt, likes_before)
     delta = (likes_after - likes_before) if isinstance(likes_before, int) and isinstance(likes_after, int) else None
     try:
         record_history(user.id, user.first_name or "", target,
@@ -290,7 +301,12 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
                      "Send a different UID meanwhile — the pool has plenty of accounts left.")
         bot.send_message(chat_id, "\n".join(lines))
     elif delta == 0:
-        bot.send_message(chat_id, "⚠️ This UID was already liked today — try again tomorrow.")
+        bot.send_message(chat_id,
+                        f"⚠️ {sent} like requests were accepted, but the counter on "
+                        f"<code>{target}</code> has not moved after ~90s "
+                        f"(still <b>{likes_after}</b>).\n"
+                        "That normally means those accounts already liked this profile today. "
+                        "Check again with /stats in a few minutes.")
     elif delta is not None and 0 < delta < sent:
         bot.send_message(chat_id, f"⚠️ {sent} attempted, actually landed {delta}.\n"
                                   f"❤️ Total Likes now: <b>{likes_after}</b>")
@@ -1236,13 +1252,8 @@ def cmd_like(m):
         usage["used_pairs"] = [list(k) for k in used]
         save_usage(usage)
     threading.Thread(target=persist_usage_github, daemon=True).start()
-    # like count after
-    time.sleep(3)
-    try:
-        s1 = ff_bd_api.get_stats(target)
-        likes_after = s1.get("likes") if s1 else None
-    except Exception:
-        likes_after = None
+    # like count after (wait for Garena to settle the counter)
+    likes_after = _likes_after_settle(target, None, likes_before)
 
     if sent == 0:
         why = pool_problem_text()
@@ -1282,10 +1293,11 @@ def cmd_like(m):
     if isinstance(likes_before, int) and isinstance(likes_after, int):
         delta = likes_after - likes_before
     if delta == 0:
-        text = ("❌ Like did not land — server count did not increase "
-                f"(before {likes_before}, still {likes_after})।\n"
-                "Common reason: pool accounts already liked this profile; "
-                "one account can like a profile only once.")
+        text = (f"⚠️ {sent} like requests were accepted, but the counter on "
+                f"<code>{target}</code> still reads <b>{likes_after}</b> after ~90s "
+                f"(was {likes_before}).\n"
+                "That usually means those accounts already liked this profile today. "
+                "Re-check with /stats in a few minutes.")
     elif delta is not None and delta < sent:
         text = (f"⚠️ {sent} attempted, actually landed {delta}.\n"
                 f"❤️ Total Likes now: <b>{likes_after}</b>")
