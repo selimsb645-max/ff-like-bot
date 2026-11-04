@@ -1,0 +1,9 @@
+{"step":4,"run":"2026-11-04T19:40+06:00","passed":23,"failed":0,"suites":[
+{"name":"env secret migration","checks":["generate with env secret 200","wrong secret 401","missing secret 401","no literal left in naiAccess"],"passed":4,"failed":0},
+{"name":"verify privacy","checks":["ACTIVE","no telegram_user_id","activation handle kept","unknown installation 404"],"passed":4,"failed":0},
+{"name":"distributed rate limit","checks":["shared counters persisted in NaiRateLimit","per-IP generate ceiling 429","counter reset restores service"],"passed":3,"failed":0},
+{"name":"code redemption","checks":["activate 200","same code+installation idempotent (reused)","second installation 409","revoked 403 at next verify","reset 200"],"passed":5,"failed":0},
+{"name":"telegram bot","checks":["webhook without secret 401","/start with env secret 200","/admin reaches API ok"],"passed":3,"failed":0},
+{"name":"admin panel","checks":["signed link sets cookie","stats with env-backed session 200"],"passed":2,"failed":0},
+{"name":"existing installs","checks":["25 users / 18 installations still readable from the panel","code generation end-to-end ok"],"passed":2,"failed":0}],
+"not_run":["server-side pagination","concurrent redemption under real parallel load (sequential simulation only)"]}
