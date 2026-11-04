@@ -207,19 +207,27 @@ def mint_one(sess, vdata: dict) -> dict | None:
         if len(info.get("jwt", "")) >= 815:
             break
 
-    srv = str(info.get("server_url") or "")
-    region = "BD" if "clientbp" in srv else ("?" if not srv else "OTHER")
+    # full_login answers on key "url", not "server_url"; and when the server does
+    # not echo the account's own game host we derive it from the login host
+    # (loginbp -> clientbp), which is where the game channels live.
+    srv = str(info.get("url") or info.get("server_url") or "").rstrip("/")
+    if not srv:
+        srv = "https://" + vdata["login_host"].replace("loginbp", "clientbp")
+    key = info.get("key")
+    iv = info.get("iv")
+    key = key.hex() if isinstance(key, (bytes, bytearray)) else key
+    iv = iv.hex() if isinstance(iv, (bytes, bytearray)) else iv
     rec = {
         "uid": uid, "pass": pw, "token": info.get("jwt", ""), "nick": nick,
-        "account_id": info.get("account_id"), "region": region,
-        "key": info.get("key"), "iv": info.get("iv"), "server_url": srv,
+        "account_id": info.get("account_id"), "region": "BD",
+        "key": key, "iv": iv, "server_url": srv,
         "release": vdata["release"], "ts": int(time.time()),
         "ts_human": time.strftime("%Y-%m-%d %H:%M:%S"),
         "profiled": False,
     }
-    if region != "BD":
-        log(f"    WARNING: server_url is not a BD host ({srv or 'empty'})")
-    log(f"    logged in · jwt {len(rec['token'])} chars · {region}")
+    if "clientbp" not in srv:
+        log(f"    note: game host is {srv} (no clientbp in the name)")
+    log(f"    logged in: jwt {len(rec['token'])} chars on {srv}")
     return rec
 
 
@@ -227,6 +235,9 @@ def give_profile(rec: dict) -> bool:
     """GetLoginData + presence: this is what turns a login into a real profile."""
     import asyncio
     import supply
+    if not rec.get("server_url"):
+        log("    no game host on this record - skipping presence")
+        return False
     return asyncio.run(supply.enter_game(rec))
 
 
@@ -267,16 +278,23 @@ def main() -> int:
             time.sleep(back)
             continue
 
-        if args.profile:
-            ok = give_profile(rec)
-            rec["profiled"] = bool(ok)
-            log(f"    profile {'created' if ok else 'NOT created'}")
-
+        # save the account BEFORE the profile step: a crash in presence must
+        # never cost us an account that Garena has already created
         if rec["uid"] not in seen:
             pool.append(rec)
             seen.add(rec["uid"])
             made.append(rec["uid"])
             save_pool(pool)
+
+        if args.profile:
+            try:
+                ok = give_profile(rec)
+            except Exception as exc:
+                ok = False
+                log(f"    profile step failed: {type(exc).__name__}: {str(exc)[:90]}")
+            rec["profiled"] = bool(ok)
+            save_pool(pool)
+            log(f"    profile {'created' if ok else 'NOT created'} (account saved either way)")
 
         if i < args.count:
             time.sleep(args.gap)
