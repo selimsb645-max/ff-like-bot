@@ -1369,6 +1369,16 @@ def cmd_profile(m):
         bot.edit_message_text(f"❌ Error: {e}", msg.chat.id, msg.message_id)
         return
     if not p or p.get("error"):
+        try:
+            _has_pool = bool(ff_bd_api.get_pool())
+        except Exception:
+            _has_pool = False
+        if not _has_pool:
+            bot.edit_message_text(
+                "⏳ The token pool is refreshing (pool tokens expire every few hours).\n"
+                "Try again in 1–2 minutes — no UID is lost, nothing is broken.",
+                msg.chat.id, msg.message_id)
+            return
         err = (p or {}).get("error", "player not found")
         why = pool_problem_text()
         text = f"❌ Could not fetch profile: {err}"
