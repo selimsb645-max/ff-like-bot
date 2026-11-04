@@ -360,6 +360,26 @@ Deno.serve(async (req) => {
       last_ip: ip,
     });
 
+    // Final settle. Two claims from the SAME installation can pass every check
+    // above and both write an activation row, because the platform has no unique
+    // constraint and no compare-and-swap. The code row is the referee: whoever's
+    // activation id sits there after the writes land is the real one, and every
+    // other request deletes its own row and answers with the winner.
+    await new Promise((r) => setTimeout(r, 250));
+    const settled = rows(await svc.entities.AccessCode.filter({ id: rec.id }, { limit: 1 }))[0];
+    if (settled && settled.activation_id && settled.activation_id !== activationId) {
+      const winner = rows(await svc.entities.NaiActivation.filter(
+        { activation_id: settled.activation_id }, { limit: 1 }))[0];
+      if (winner) {
+        try {
+          await svc.entities.NaiActivation.delete(activation.id);
+        } catch (_e) { /* best effort; the code row stays authoritative */ }
+        await logEvent(svc, "reuse_attempt", install, tgId, ip,
+          "duplicate claim for the same installation discarded");
+        return json({ ok: true, status: "ACTIVE", reused: true, activation: winner });
+      }
+    }
+
     if (existing) {
       await svc.entities.NaiInstallation.update(existing.id, {
         activation_id: activationId,

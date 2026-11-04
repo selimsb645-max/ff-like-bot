@@ -1,0 +1,13 @@
+{"step":5,"run":"2026-11-04T21:10+06:00","passed":45,"failed":0,
+"suites":[
+{"name":"pagination","passed":16,"detail":"limit honoured, cursor pages do not overlap over 3 pages, search finds a row, codes status filter holds on page 2, installations page, ids+ip masked, events page, type filter, limit capped at 200, overview loads"},
+{"name":"secret migration","passed":5,"detail":"signed link cookie via env session secret, forged link 401, api without session 401, ffAccessBot 401 without secret, ffAccessBot 200 with env secret"},
+{"name":"bot + terminal regression","passed":4,"detail":"naiBot /start, generate, activate, verify"},
+{"name":"concurrency","passed":9,"detail":"5 installations race one code -> exactly one winner, one activation id, only winner active; 3 duplicate claims from the same installation -> one surviving activation; late retry reused"},
+{"name":"revocation and reset","passed":3,"detail":"revoked device 403 at next verify, reset returns RESET, device active on one handle"},
+{"name":"rate limit cleanup","passed":2,"detail":"job runs, keeps last two windows, writes a rate_cleanup event"},
+{"name":"admin actions","passed":6,"detail":"stats, settings registry, users detail, installs reveal audit, codes list, profile"}],
+"known_limits":[
+"the platform allows 70 entity operations per minute per caller; a burst of parallel redemptions can exhaust it and the API answers 500 instead of a clean 503",
+"no unique constraint, no compare-and-swap and no transaction on entities: at-least-once writes are corrected by settling and by compensating deletes, not by atomicity",
+"the panel UI still requests one page of 200 rows; the cursor API is live but the browser has no Load more control yet"]}

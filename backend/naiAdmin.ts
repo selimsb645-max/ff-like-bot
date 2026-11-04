@@ -23,12 +23,72 @@ import { createClientFromRequest } from "npm:@base44/sdk@0.8.54";
 
 const SUPER_ADMIN = "8012564523";
 const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN_6") ?? "";
-const SESSION_SECRET = Deno.env.get("NAI_SESSION_SECRET") ?? "naiPanel-2026-session-7k2q9x4mL1";
-const INTERNAL = Deno.env.get("NAI_INTERNAL_SECRET") ?? "solasAccess7k2q9x4mL1";
+const SESSION_SECRET = Deno.env.get("NAI_SESSION_SECRET") ?? "";
+const INTERNAL = Deno.env.get("NAI_INTERNAL_SECRET") ?? "";
 const SESSION_HOURS = 8;
 const LINK_MINUTES = 10;
 
 const rows = (p: any): any[] => p?.items ?? p ?? [];
+
+// ---------- server-side pagination ----------
+// The cursor is an opaque base64 offset into a stable "-created_date" sort, so a
+// page never re-reads the whole collection: pageScan stops as soon as the page is
+// full and hands back where it stopped. Filters and search run on the rows that
+// were actually read, so they keep working across pages.
+const PAGE_MAX = 200;
+const SCAN_BATCH = 200;
+
+function encCursor(o: number): string {
+  return btoa(`o${o}`).replace(/=+$/, "");
+}
+
+function decCursor(raw: string | null): number {
+  if (!raw) return 0;
+  try {
+    const s = atob(raw + "=".repeat((4 - (raw.length % 4)) % 4));
+    const n = Number(s.slice(1));
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  } catch (_e) {
+    return 0;
+  }
+}
+
+function pageSize(url: URL): number {
+  const raw = Number(url.searchParams.get("limit") ?? "");
+  if (!Number.isFinite(raw) || raw <= 0) return 50;
+  return Math.min(Math.floor(raw), PAGE_MAX);
+}
+
+async function pageScan(
+  fetchBatch: (skip: number, take: number) => Promise<any[]>,
+  opts: { limit: number; start: number; match?: (row: any) => boolean; maxScan?: number },
+) {
+  const out: any[] = [];
+  const maxScan = opts.maxScan ?? 2000;
+  let skip = Math.max(0, opts.start);
+  let scanned = 0;
+  let exhausted = false;
+  while (out.length < opts.limit && scanned < maxScan) {
+    const batch = await fetchBatch(skip, SCAN_BATCH);
+    scanned += batch.length;
+    let consumed = 0;
+    for (let i = 0; i < batch.length; i++) {
+      consumed = i + 1;
+      if (!opts.match || opts.match(batch[i])) {
+        out.push(batch[i]);
+        if (out.length >= opts.limit) break;
+      }
+    }
+    skip += consumed;
+    if (batch.length < SCAN_BATCH) { exhausted = true; break; }
+    if (consumed === 0) break;
+  }
+  // Rows are still waiting when the last batch was only partly consumed, even if
+  // the collection itself is now drained.
+  const more = skip < scanned || !exhausted;
+  return { items: out, next: more ? encCursor(skip) : null, scanned, exhausted };
+}
+
 const json = (b: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json", ...headers } });
 const html = (b: string, status = 200, headers: Record<string, string> = {}) =>
@@ -59,6 +119,7 @@ async function makeToken(ttlMin: number, kind: string): Promise<string> {
 }
 
 async function readToken(token: string, kind: string): Promise<any | null> {
+  if (!SESSION_SECRET) return null;   // fail closed when the platform secret is missing
   try {
     const [body, mac] = token.split(".");
     if (!body || !mac) return null;
@@ -283,14 +344,28 @@ Deno.serve(async (req) => {
     }
 
     if (path === "api/users") {
-      const q = (url.searchParams.get("q") || "").trim();
-      let users = rows(await svc.entities.NaiUser.list("-created_date", 500));
-      if (q) users = users.filter((u: any) => String(u.telegram_user_id).includes(q) ||
-        String(u.username || "").toLowerCase().includes(q.toLowerCase()) ||
-        String(u.display_name || "").toLowerCase().includes(q.toLowerCase()));
+      const q = (url.searchParams.get("q") || "").trim().toLowerCase();
+      const limit = pageSize(url);
+      const match = q
+        ? (u: any) => String(u.telegram_user_id).includes(q) ||
+          String(u.username || "").toLowerCase().includes(q) ||
+          String(u.display_name || "").toLowerCase().includes(q)
+        : undefined;
+      const page = await pageScan(
+        async (skip, take) => rows(await svc.entities.NaiUser.list("-created_date", take, skip)),
+        { limit, start: decCursor(url.searchParams.get("cursor")), match },
+      );
+      // one read for the whole page instead of one read per user
       const installs = rows(await svc.entities.NaiInstallation.list("-created_date", 500));
-      const out = users.slice(0, 200).map((u: any) => {
-        const mine = installs.filter((i: any) => String(i.telegram_user_id) === String(u.telegram_user_id));
+      const byUser = new Map<string, any[]>();
+      for (const i of installs) {
+        const k = String(i.telegram_user_id || "");
+        const bucket = byUser.get(k);
+        if (bucket) bucket.push(i);
+        else byUser.set(k, [i]);
+      }
+      const out = page.items.map((u: any) => {
+        const mine = byUser.get(String(u.telegram_user_id)) || [];
         return {
           telegram_user_id: u.telegram_user_id, username: u.username || "", display_name: u.display_name || "",
           blocked: u.blocked === true, registered: u.created_date,
@@ -298,7 +373,8 @@ Deno.serve(async (req) => {
           installations: mine.length, active: mine.filter((i: any) => i.status === "active").length,
         };
       });
-      return send({ ok: true, users: out, total: out.length });
+      return send({ ok: true, users: out, total: out.length,
+        page: { next_cursor: page.next, has_more: page.next !== null, limit, scanned: page.scanned } });
     }
 
     if (path.startsWith("api/users/")) {
@@ -314,31 +390,51 @@ Deno.serve(async (req) => {
     if (path === "api/installations") {
       const q = (url.searchParams.get("q") || "").trim().toLowerCase();
       const state = url.searchParams.get("state") || "";
-      const installs = rows(await svc.entities.NaiInstallation.list("-created_date", 500));
+      const limit = pageSize(url);
+      const match = q
+        ? (i: any) => maskInstall(i.installation_id).includes(q) ||
+          String(i.telegram_user_id || "").includes(q)
+        : undefined;
+      const page = await pageScan(
+        async (skip, take) => rows(await svc.entities.NaiInstallation.list("-created_date", take, skip)),
+        { limit: state ? PAGE_MAX : limit, start: decCursor(url.searchParams.get("cursor")), match },
+      );
+      // one read for activations, shared by the whole page
       const acts = rows(await svc.entities.NaiActivation.list("-created_date", 500));
       const actById = new Map(acts.map((a: any) => [a.activation_id, a]));
-      let out = installs.map((i: any) => {
-        const a = actById.get(i.activation_id);
-        let s = "PENDING";
-        if (i.status === "revoked" || a?.status === "REVOKED") s = "REVOKED";
-        else if (a?.status === "EXPIRED") s = "EXPIRED";
-        else if (a?.status === "ACTIVE") s = "ACTIVE";
-        return { ...installRow(i), state: s, activation: a ? activationRow(a) : null };
-      });
-      if (state) out = out.filter((r: any) => r.state === state);
-      if (q) out = out.filter((r: any) => r.tail.includes(q) || String(r.telegram_user_id).includes(q));
-      return send({ ok: true, installations: out.slice(0, 300), total: out.length });
+      const out = [];
+      for (const i of page.items) {
+        const a = actById.get(i.activation_id ?? "");
+        let st = "PENDING";
+        if (i.status === "revoked" || a?.status === "REVOKED") st = "REVOKED";
+        else if (a?.status === "EXPIRED") st = "EXPIRED";
+        else if (a?.status === "ACTIVE") st = "ACTIVE";
+        if (state && st !== state) continue;
+        out.push({ ...installRow(i), state: st, activation: a ? activationRow(a) : null });
+        if (out.length >= limit) break;
+      }
+      return send({ ok: true, installations: out, total: out.length,
+        page: { next_cursor: page.next, has_more: page.next !== null, limit, scanned: page.scanned,
+          note: state ? "a state filter can return a short page; keep following next_cursor" : "" } });
     }
 
     if (path === "api/codes") {
       const q = (url.searchParams.get("q") || "").trim().toLowerCase();
       const status = url.searchParams.get("status") || "";
-      let codes = rows(await svc.entities.AccessCode.list("-created_date", 300));
-      if (status) codes = codes.filter((c: any) => c.status === status);
-      if (q) codes = codes.filter((c: any) => String(c.tg_id || "").includes(q) ||
-        String(c.tg_name || "").toLowerCase().includes(q) ||
-        String(c.id).toLowerCase().includes(q) || maskInstall(c.installation_id).includes(q));
-      return send({ ok: true, codes: codes.slice(0, 300).map(codeRow), total: codes.length });
+      const limit = pageSize(url);
+      const match = (c: any) => {
+        if (status && c.status !== status) return false;
+        if (!q) return true;
+        return String(c.tg_id || "").includes(q) ||
+          String(c.tg_name || "").toLowerCase().includes(q) ||
+          String(c.id).toLowerCase().includes(q) || maskInstall(c.installation_id).includes(q);
+      };
+      const page = await pageScan(
+        async (skip, take) => rows(await svc.entities.AccessCode.list("-created_date", take, skip)),
+        { limit, start: decCursor(url.searchParams.get("cursor")), match },
+      );
+      return send({ ok: true, codes: page.items.map(codeRow), total: page.items.length,
+        page: { next_cursor: page.next, has_more: page.next !== null, limit, scanned: page.scanned } });
     }
 
     if (path === "api/events") {
@@ -346,13 +442,22 @@ Deno.serve(async (req) => {
       const q = (url.searchParams.get("q") || "").trim();
       const from = url.searchParams.get("from") || "";
       const to = url.searchParams.get("to") || "";
-      let evts = rows(await svc.entities.NaiEvent.list("-created_date", 400));
-      if (type) evts = evts.filter((e: any) => e.event_type === type);
-      if (q) evts = evts.filter((e: any) => String(e.telegram_user_id || "").includes(q) ||
-        String(e.installation_id || "").includes(q) || String(e.detail || "").toLowerCase().includes(q.toLowerCase()));
-      if (from) evts = evts.filter((e: any) => new Date(e.created_date) >= new Date(`${from}T00:00:00+06:00`));
-      if (to) evts = evts.filter((e: any) => new Date(e.created_date) <= new Date(`${to}T23:59:59+06:00`));
-      return send({ ok: true, events: evts.slice(0, 300).map(eventRow), total: evts.length });
+      const limit = pageSize(url);
+      const match = (e: any) => {
+        if (type && e.event_type !== type) return false;
+        if (q && !(String(e.telegram_user_id || "").includes(q) ||
+          String(e.installation_id || "").includes(q) ||
+          String(e.detail || "").toLowerCase().includes(q.toLowerCase()))) return false;
+        if (from && !(new Date(e.created_date) >= new Date(`${from}T00:00:00+06:00`))) return false;
+        if (to && !(new Date(e.created_date) <= new Date(`${to}T23:59:59+06:00`))) return false;
+        return true;
+      };
+      const page = await pageScan(
+        async (skip, take) => rows(await svc.entities.NaiEvent.list("-created_date", take, skip)),
+        { limit, start: decCursor(url.searchParams.get("cursor")), match },
+      );
+      return send({ ok: true, events: page.items.map(eventRow), total: page.items.length,
+        page: { next_cursor: page.next, has_more: page.next !== null, limit, scanned: page.scanned } });
     }
 
     if (path === "api/settings") {
@@ -642,7 +747,7 @@ tr:hover td{background:rgba(79,140,255,.06)}
 <div class="toast" id="toast"></div>
 <script>
 const BASE=location.pathname;
-const $=s=>document.querySelector(s), api=(p,o={})=>fetch(BASE+'?r=api/'+String(p).replace(/^\//,'').replace(/\?/g,'&'),{credentials:'same-origin',...o,headers:{'X-Panel':'1','Content-Type':'application/json',...(o.headers||{})}}).then(r=>r.json());
+const $=s=>document.querySelector(s), api=(p,o={})=>fetch(BASE+'?r=api/'+String(p).replace(/^\//,'').replace(/\?/g,'&')+(String(p).includes('limit=')?'':'&limit=200'),{credentials:'same-origin',...o,headers:{'X-Panel':'1','Content-Type':'application/json',...(o.headers||{})}}).then(r=>r.json());
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const dt=s=>{if(!s)return '—';const d=new Date(s);return isNaN(d)?'—':d.toLocaleString('en-GB',{timeZone:'Asia/Dhaka',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:true});};
 let toastT;const toast=m=>{const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),3200);};
