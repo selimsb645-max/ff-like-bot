@@ -132,6 +132,11 @@ start_loop() {  # start_loop <name> <seconds between restarts> <command...>
   echo "started $name (log: $name.log)"
 }
 
+BOUND="no"
+if grep -qE '^BOT_ACCESS_KEY=NAI-' .env 2>/dev/null; then
+  BOUND="yes"        # an issued key activates the device without a terminal prompt
+fi
+if [ "$BOUND" != "yes" ]; then
 BOUND=$(python3 - <<'PYCHK'
 import sys
 try:
@@ -143,6 +148,7 @@ except Exception:
 print("yes" if ok else "no")
 PYCHK
 )
+fi
 if [ "$BOUND" = "yes" ]; then
   start_loop bot 20 python3 bot.py
 else
