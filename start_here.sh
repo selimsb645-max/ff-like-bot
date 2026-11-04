@@ -125,7 +125,24 @@ start_loop() {  # start_loop <name> <seconds between restarts> <command...>
   echo "started $name (log: $name.log)"
 }
 
-start_loop bot 20 python3 bot.py
+BOUND=$(python3 - <<'PYCHK'
+import sys
+try:
+    import access
+    doc = access.load()
+    ok = bool(access.is_remember(doc) and access.bound_for(access.device_fingerprint(), doc))
+except Exception:
+    ok = False
+print("yes" if ok else "no")
+PYCHK
+)
+if [ "$BOUND" = "yes" ]; then
+  start_loop bot 20 python3 bot.py
+else
+  echo "this phone is not activated yet, so the bot loop was NOT started"
+  echo "run it once in the foreground to enter the code from @NAI_AccessBot:"
+  echo "  python3 bot.py        (then Ctrl+C and run start_here.sh again)"
+fi
 start_loop activate 600 python3 activate.py --pending 6
 
 say "done"

@@ -527,6 +527,14 @@ def require_access(purpose: str = "this program") -> None:
                       + "\n  " + C("start once with internet, then try again", GRAY))
             print("  " + C(f"server not reachable ({_english(why)}) - asking for a code", YELLOW))
 
+    if not sys.stdin.isatty():
+        # A restart wrapper runs with no terminal, so the code prompt would read EOF and
+        # report "cancelled" forever. Say what actually has to happen instead.
+        _fail("  " + C("this phone is not activated yet, and there is no terminal to type the code into",
+                       RED + ";1")
+              + "\n  " + C(f"run it once in the foreground:  python3 bot.py", GRAY)
+              + "\n  " + C(f"then paste the code from @{TG_BOT} and restart the background loop", GRAY))
+
     _show_gate(purpose)
     for attempt in range(1, ATTEMPTS + 1):
         left = ATTEMPTS - attempt + 1
