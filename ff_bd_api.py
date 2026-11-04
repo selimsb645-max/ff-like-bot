@@ -1071,7 +1071,13 @@ def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> 
     import like_pb2 as lpb
     import random as _rnd
     cache = ready_uids()
-    pool = _filter_activated(get_pool(), cache)
+    raw_pool = get_pool()
+    pool = _filter_activated(raw_pool, cache)
+    if not pool:
+        LAST_LIKE_STATS.update({"attempted": 0, "sent": 0, "accounts_tried": 0,
+                                "reasons": {"pool_empty": len(raw_pool)}})
+        print(f"[like] pool has no usable account (raw pool {len(raw_pool)})")
+        return 0
     try:
         READY_FILE.write_text(json.dumps(cache, indent=1))
     except Exception:
@@ -1086,6 +1092,9 @@ def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> 
         if len(todo) >= max(count * 2, count + 10):
             break
     if not todo:
+        LAST_LIKE_STATS.update({"attempted": 0, "sent": 0, "accounts_tried": 0,
+                                "reasons": {"all_pairs_used": 1}})
+        print("[like] nothing to do: every pair already used for this target")
         return 0
     m = lpb.like()
     m.uid = int(account_id)
