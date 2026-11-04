@@ -8,6 +8,11 @@
 # activator under a self-restarting wrapper.
 set -uo pipefail
 cd "$(dirname "$0")"
+if [ ! -f bot.py ] || [ ! -d levelbot ]; then
+  echo "This must run inside the ff-like-bot folder."
+  echo "Expected: ~/ff-like-bot/bot.py — you are in: $(pwd)"
+  exit 1
+fi
 
 say() { printf '\n\033[1m== %s ==\033[0m\n' "$*"; }
 ENV_FILE=".env"
@@ -22,7 +27,7 @@ if ! pip install -q -r requirements.txt; then
   exit 1
 fi
 # like_pb2 needs a modern protobuf; an older one gets installed by other tools
-python3 - <<'PY' || pip install -q "protobuf>=4.25,<6"
+python3 - <<'PY' || pip install -q --upgrade protobuf
 import sys
 try:
     import google.protobuf, like_pb2  # noqa: F401
