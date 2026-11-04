@@ -502,6 +502,58 @@ def require_access(purpose: str = "this program") -> None:
               "Set BOT_ACCESS_KEY to require it there too.")
         return
 
+    # ── v2: installation identity, the server decides ──────────────────────
+    # A fresh clone has no ~/.nai/installation.json, so it is a NEW installation
+    # and needs its own code. Installations that were activated the old way are
+    # left to the legacy path below so nothing that already works breaks.
+    try:
+        import nai_client as nai
+    except Exception:
+        nai = None
+    if nai is not None:
+        legacy_bound = any(r.get("bound_device") for r in doc.get("keys", []))
+        if nai.exists() or not legacy_bound:
+            st, why = nai.check()
+            if st == "ACTIVE":
+                print("  " + C(f"\u2713 installation activated ({nai.installation_id()[-6:]})", GREEN)
+                      + C(" - go ahead", GRAY))
+                return
+            if st in ("REVOKED", "EXPIRED"):
+                _fail("  " + C(f"this installation is {st.lower()} ({_english(why)})", RED + ";1")
+                      + "\n  " + C("ask the owner for a reset, then request a new code", GRAY))
+            if st == "OFFLINE":
+                grace_ok, grace_why = nai.offline_grace()
+                if grace_ok:
+                    print("  " + C(f"access server unreachable ({_english(why)}); {grace_why}", YELLOW)
+                          + " " + C(f"- allowing up to {nai.OFFLINE_GRACE_HOURS}h offline", GRAY))
+                    return
+                why = grace_why
+            if not sys.stdin.isatty():
+                _fail("  " + C("this installation is not activated, and there is no terminal for the code",
+                               RED + ";1")
+                      + "\n  " + C("run it once in the foreground:  python3 bot.py", GRAY)
+                      + "\n  " + C(f"then paste the code from @{TG_BOT}", GRAY))
+            _show_gate(purpose)
+            for attempt in range(1, ATTEMPTS + 1):
+                left = ATTEMPTS - attempt + 1
+                label = "try" if left == 1 else "tries"
+                try:
+                    code = input("  " + C(f"Access code ({left} {label} left): ", YELLOW + ";1")).strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\n  " + C("cancelled", RED))
+                    raise SystemExit(1)
+                if not code:
+                    continue
+                ok, msg = nai.activate(code)
+                if ok:
+                    print("  " + C("\u2713 " + _english(msg), GREEN + ";1"))
+                    print(_rule())
+                    print()
+                    return
+                print("  " + C("\u2715 " + _english(msg), RED))
+                print()
+            _fail("  " + C("too many failed attempts - not starting", RED))
+
     fp = device_fingerprint()
     if is_remember(doc):
         known = bound_for(fp, doc)
