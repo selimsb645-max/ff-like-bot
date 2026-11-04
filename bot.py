@@ -98,6 +98,35 @@ def _likes_after_settle(target, jwt=None, before=None, tries=6, gap=12):
             return last
     return last
 
+
+def _target_today(usage: dict, target) -> dict:
+    """What our own bot already did to this target today."""
+    rec = (usage.get("targets") or {}).get(str(target)) or {}
+    try:
+        if time.time() - float(rec.get("last") or 0) > LIKE_PAIR_TTL:
+            return {}
+    except Exception:
+        return {}
+    return rec
+
+
+def _target_record(usage: dict, target, accepted=0, landed=0):
+    tg = usage.setdefault("targets", {})
+    k = str(target)
+    rec = tg.get(k) or {}
+    now = time.time()
+    rec["last"] = now
+    rec["accepted"] = int(rec.get("accepted") or 0) + int(accepted or 0)
+    rec["landed"] = int(rec.get("landed") or 0) + max(int(landed or 0), 0)
+    rec.setdefault("first", now)
+    tg[k] = rec
+    for kk in list(tg.keys()):
+        try:
+            if now - float((tg[kk] or {}).get("last") or 0) > 3 * 86400:
+                tg.pop(kk, None)
+        except Exception:
+            tg.pop(kk, None)
+
 def _pairs_from_usage(usage: dict) -> set:
     now = time.time()
     raw = usage.get("used_pairs") or []
@@ -269,6 +298,10 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
     threading.Thread(target=persist_usage_github, daemon=True).start()
     likes_after = _likes_after_settle(target, jwt, likes_before)
     delta = (likes_after - likes_before) if isinstance(likes_before, int) and isinstance(likes_after, int) else None
+    with USAGE_LOCK:
+        _target_record(usage, target, accepted=sent,
+                       landed=delta if isinstance(delta, int) else 0)
+        save_usage(usage)
     try:
         record_history(user.id, user.first_name or "", target,
                        pool_size, delta if isinstance(delta, int) and delta > 0 else sent)
@@ -1236,7 +1269,8 @@ def cmd_like(m):
     msg = bot.reply_to(m, f"🔄 {target} → {count} likes being sent...")
     usage = load_usage()
     with USAGE_LOCK:
-        used = set(tuple(k) for k in usage.get("used_pairs", []))
+        prev_pairs = usage.get("used_pairs") or {}
+        used = _pairs_from_usage(usage)
     # like count before
     try:
         s0 = ff_bd_api.get_stats(target)
@@ -1248,12 +1282,15 @@ def cmd_like(m):
     except Exception as e:
         bot.edit_message_text(f"❌ Error: {e}", msg.chat.id, msg.message_id)
         return
-    with USAGE_LOCK:
-        usage["used_pairs"] = [list(k) for k in used]
-        save_usage(usage)
-    threading.Thread(target=persist_usage_github, daemon=True).start()
     # like count after (wait for Garena to settle the counter)
     likes_after = _likes_after_settle(target, None, likes_before)
+    with USAGE_LOCK:
+        usage["used_pairs"] = _pairs_to_usage(used, prev_pairs)
+        _target_record(usage, target, accepted=sent,
+                       landed=(likes_after - likes_before)
+                       if isinstance(likes_after, int) and isinstance(likes_before, int) else 0)
+        save_usage(usage)
+    threading.Thread(target=persist_usage_github, daemon=True).start()
 
     if sent == 0:
         why = pool_problem_text()
@@ -1293,11 +1330,16 @@ def cmd_like(m):
     if isinstance(likes_before, int) and isinstance(likes_after, int):
         delta = likes_after - likes_before
     if delta == 0:
+        prev_t = _target_today(usage, target)
+        when = time.strftime("%H:%M", time.localtime(prev_t.get("last") or 0))
         text = (f"⚠️ {sent} like requests were accepted, but the counter on "
                 f"<code>{target}</code> still reads <b>{likes_after}</b> after ~90s "
-                f"(was {likes_before}).\n"
-                "That usually means those accounts already liked this profile today. "
-                "Re-check with /stats in a few minutes.")
+                f"(was {likes_before}).\n")
+        if prev_t.get("accepted"):
+            text += (f"📌 This bot already sent this UID <b>{prev_t.get('accepted')}</b> like "
+                     f"requests today (last at {when}) — Garena allows one like per account "
+                     "per profile per day.\n")
+        text += "Try a UID that was not liked today, or re-check with /stats in a few minutes."
     elif delta is not None and delta < sent:
         text = (f"⚠️ {sent} attempted, actually landed {delta}.\n"
                 f"❤️ Total Likes now: <b>{likes_after}</b>")
