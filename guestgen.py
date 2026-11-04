@@ -172,6 +172,21 @@ def save_pool(pool: list) -> None:
     POOL.write_text(json.dumps(pool, indent=2))
 
 
+# Every account should read "SBㅤXXXXX": the owner's initials, then U+3164 HANGUL
+# FILLER, which renders as nothing at all in game, then random characters. The
+# separator is a real character, not a space, so the game font shows no gap.
+NICK_PREFIX = os.environ.get("GUEST_NICK_PREFIX", "SB")
+NICK_SEP = os.environ.get("GUEST_NICK_SEP", "\u3164")
+
+
+def rand_tail(n: int = 5) -> str:
+    return "".join(random.choices(string.ascii_uppercase + string.digits, k=n))
+
+
+def make_nick() -> str:
+    return f"{NICK_PREFIX}{NICK_SEP}{rand_tail()}"
+
+
 def mint_one(sess, vdata: dict) -> dict | None:
     """One account, using the modules that already work."""
     import full_login
@@ -189,8 +204,16 @@ def mint_one(sess, vdata: dict) -> dict | None:
         log("    grant failed")
         return None
 
-    nick = "ANON\u2022" + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    # nickname: SB + invisible filler + random, as the owner asked. Registration
+    # is strict (a bad nickname answers with a short "NO..." body and the login
+    # that follows 404s), so if the server refuses it we retry once with the
+    # proven ANON bullet form rather than throwing the guest away.
+    nick = make_nick()
     ok, msg = gr.major_register(sess, at, oid, nick)
+    if not ok:
+        log(f"    nickname {nick!r} refused ({msg}), retrying as ANON bullet")
+        nick = "ANON\u2022" + rand_tail()
+        ok, msg = gr.major_register(sess, at, oid, nick)
     if not ok:
         log(f"    major_register: {msg}")
         return None
