@@ -84,12 +84,19 @@ if [ -z "$LOGIN_PASS" ]; then
   read -r -s -p "  password: " LOGIN_PASS; echo
 fi
 
+ACCESS_KEY=""
+if [ -f "$ENV_FILE" ]; then
+  ACCESS_KEY=$(grep -E '^BOT_ACCESS_KEY=' "$ENV_FILE" | head -1 | cut -d= -f2- || true)
+fi
+ACCESS_KEY=${BOT_ACCESS_KEY:-$ACCESS_KEY}
+
 umask 077
 cat > "$ENV_FILE" <<EOF
 BOT_TOKEN=$BOT_TOKEN
 BOT_USERNAME=$LOGIN_USER
 BOT_PASSWORD=$LOGIN_PASS
 EOF
+[ -n "$ACCESS_KEY" ] && echo "BOT_ACCESS_KEY=$ACCESS_KEY" >> "$ENV_FILE"
 chmod 600 "$ENV_FILE"
 echo ".env written (mode 600, ignored by git)"
 

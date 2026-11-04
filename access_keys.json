@@ -17,6 +17,17 @@
    "last_used": "2026-11-03T16:28:13Z",
    "uses": 9,
    "revoked": false
+  },
+  {
+   "label": "selim-phone",
+   "salt": "aff11e47a236c8857e2120324f0fd8fe",
+   "hash": "cf9f73f26878670356d92933a417b00be98ff3cd80138d456f4f329ffa3119f9",
+   "created": "2026-11-04T11:00:53Z",
+   "bound_device": "",
+   "bound_at": "",
+   "last_used": "",
+   "uses": 0,
+   "revoked": false
   }
  ],
  "mode": "remember"
