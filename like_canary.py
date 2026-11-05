@@ -77,13 +77,20 @@ def main():
     # a like from an account locked to another region never credits a BD target
     try:
         import base64 as _b64
-        _p = rec["token"].split(".")[1]
+        _p = acct["token"].split(".")[1]
         _p += "=" * (-len(_p) % 4)
         _cl = json.loads(_b64.urlsafe_b64decode(_p))
         print(f"  liker claims: lock_region={_cl.get('lock_region')} "
               f"country={_cl.get('country_code')} account_id={_cl.get('account_id')}")
     except Exception as _e:
         print(f"  liker claims unreadable: {type(_e).__name__}")
+
+    try:
+        me = api.get_profile(int(acct.get("account_id") or acct["uid"])) or {}
+        print(f"  liker profile: region={me.get('region')} level={me.get('level')} "
+              f"likes={me.get('likes')} name={me.get('name')}")
+    except Exception as _e:
+        print(f"  liker profile unreadable: {type(_e).__name__}")
 
     print(f"before : {before}  (via {src})")
 
