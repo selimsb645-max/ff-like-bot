@@ -218,31 +218,32 @@ def mint_one(sess, vdata: dict) -> dict | None:
         log(f"    major_register: {msg}")
         return None
 
-    info = full_login.full_major_login(uid, oid, at, release=vdata["release"])
+    # MajorLogin -> ChooseRegion(BD) -> MajorLogin #2. The middle step is what
+    # gives the account its own game host and a real profile; without it the
+    # account shows up as a foreign region and its likes are never credited.
+    reg = str(vdata.get("region") or "BD").upper()
+    info = full_login.login_locked(uid, oid, at, region=reg, release=vdata["release"])
     if not info:
         log("    major login failed")
         return None
-    # the game only accepts the longer stage-2 JWT
     for _ in range(2):
-        again = full_login.full_major_login(uid, oid, at, release=vdata["release"])
+        again = full_login.login_locked(uid, oid, at, region=reg, release=vdata["release"])
         if again and len(again.get("jwt", "")) > len(info.get("jwt", "")):
             info = again
         if len(info.get("jwt", "")) >= 815:
             break
 
-    # full_login answers on key "url", not "server_url"; and when the server does
-    # not echo the account's own game host we derive it from the login host
-    # (loginbp -> clientbp), which is where the game channels live.
-    srv = str(info.get("url") or info.get("server_url") or "").rstrip("/")
-    if not srv:
-        srv = "https://" + vdata["login_host"].replace("loginbp", "clientbp")
+    srv = str(info.get("server_url") or "").rstrip("/")
+    locked = bool(srv)
+    if not locked:
+        log("    region NOT locked - no server_url, so this account cannot be profiled")
     key = info.get("key")
     iv = info.get("iv")
     key = key.hex() if isinstance(key, (bytes, bytearray)) else key
     iv = iv.hex() if isinstance(iv, (bytes, bytearray)) else iv
     rec = {
         "uid": uid, "pass": pw, "token": info.get("jwt", ""), "nick": nick,
-        "account_id": info.get("account_id"), "region": "BD",
+        "account_id": info.get("account_id"), "region": reg if locked else "UNLOCKED",
         "key": key, "iv": iv, "server_url": srv,
         "release": vdata["release"], "ts": int(time.time()),
         "ts_human": time.strftime("%Y-%m-%d %H:%M:%S"),

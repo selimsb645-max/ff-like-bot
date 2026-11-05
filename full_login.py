@@ -56,7 +56,8 @@ def device_for(uid: str) -> dict:
 
 
 def build_full_payload(open_id: str, access_token: str, dev: dict,
-                       platform: int = 4, client_version: str = "1.132.11") -> bytes:
+                       platform: int = 4, client_version: str = "1.132.11",
+                       region: str = "BD") -> bytes:
     p = {
         3: str(datetime.now())[:-7], 4: "free fire", 5: "1",
         7: str(client_version), 8: str(dev.get("system_software", "Android OS 14 / API-34")),
@@ -70,7 +71,7 @@ def build_full_payload(open_id: str, access_token: str, dev: dict,
         19: str(dev.get("unique_device_id", f"Google|{uuid.uuid4()}")),
         20: str(dev.get("client_ip", "182.5.135.225")),
         21: "en", 22: str(open_id), 23: str(platform), 24: "Handheld",
-        25: str(dev.get("model", "Xiaomi")), 26: "ID", 29: str(access_token),
+        25: str(dev.get("model", "Xiaomi")), 26: region.upper(), 29: str(access_token),
         30: "1", 41: "Telkomsel", 42: "4G", 57: "7428b253defc164018c604a1ebbfebdf",
         60: "109278", 61: "55402", 62: "868", 64: "55927", 65: "109278", 66: "55927",
         67: "109278", 73: 2,
@@ -89,8 +90,9 @@ def build_full_payload(open_id: str, access_token: str, dev: dict,
     return gr.encrypt_payload(wire)
 
 
-def full_major_login(uid, open_id, access_token, host=None, release="OB55", dev=None):
-    blob = build_full_payload(open_id, access_token, dev or device_for(uid))
+def full_major_login(uid, open_id, access_token, host=None, release="OB55", dev=None,
+                     region="BD"):
+    blob = build_full_payload(open_id, access_token, dev or device_for(uid), region=region)
     hosts = [host] if host else ["https://clientbp.ppmainecoonghj.com",
                                  "https://loginbp.ppmainecoonghj.com"]
     h = {"User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
@@ -107,7 +109,12 @@ def full_major_login(uid, open_id, access_token, host=None, release="OB55", dev=
                     continue
                 info = mlm._parse_any(r.content)
                 if info.get("jwt"):
-                    info.setdefault("url", base)
+                    # field 10 is the account's OWN game host. Keep it apart from
+                    # the host we dialled, so "no server_url" stays visible and the
+                    # caller can run ChooseRegion instead of silently guessing.
+                    if not info.get("server_url"):
+                        info["server_url"] = info.get("url") or ""
+                    info["url"] = base
                     info["account_id"] = info.get("account_uid") or int(uid)
                     info.setdefault("ts", int(time.time()))
                     return info
@@ -117,6 +124,49 @@ def full_major_login(uid, open_id, access_token, host=None, release="OB55", dev=
             time.sleep(2)
     print("   login failed:", last, flush=True)
     return None
+
+
+
+def choose_region(jwt: str, host: str, region: str = "BD", release: str = "OB55"):
+    """Lock the account to a region.
+
+    Verified working sequence (UNFAIR, 2026-10-30): MajorLogin -> ChooseRegion ->
+    MajorLogin #2. Skipping this step is why freshly minted accounts came back on
+    a foreign region, showed "Indonesia" in game and never got their likes
+    credited.
+    """
+    url = host.rstrip("/") + "/ChooseRegion"
+    body = gr.encrypt_payload(gr.pf(1, region.upper()))
+    h = {"User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
+         "Accept-Encoding": "gzip", "X-GA-SV": str(int(time.time())),
+         "Content-Type": "application/x-www-form-urlencoded",
+         "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1",
+         "Authorization": f"Bearer {jwt}", "ReleaseVersion": release}
+    try:
+        return _post(url, h, body, 20).status_code
+    except Exception:
+        return None
+
+
+def login_locked(uid, open_id, access_token, region="BD", release="OB55", host=None):
+    """Full login that also guarantees the region lock is in place."""
+    host = (host or "https://loginbp.ppmainecoonghj.com").rstrip("/")
+    info = full_major_login(uid, open_id, access_token, host=host,
+                            release=release, region=region)
+    if info and info.get("server_url"):
+        return info
+    jwt = (info or {}).get("jwt") or ""
+    if not jwt:
+        return info
+    status = choose_region(jwt, host, region, release)
+    if status != 200:
+        print(f"   ChooseRegion({region}) -> {status}", flush=True)
+        return info
+    print(f"   ChooseRegion({region}) ok, re-running MajorLogin", flush=True)
+    time.sleep(2.0)
+    again = full_major_login(uid, open_id, access_token, host=host,
+                             release=release, region=region)
+    return again or info
 
 
 if __name__ == "__main__":
