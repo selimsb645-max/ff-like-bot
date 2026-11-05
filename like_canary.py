@@ -38,13 +38,26 @@ def read_likes(uid):
 
 
 def newest_bd_account():
-    pool = json.loads(Path("bd_pool.json").read_text())
-    for rec in sorted(pool, key=lambda r: r.get("ts") or 0, reverse=True):
-        if str(rec.get("region", "")).upper() != "BD":
-            continue
-        if rec.get("token") and rec.get("key"):
-            return rec
-    return None
+    """Newest pool record that can send a like.
+
+    Pool rows are written by two different writers and do NOT share a schema:
+    supply.py rows carry uid/token/pass/region/server_url, while guestgen rows
+    also carry hex key/iv. Likes only need a JWT, so the only hard requirements
+    here are a token and a BD region.
+    """
+    raw = json.loads(Path("bd_pool.json").read_text())
+    recs = raw if isinstance(raw, list) else list(raw.values())
+    total = len(recs)
+    usable = [r for r in recs
+              if isinstance(r, dict) and str(r.get("region", "BD")).upper() == "BD"
+              and r.get("token") and (r.get("pass") or r.get("pw"))]
+    if not usable:
+        print(f"  pool has {total} record(s) but none usable for a like "
+              f"(need region BD + token + password)")
+        return None
+    usable.sort(key=lambda r: r.get("ts") or r.get("exp") or 0, reverse=True)
+    print(f"  pool: {total} record(s), {len(usable)} usable")
+    return usable[0]
 
 
 def main():
