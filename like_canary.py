@@ -37,6 +37,25 @@ def read_likes(uid):
     return None, None
 
 
+
+def send_direct(acct, target, variant="uid"):
+    """One LikeProfile from ONE account, so the result is not diluted by the pool.
+
+    send_like() fans out over every pool row, which is why earlier runs could not
+    tell a good liker from a bad one.
+    """
+    import like_pb2 as lpb
+    m = lpb.like()
+    m.uid = int(target)
+    if variant != "noregion":
+        m.region = "BD"
+    body = api._enc(m.SerializeToString())
+    base = api._api_base(acct)
+    r = api._client().post(base + "/LikeProfile",
+                           headers=api._headers(acct["token"], "OB55"), data=body)
+    return r.status_code, r.content
+
+
 def newest_bd_account():
     """Newest pool record that can send a like.
 
@@ -64,6 +83,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--uid", type=int, default=9078648985, help="target account id")
     ap.add_argument("--count", type=int, default=10, help="likes to attempt")
+    ap.add_argument("--direct", action="store_true",
+                    help="send exactly one LikeProfile from the forced liker, bypassing the pool")
+    ap.add_argument("--variant", default="uid", choices=["uid", "noregion"],
+                    help="payload shape: uid+BD region (default) or uid with no region field")
     ap.add_argument("--liker", default=None,
                     help="force one pool account as the sender (uid); default: newest usable")
     args = ap.parse_args()
@@ -104,7 +127,12 @@ def main():
 
     print(f"before : {before}  (via {src})")
 
-    sent = api.send_like(args.uid, count=args.count)
+    if args.direct:
+        st, body = send_direct(acct, args.uid, args.variant)
+        print(f"direct like: variant={args.variant} http={st} body={body[:24].hex() or 'empty'}")
+        sent = 1 if st == 200 else 0
+    else:
+        sent = api.send_like(args.uid, count=args.count)
     print(f"posted : {sent} likes · {json.dumps(api.LAST_LIKE_STATS.get('reasons', {}))}")
 
     marks = []
