@@ -77,7 +77,7 @@ def main() -> int:
             return 2
         rows = raw if isinstance(raw, list) else list(raw.values())
         rows.sort(key=lambda r: r.get("ts") or 0, reverse=True)
-        print(f"{'uid':12} {'region':7} {'lvl':>4} {'likes':>6}  state")
+        print(f"{'uid':12} {'region':7} {'lvl':>4} {'likes':>6}  {'name':14} ours?")
         active = 0
         for r in rows:
             uid = str(r.get("uid"))
@@ -90,8 +90,12 @@ def main() -> int:
             reg, lvl, lk = prof.get("region"), prof.get("level"), prof.get("likes")
             ok = lvl is not None or prof.get("name")
             active += 1 if ok else 0
+            nm = str(prof.get("name") or "")
+            # our accounts are minted with the "SB" + U+3164 prefix; anything else
+            # in this row is not ours, however plausible the profile looks
+            ours = "yes" if nm.startswith("SB\u3164") else ("??" if not nm else "NO")
             print(f"{uid:12} {str(reg or '-'):7} {str(lvl if lvl is not None else '-'):>4} "
-                  f"{str(lk if lk is not None else '-'):>6}  {'ACTIVE' if ok else 'no profile'}")
+                  f"{str(lk if lk is not None else '-'):>6}  {(nm or '-')[:14]:14} {ours}")
         print(f"\n{active}/{len(rows)} accounts have an active profile")
         return 0 if active else 1
 
