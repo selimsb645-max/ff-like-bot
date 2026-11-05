@@ -47,6 +47,8 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
+import full_login  # noqa: E402  (needs sys.path above)
+
 POOL = ROOT / "bd_pool.json"
 VER_CFG = ROOT / ".guestgen_version.json"
 VER_TTL = 20 * 60
