@@ -91,11 +91,19 @@ def main() -> int:
             ok = lvl is not None or prof.get("name")
             active += 1 if ok else 0
             nm = str(prof.get("name") or "")
+            stored = ""
+            if not ok and (r.get("verified") or r.get("live_name")):
+                # the read needs a valid token; if ours is spent, trust what the
+                # mint verified at the moment it had one
+                stored = f"stored: {r.get('live_name') or '?'} lvl {r.get('live_level') or '?'}"
+                ok = True
+                reg = r.get("live_region") or reg
+                lvl = r.get("live_level") or lvl
             # our accounts are minted with the "SB" + U+3164 prefix; anything else
             # in this row is not ours, however plausible the profile looks
             ours = "yes" if nm.startswith("SB\u3164") else ("??" if not nm else "NO")
             print(f"{uid:12} {str(reg or '-'):7} {str(lvl if lvl is not None else '-'):>4} "
-                  f"{str(lk if lk is not None else '-'):>6}  {(nm or '-')[:14]:14} {ours}")
+                  f"{str(lk if lk is not None else '-'):>6}  {(nm or stored or '-')[:14]:14} {ours}")
         print(f"\n{active}/{len(rows)} accounts have an active profile")
         return 0 if active else 1
 

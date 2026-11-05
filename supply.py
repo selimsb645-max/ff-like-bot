@@ -109,7 +109,9 @@ async def enter_game(rec: dict) -> bool:
              "region": "BD", "url": rec.get("server_url")}
     data = get_login_data(login)
     if not data:
+        print("    GetLoginData returned nothing - the profile was never created", flush=True)
         return False
+    print(f"    GetLoginData ok: online {data[2]}:{data[3]}", flush=True)
     login.update({"whisper_ip": data[0], "whisper_port": data[1],
                   "online_ip": data[2], "online_port": data[3]})
     conn = GameConnection()
@@ -120,6 +122,25 @@ async def enter_game(rec: dict) -> bool:
                            await build_conn_token(login),
                            await build_conn_token(login, chat=True))
         await asyncio.sleep(18)
+        # Verify NOW, with the token we just minted. The same read an hour later
+        # uses an expired token, comes back empty and looks like "no profile",
+        # which is how we kept mis-diagnosing our own accounts.
+        try:
+            import ff_bd_api as _api
+            prof = _api.get_profile(int(rec.get("account_id") or rec["uid"]),
+                                    rec.get("token")) or {}
+            if prof.get("level") is not None or prof.get("name"):
+                rec["verified"] = True
+                rec["live_name"] = prof.get("name")
+                rec["live_level"] = prof.get("level")
+                rec["live_region"] = prof.get("region")
+                print(f"    PROFILE LIVE: name={prof.get('name')} level={prof.get('level')} "
+                      f"region={prof.get('region')} likes={prof.get('likes')}", flush=True)
+            else:
+                rec["verified"] = False
+                print("    profile still empty - GetLoginData did not create it", flush=True)
+        except Exception as exc:
+            print(f"    profile check failed: {type(exc).__name__}: {str(exc)[:60]}", flush=True)
         return True
     except Exception:
         return False
