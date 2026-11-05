@@ -64,9 +64,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--uid", type=int, default=9078648985, help="target account id")
     ap.add_argument("--count", type=int, default=10, help="likes to attempt")
+    ap.add_argument("--liker", default=None,
+                    help="force one pool account as the sender (uid); default: newest usable")
     args = ap.parse_args()
 
-    acct = newest_bd_account()
+    if args.liker:
+        pool = json.loads(Path("bd_pool.json").read_text())
+        recs = pool if isinstance(pool, list) else list(pool.values())
+        acct = next((r for r in recs if str(r.get("uid")) == str(args.liker)), None)
+        if not acct:
+            print(f"liker {args.liker} is not in bd_pool.json")
+            return 2
+    else:
+        acct = newest_bd_account()
     if not acct:
         print("no BD account with a token in bd_pool.json")
         return 2
