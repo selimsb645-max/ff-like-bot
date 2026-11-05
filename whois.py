@@ -11,6 +11,7 @@ active? A like can only be credited from an account the server considers real.
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, ".")
@@ -19,6 +20,34 @@ sys.path.insert(0, "guests_manager")
 import ff_bd_api as api  # noqa: E402
 
 FIELDS = ("uid", "name", "region", "level", "likes", "exp", "credit_score")
+
+
+
+TOKEN_TTL = 40 * 60          # a BD guest JWT is good for about an hour
+
+
+def fresh_token(row, force=False):
+    """Return (jwt, refreshed).
+
+    Reading a profile with an expired token returns empty fields, which looks
+    exactly like a banned account. Refreshing first is the difference between a
+    real answer and a wrong one.
+    """
+    tok = row.get("token") or ""
+    ts = row.get("ts") or 0
+    if tok and not force and (time.time() - ts) < TOKEN_TTL:
+        return tok, False
+    pw = row.get("pass") or row.get("pw")
+    if pw:
+        try:
+            info = api.mint_jwt_self(str(row["uid"]), pw)
+        except Exception:
+            info = None
+        if info and info.get("jwt"):
+            row["token"] = info["jwt"]
+            row["ts"] = int(time.time())
+            return info["jwt"], True
+    return tok, False
 
 
 def pool_row(uid: str):
@@ -52,8 +81,9 @@ def main() -> int:
         active = 0
         for r in rows:
             uid = str(r.get("uid"))
+            tok, rf = fresh_token(r)
             try:
-                prof = api.get_profile(int(uid)) or {}
+                prof = api.get_profile(int(uid), tok) or {}
             except Exception as exc:
                 print(f"{uid:12} {'-':7} {'-':>4} {'-':>6}  unreadable ({type(exc).__name__})")
                 continue
@@ -69,7 +99,14 @@ def main() -> int:
         print("give --uid <number> or --pool")
         return 2
 
-    prof = api.get_profile(int(args.uid)) or {}
+    try:
+        cand = next((r for r in json.loads(Path("bd_pool.json").read_text())
+                     if str(r.get("uid")) == str(args.uid)), {})
+    except Exception:
+        cand = {}
+    tok, rf = fresh_token(cand) if cand else (None, False)
+    print(f"token : {'refreshed' if rf else 'pool copy'}")
+    prof = api.get_profile(int(args.uid), tok) or {}
     row = {k: prof.get(k) for k in FIELDS}
     active = any(row.get(k) is not None for k in ("level", "name"))
 
