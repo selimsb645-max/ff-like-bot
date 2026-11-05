@@ -40,6 +40,23 @@ FALLBACK_DEVS = [
 ]
 
 
+PUBLIC_IP = ""          # set by guestgen once the exit IP is known
+
+
+def public_ip() -> str:
+    """The IP the server will see. Falls back to empty, never to a fake."""
+    global PUBLIC_IP
+    if PUBLIC_IP:
+        return PUBLIC_IP
+    try:
+        import urllib.request
+        with urllib.request.urlopen("https://api.ipify.org", timeout=8) as r:
+            PUBLIC_IP = r.read().decode().strip()
+    except Exception:
+        pass
+    return PUBLIC_IP
+
+
 def device_for(uid: str) -> dict:
     try:
         table = json.loads(DEVICES.read_text())
@@ -52,7 +69,7 @@ def device_for(uid: str) -> dict:
             "gpu_renderer": gpu, "system_software": sw, "screen_width": w,
             "screen_height": h, "screen_dpi": dpi,
             "processor_details": "ARM64 FP ASIMD AES | 2000 | 8", "memory": 5653,
-            "client_ip": "182.5.135.225"}
+            "client_ip": public_ip()}
 
 
 def build_full_payload(open_id: str, access_token: str, dev: dict,
@@ -69,7 +86,7 @@ def build_full_payload(open_id: str, access_token: str, dev: dict,
         17: str(dev.get("gpu_renderer", "Mali-G52 MC2")),
         18: "OpenGL ES 3.2 v1.r49p1-03bet0",
         19: str(dev.get("unique_device_id", f"Google|{uuid.uuid4()}")),
-        20: str(dev.get("client_ip", "182.5.135.225")),
+        20: str(dev.get("client_ip") or public_ip()),
         21: "en", 22: str(open_id), 23: str(platform), 24: "Handheld",
         25: str(dev.get("model", "Xiaomi")), 26: region.upper(), 29: str(access_token),
         30: "1", 41: "Telkomsel", 42: "4G", 57: "7428b253defc164018c604a1ebbfebdf",

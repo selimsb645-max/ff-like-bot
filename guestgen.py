@@ -310,6 +310,10 @@ def main() -> int:
 
     sess = make_session(args.proxy)
     ip = exit_ip(sess)
+    # the login payload must claim the IP the request really leaves from; a
+    # hardcoded client_ip is one of the things the anti-cheat bans as "Cheat"
+    if ip:
+        full_login.PUBLIC_IP = ip
     if not args.no_ip_gate and not is_bd_ip(ip):
         log("refusing to mint: traffic is not leaving from a Bangladesh residential IP")
         return 2
