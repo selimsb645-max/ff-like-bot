@@ -171,7 +171,18 @@ def load_pool() -> list:
 
 
 def save_pool(pool: list) -> None:
-    POOL.write_text(json.dumps(pool, indent=2))
+    """Write the pool, and keep a copy.
+
+    bd_pool.json is tracked in git, so a `git pull` silently replaces the running
+    state with the committed one. The backup is what recovers accounts that were
+    minted but never made it into a commit.
+    """
+    blob = json.dumps(pool, indent=2)
+    POOL.write_text(blob)
+    try:
+        POOL.with_suffix(".backup.json").write_text(blob)
+    except Exception:
+        pass
 
 
 # Every account should read "SBㅤXXXXX": the owner's initials, then U+3164 HANGUL
@@ -300,6 +311,8 @@ def main() -> int:
     ap.add_argument("--probe", action="store_true", help="print live version data and exit")
     ap.add_argument("--no-ip-gate", action="store_true", help="skip the BD IP check (tests only)")
     ap.add_argument("--fresh-vercfg", action="store_true")
+    ap.add_argument("--activate-only", action="store_true",
+                    help="run GetLoginData for accounts already in the pool (no new registrations)")
     ap.add_argument("--legacy", action="store_true",
                     help="replay last night's login path (no ChooseRegion)")
     args = ap.parse_args()
@@ -311,6 +324,26 @@ def main() -> int:
         f"server_open {vdata.get('server_open')}")
     if args.probe:
         return 0
+
+    if args.activate_only:
+        pool = load_pool()
+        todo = [r for r in pool if r.get("token") and not r.get("profiled")]
+        log(f"activating {len(todo)} of {len(pool)} pool accounts")
+        done = 0
+        for i, rec in enumerate(todo, 1):
+            log(f"  [{i}/{len(todo)}] {rec.get('uid')}")
+            try:
+                good = give_profile(rec)
+            except Exception as exc:
+                good = False
+                log(f"    failed: {type(exc).__name__}: {str(exc)[:80]}")
+            rec["profiled"] = bool(good)
+            done += 1 if good else 0
+            save_pool(pool)
+            time.sleep(3)
+        log(json.dumps({"activated": done, "checked": len(todo),
+                        "pool_size": len(pool)}, indent=2))
+        return 0 if done else 4
 
     sess = make_session(args.proxy)
     ip = exit_ip(sess)
