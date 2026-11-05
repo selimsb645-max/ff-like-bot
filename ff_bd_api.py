@@ -1146,6 +1146,10 @@ def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> 
                 with lock:
                     used.add(key)
                     done["sent"] += 1
+                    # LikeProfile answers 200 even when it refuses, so keep the
+                    # body: without it "sent" is a guess, not proof.
+                    tag = r.content[:24].hex() or "empty"
+                    reasons["200:" + tag] = reasons.get("200:" + tag, 0) + 1
             else:
                 body = r.content[:60].decode("utf-8", "replace").strip() or f"HTTP {r.status_code}"
                 with lock:
