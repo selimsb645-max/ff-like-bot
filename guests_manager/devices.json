@@ -1,0 +1,28 @@
+{
+ "8410381093": {
+  "unique_device_id": "Google|4a4ce196-0e40-4328-bd55-d0daacccee60",
+  "brand": "Xiaomi",
+  "model": "M2007J20CG",
+  "gpu_renderer": "Adreno (TM) 618",
+  "system_software": "Android OS 12 / API-31",
+  "screen_width": 1080,
+  "screen_height": 2340,
+  "screen_dpi": 395,
+  "processor_details": "ARM64 FP ASIMD AES | 2000 | 8",
+  "memory": 5653,
+  "client_ip": "95.143.47.23"
+ },
+ "9999999999": {
+  "unique_device_id": "Google|2890a97c-199d-44d7-bb11-407041867248",
+  "brand": "Samsung",
+  "model": "SM-G998B",
+  "gpu_renderer": "Adreno (TM) 660",
+  "system_software": "Android OS 12 / API-31",
+  "screen_width": 1440,
+  "screen_height": 3200,
+  "screen_dpi": 480,
+  "processor_details": "ARM64 FP ASIMD AES | 2000 | 8",
+  "memory": 5653,
+  "client_ip": "95.143.47.23"
+ }
+}

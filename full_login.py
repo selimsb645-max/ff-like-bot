@@ -19,7 +19,23 @@ import ff_majorlogin as mlm
 import ff_bd_api as api
 from guests_manager import game_register as gr
 
-DEVICES = Path("/tmp/ug/UNFAIR GLORY BOT /guildglory/devices.json")
+DEVICES = Path(__file__).parent / "guests_manager" / "devices.json"
+_DEV_CACHE = {}
+
+
+def _load_devices() -> dict:
+    try:
+        return json.loads(DEVICES.read_text())
+    except Exception:
+        return {}
+
+
+def _save_devices(table: dict) -> None:
+    try:
+        DEVICES.parent.mkdir(parents=True, exist_ok=True)
+        DEVICES.write_text(json.dumps(table, indent=1))
+    except Exception:
+        pass
 import httpx
 
 
@@ -58,18 +74,29 @@ def public_ip() -> str:
 
 
 def device_for(uid: str) -> dict:
-    try:
-        table = json.loads(DEVICES.read_text())
-        if str(uid) in table:
-            return table[str(uid)]
-    except Exception:
-        pass
+    """One device per account, reused for every request in its whole life.
+
+    The anti-cheat compares the device claimed at registration with the one on
+    each later login; a fresh random phone per call is treated as a tampered
+    client and banned as "Cheat".
+    """
+    uid = str(uid)
+    if uid in _DEV_CACHE:
+        return _DEV_CACHE[uid]
+    table = _load_devices()
+    if uid in table:
+        _DEV_CACHE[uid] = table[uid]
+        return table[uid]
     brand, model, gpu, sw, w, h, dpi = random.choice(FALLBACK_DEVS)
-    return {"unique_device_id": f"Google|{uuid.uuid4()}", "brand": brand, "model": model,
-            "gpu_renderer": gpu, "system_software": sw, "screen_width": w,
-            "screen_height": h, "screen_dpi": dpi,
-            "processor_details": "ARM64 FP ASIMD AES | 2000 | 8", "memory": 5653,
-            "client_ip": public_ip()}
+    dev = {"unique_device_id": f"Google|{uuid.uuid4()}", "brand": brand, "model": model,
+           "gpu_renderer": gpu, "system_software": sw, "screen_width": w,
+           "screen_height": h, "screen_dpi": dpi,
+           "processor_details": "ARM64 FP ASIMD AES | 2000 | 8", "memory": 5653,
+           "client_ip": public_ip()}
+    table[uid] = dev
+    _DEV_CACHE[uid] = dev
+    _save_devices(table)
+    return dev
 
 
 def build_full_payload(open_id: str, access_token: str, dev: dict,
@@ -115,7 +142,7 @@ def full_major_login(uid, open_id, access_token, host=None, release="OB55", dev=
     h = {"User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
          "Accept-Encoding": "gzip", "X-GA-SV": str(int(time.time())),
          "Content-Type": "application/x-www-form-urlencoded", "X-Unity-Version": "2018.4.12f1",
-         "X-GA": "v1 1", "ReleaseVersion": release}
+         "X-GA": "v1 1", "X-GA-RV": release, "ReleaseVersion": release}
     last = None
     for base in hosts:
         for attempt in (1, 2):
@@ -157,7 +184,7 @@ def choose_region(jwt: str, host: str, region: str = "BD", release: str = "OB55"
     h = {"User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
          "Accept-Encoding": "gzip", "X-GA-SV": str(int(time.time())),
          "Content-Type": "application/x-www-form-urlencoded",
-         "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1",
+         "X-Unity-Version": "2018.4.12f1", "X-GA": "v1 1", "X-GA-RV": release,
          "Authorization": f"Bearer {jwt}", "ReleaseVersion": release}
     try:
         return _post(url, h, body, 20).status_code

@@ -267,6 +267,8 @@ def mint_one(sess, vdata: dict) -> dict | None:
         "uid": uid, "pass": pw, "token": info.get("jwt", ""), "nick": nick,
         "account_id": info.get("account_id"), "region": reg if locked else "UNLOCKED",
         "key": key, "iv": iv, "server_url": srv,
+        "device_id": (full_login.device_for(uid).get("unique_device_id") or ""),
+        "client_ip": full_login.public_ip(),
         "release": vdata["release"], "ts": int(time.time()),
         "ts_human": time.strftime("%Y-%m-%d %H:%M:%S"),
         "profiled": False,
