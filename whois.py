@@ -35,9 +35,39 @@ def pool_row(uid: str):
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="read one account's server-side profile")
-    ap.add_argument("--uid", required=True, help="public UID (8-10 digits)")
+    ap.add_argument("--uid", default=None, help="public UID (8-10 digits)")
+    ap.add_argument("--pool", action="store_true", help="check every account in bd_pool.json")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     args = ap.parse_args()
+
+    if args.pool:
+        try:
+            raw = json.loads(Path("bd_pool.json").read_text())
+        except Exception as exc:
+            print(f"cannot read bd_pool.json: {exc}")
+            return 2
+        rows = raw if isinstance(raw, list) else list(raw.values())
+        rows.sort(key=lambda r: r.get("ts") or 0, reverse=True)
+        print(f"{'uid':12} {'region':7} {'lvl':>4} {'likes':>6}  state")
+        active = 0
+        for r in rows:
+            uid = str(r.get("uid"))
+            try:
+                prof = api.get_profile(int(uid)) or {}
+            except Exception as exc:
+                print(f"{uid:12} {'-':7} {'-':>4} {'-':>6}  unreadable ({type(exc).__name__})")
+                continue
+            reg, lvl, lk = prof.get("region"), prof.get("level"), prof.get("likes")
+            ok = lvl is not None or prof.get("name")
+            active += 1 if ok else 0
+            print(f"{uid:12} {str(reg or '-'):7} {str(lvl if lvl is not None else '-'):>4} "
+                  f"{str(lk if lk is not None else '-'):>6}  {'ACTIVE' if ok else 'no profile'}")
+        print(f"\n{active}/{len(rows)} accounts have an active profile")
+        return 0 if active else 1
+
+    if not args.uid:
+        print("give --uid <number> or --pool")
+        return 2
 
     prof = api.get_profile(int(args.uid)) or {}
     row = {k: prof.get(k) for k in FIELDS}
