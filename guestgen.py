@@ -311,6 +311,8 @@ def main() -> int:
     ap.add_argument("--probe", action="store_true", help="print live version data and exit")
     ap.add_argument("--no-ip-gate", action="store_true", help="skip the BD IP check (tests only)")
     ap.add_argument("--fresh-vercfg", action="store_true")
+    ap.add_argument("--old-ip", action="store_true",
+                    help="A/B test: send the old hardcoded client_ip (182.5.135.225) like the night that worked")
     ap.add_argument("--activate-only", action="store_true",
                     help="run GetLoginData for accounts already in the pool (no new registrations)")
     ap.add_argument("--legacy", action="store_true",
@@ -351,6 +353,10 @@ def main() -> int:
     # hardcoded client_ip is one of the things the anti-cheat bans as "Cheat"
     if ip:
         full_login.PUBLIC_IP = ip
+    if args.old_ip:
+        # A/B switch only: that night's accounts got profiles with this value
+        full_login.PUBLIC_IP = "182.5.135.225"
+        log("  [A/B] sending the OLD hardcoded client_ip 182.5.135.225")
     if not args.no_ip_gate and not is_bd_ip(ip):
         log("refusing to mint: traffic is not leaving from a Bangladesh residential IP")
         return 2
