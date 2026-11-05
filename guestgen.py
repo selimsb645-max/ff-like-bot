@@ -175,6 +175,7 @@ def save_pool(pool: list) -> None:
 # Every account should read "SBㅤXXXXX": the owner's initials, then U+3164 HANGUL
 # FILLER, which renders as nothing at all in game, then random characters. The
 # separator is a real character, not a space, so the game font shows no gap.
+LEGACY_LOGIN = False          # --legacy: replay the exact path that made working accounts
 NICK_PREFIX = os.environ.get("GUEST_NICK_PREFIX", "SB")
 NICK_SEP = os.environ.get("GUEST_NICK_SEP", "\u3164")
 
@@ -222,21 +223,42 @@ def mint_one(sess, vdata: dict) -> dict | None:
     # gives the account its own game host and a real profile; without it the
     # account shows up as a foreign region and its likes are never credited.
     reg = str(vdata.get("region") or "BD").upper()
-    info = full_login.login_locked(uid, oid, at, region=reg, release=vdata["release"])
-    if not info:
-        log("    major login failed")
-        return None
-    for _ in range(2):
-        again = full_login.login_locked(uid, oid, at, region=reg, release=vdata["release"])
-        if again and len(again.get("jwt", "")) > len(info.get("jwt", "")):
-            info = again
-        if len(info.get("jwt", "")) >= 815:
-            break
-
-    srv = str(info.get("server_url") or "").rstrip("/")
-    locked = bool(srv)
-    if not locked:
-        log("    region NOT locked - no server_url, so this account cannot be profiled")
+    if LEGACY_LOGIN:
+        # Owner's correction (2026-11-05): the accounts minted last night ARE BD
+        # accounts - cross-region search would not have found them from a BD
+        # login, and his account proved it. Only the in-game language showed
+        # Indonesia. So replay that exact path: no ChooseRegion, the same
+        # language field as before, and the login host as the game host.
+        info = full_login.full_major_login(uid, oid, at, release=vdata["release"], region="ID")
+        if not info:
+            log("    major login failed")
+            return None
+        for _ in range(2):
+            again = full_login.full_major_login(uid, oid, at, release=vdata["release"], region="ID")
+            if again and len(again.get("jwt", "")) > len(info.get("jwt", "")):
+                info = again
+            if len(info.get("jwt", "")) >= 815:
+                break
+        srv = str(info.get("server_url") or info.get("url") or "").rstrip("/")
+        if not srv or "loginbp" in srv:
+            srv = "https://" + str(vdata["login_host"]).replace("loginbp", "clientbp")
+        log(f"    legacy path (no ChooseRegion) - game host {srv}")
+        locked = True
+    else:
+        info = full_login.login_locked(uid, oid, at, region=reg, release=vdata["release"])
+        if not info:
+            log("    major login failed")
+            return None
+        for _ in range(2):
+            again = full_login.login_locked(uid, oid, at, region=reg, release=vdata["release"])
+            if again and len(again.get("jwt", "")) > len(info.get("jwt", "")):
+                info = again
+            if len(info.get("jwt", "")) >= 815:
+                break
+        srv = str(info.get("server_url") or "").rstrip("/")
+        locked = bool(srv)
+        if not locked:
+            log("    region NOT locked - no server_url, so this account cannot be profiled")
     key = info.get("key")
     iv = info.get("iv")
     key = key.hex() if isinstance(key, (bytes, bytearray)) else key
@@ -274,7 +296,11 @@ def main() -> int:
     ap.add_argument("--probe", action="store_true", help="print live version data and exit")
     ap.add_argument("--no-ip-gate", action="store_true", help="skip the BD IP check (tests only)")
     ap.add_argument("--fresh-vercfg", action="store_true")
+    ap.add_argument("--legacy", action="store_true",
+                    help="replay last night's login path (no ChooseRegion)")
     args = ap.parse_args()
+    global LEGACY_LOGIN
+    LEGACY_LOGIN = bool(args.legacy)
 
     vdata = version_data(force=args.fresh_vercfg)
     log(f"version data · release {vdata['release']} · login {vdata['login_host']} · "
