@@ -46,14 +46,19 @@ def _proxy_healthy(px: str) -> bool:
     if _PROXY_STATE["url"] == px and now - _PROXY_STATE["checked"] < _PROXY_TTL:
         return _PROXY_STATE["ok"]
     ok = False
-    try:
-        r = httpx.get("https://ipinfo.io/json", proxy=px, timeout=7)
-        d = r.json() if r.status_code == 200 else {}
-        ok = d.get("country") == "BD"
-        print(f"[proxy] health {px[:40]} -> {d.get('ip')} {d.get('country')} {'OK' if ok else 'BAD'}")
-    except Exception as e:
-        print(f"[proxy] health {px[:40]} FAILED: {str(e)[:60]}")
-        ok = False
+    # A two-hop tunnel (sandbox -> tailnet -> phone) drops the odd connection, so
+    # one transient failure must not condemn the proxy for ten minutes.
+    for attempt in range(3):
+        try:
+            r = httpx.get("https://ipinfo.io/json", proxy=px, timeout=12)
+            d = r.json() if r.status_code == 200 else {}
+            ok = d.get("country") == "BD"
+            print(f"[proxy] health {px[:40]} -> {d.get('ip')} {d.get('country')} {'OK' if ok else 'BAD'}")
+            break
+        except Exception as e:
+            print(f"[proxy] health {px[:40]} attempt {attempt + 1} failed: {str(e)[:60]}")
+            ok = False
+            time.sleep(2)
     _PROXY_STATE.update({"url": px, "ok": ok, "checked": now})
     return ok
 
