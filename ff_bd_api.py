@@ -374,9 +374,9 @@ def get_profile(account_id, jwt: str = None) -> dict | None:
     if not t:
         return None
     wire = _pb(1, int(account_id)) + _pb(2, 1)
+    # _headers already signs with the current clock; overriding it here with the
+    # old constants signed every profile read with a stale timestamp
     h = dict(_headers(t))
-    h["ReleaseVersion"] = "OB53"
-    h["X-GA-SV"] = "1789556611"
     try:
         r = httpx.post(profile_url(), headers=h, data=_enc(wire), timeout=20,
                        verify=False, **_pxkw())
@@ -499,7 +499,6 @@ def check_token(jwt: str) -> bool:
     try:
         wire = _pb(1, HEALTH_TARGET) + _pb(2, 1)
         h = dict(_headers(jwt))
-        h["ReleaseVersion"] = "OB53"
         r = httpx.post(profile_url(), headers=h, data=_enc(wire), timeout=15,
                        verify=False, **_pxkw())
         return r.status_code == 200
