@@ -45,9 +45,31 @@ NICK_KEYS = ("nickname", "player_name", "ign", "name")
 
 
 def parse_prefs(path: Path) -> dict:
-    """Return every scalar string stored in the prefs file."""
+    """Return every scalar string stored in the prefs file.
+
+    Three shapes are accepted: the Android prefs XML, the MSDK guest .dat file
+    ({"guest_account_info":{"com.garena.msdk.guest_uid":..., ...}}) and a protobuf-
+    ish blob we can only sweep with a regex.
+    """
     out = {}
     raw = path.read_bytes()
+
+    if raw.lstrip()[:1] in (b"{", b"["):
+        try:
+            flat = {}
+
+            def walk(node):
+                if isinstance(node, dict):
+                    for k, v in node.items():
+                        walk(v) if isinstance(v, (dict, list)) else flat.__setitem__(str(k), str(v))
+                elif isinstance(node, list):
+                    for v in node:
+                        walk(v)
+            walk(json.loads(raw.decode("utf-8", "replace")))
+            if flat:
+                return flat
+        except Exception:
+            pass
 
     # normal Android prefs are XML; some builds store a protobuf-ish blob, so
     # fall back to a regex sweep over printable key/value pairs
