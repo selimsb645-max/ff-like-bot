@@ -3,3 +3,9 @@ __pycache__/
 
 # local secrets and state
 .env
+
+# runtime state that must never be clobbered by a git pull
+.guestgen_version.json
+mint_attempts.json
+bd_pool.backup.json
+ffprefs/
