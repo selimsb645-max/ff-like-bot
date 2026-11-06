@@ -42,10 +42,23 @@ def get_login_data(token: dict):
 
 
 def main():
-    limit = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else 99
+    if any(a in ("-h", "--help") for a in sys.argv):
+        print(__doc__)
+        return
+    try:
+        limit = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else 99
+    except (ValueError, IndexError):
+        limit = 99
     pool_path = Path(__file__).parent / "bd_pool.json"
+    ready_path = Path(__file__).parent / "like_ready.json"
+    if not pool_path.exists():
+        print("bd_pool.json not found")
+        return
     pool = json.loads(pool_path.read_text())
-    cache = api.ready_uids()
+    try:
+        cache = json.loads(ready_path.read_text())
+    except Exception:
+        cache = {}
     done = 0
     for t in pool[:limit]:
         res, err = get_login_data(t)
@@ -63,7 +76,7 @@ def main():
         else:
             cache[str(t["uid"])] = {"ready": False, "ts": time.time()}
         time.sleep(2)
-    api.READY_FILE.write_text(json.dumps(cache, indent=1))
+    ready_path.write_text(json.dumps(cache, indent=1))
     pool_path.write_text(json.dumps(pool, indent=1))
     print(f"activated {done}/{min(limit, len(pool))}")
 
