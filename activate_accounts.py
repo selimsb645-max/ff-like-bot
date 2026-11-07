@@ -19,9 +19,10 @@ import ff_bd_api as api
 
 def get_login_data(token: dict):
     """GetLoginData with the JWT already minted; the phone/proxy path stays the same."""
-    pair, why = api.grant_any(str(token["uid"]), token.get("pass", ""))
+    from guests_manager import game_register as gr
+    pair = gr.token_grant(gr.new_session(), str(token["uid"]), token.get("pass", ""))
     if not pair:
-        return None, f"grant failed: {why}"
+        return None, "grant failed"
     at2, oid2 = pair
     wire = (api._pf_str(22, oid2) + api._pf_str(23, "4")
             + api._pf_str(29, at2) + api._pf_str(99, "4"))
