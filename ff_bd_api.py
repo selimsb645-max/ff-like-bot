@@ -864,8 +864,18 @@ def refresh_pool() -> list:
     if hard:
         _burned_add(hard)
     _tries_mark([u for u in touched if u not in hard], ok=bool(pool))
+    # A mint run that produced nothing must never truncate a pool that still holds
+    # working tokens - that is how a good pool got wiped on 2026-11-07.
     try:
-        POOL_FILE.write_text(json.dumps(pool, indent=1))
+        existing = []
+        try:
+            existing = json.loads(POOL_FILE.read_text())
+        except Exception:
+            existing = []
+        if pool or not existing:
+            POOL_FILE.write_text(json.dumps(pool, indent=1))
+        else:
+            print(f"[POOL] kept the existing {len(existing)} token(s) - this run minted none")
     except Exception:
         pass
     print(f"[POOL] minted {len(pool)}/{len(touched)} tokens (budget {POOL_MINT_BUDGET})")
