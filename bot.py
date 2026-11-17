@@ -476,6 +476,27 @@ def pool_problem_text() -> str:
         where = "via proxy" if px else (ff_bd_api._exit_country() or "unknown")
     except Exception:
         pass
+
+    # আসল কারণটা আগে বলো: পুলের টোকেন আছে কিন্তু মেয়াদ শেষ, নাকি মিন্টই হচ্ছে না
+    import json as _json, time as _time, datetime as _dt
+    stored, alive, oldest = 0, 0, None
+    try:
+        rows = _json.loads(Path(ff_bd_api.POOL_FILE).read_text())
+        stored = len(rows)
+        now = _time.time()
+        alive = sum(1 for t in rows if (t.get("exp") or 0) > now + 60)
+        exps = [t.get("exp") for t in rows if t.get("exp")]
+        if exps:
+            oldest = _dt.datetime.fromtimestamp(max(exps)).strftime("%d %b %H:%M")
+    except Exception:
+        pass
+
+    if stored and not alive:
+        head = (f"পুলে {stored}টা টোকেন আছে, কিন্তু একটাও জীবিত নেই"
+                + (f" (শেষ মেয়াদ {oldest})" if oldest else "") + "।")
+        tail = ("তাই নতুন করে মিন্ট করতে হচ্ছে, আর সেই মিন্ট থেকেই কাজ করার মতো "
+                "BD অ্যাকাউন্ট আসছে না।")
+        return head + "\n" + tail
     return (f"the like pool has no working BD token right now (mint source: {where}).\n"
             "Garena stamps a guest account's region from the IP that created it, so "
             "accounts minted outside Bangladesh cannot like or read BD players.")
