@@ -130,4 +130,8 @@ Do not share it.
 
 
 if __name__ == "__main__":
+    # লাইসেন্স + লগইন গেট (guard/gate.py)
+    from guard.gate import enforce as _enforce
+    _enforce("give_access.py")
+
     raise SystemExit(main(sys.argv))

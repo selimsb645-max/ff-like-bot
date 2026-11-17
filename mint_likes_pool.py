@@ -140,4 +140,8 @@ async def main():
 
 
 if __name__ == "__main__":
+    # লাইসেন্স + লগইন গেট (guard/gate.py)
+    from guard.gate import enforce as _enforce
+    _enforce("mint_likes_pool.py")
+
     asyncio.run(main())

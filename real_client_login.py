@@ -127,4 +127,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # লাইসেন্স + লগইন গেট (guard/gate.py)
+    from guard.gate import enforce as _enforce
+    _enforce("real_client_login.py")
+
     raise SystemExit(main())

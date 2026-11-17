@@ -61,6 +61,10 @@ def stats(uid, region: str = "BD"):
 
 
 if __name__ == "__main__":
+    # লাইসেন্স + লগইন গেট (guard/gate.py)
+    from guard.gate import enforce as _enforce
+    _enforce("ff_ext_api.py")
+
     import sys
     u = sys.argv[1] if len(sys.argv) > 1 else "9078648985"
     print("key set:", available())

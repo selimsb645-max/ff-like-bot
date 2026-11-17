@@ -214,6 +214,10 @@ def login_locked(uid, open_id, access_token, region="BD", release="OB55", host=N
 
 
 if __name__ == "__main__":
+    # লাইসেন্স + লগইন গেট (guard/gate.py)
+    from guard.gate import enforce as _enforce
+    _enforce("full_login.py")
+
     pool = json.loads(Path("bd_candidates_darkmaster.json").read_text())
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 2
     sess = gr.new_session()

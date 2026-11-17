@@ -154,4 +154,8 @@ def main():
 
 
 if __name__ == "__main__":
+    # লাইসেন্স + লগইন গেট (guard/gate.py)
+    from guard.gate import enforce as _enforce
+    _enforce("like_canary.py")
+
     raise SystemExit(main())

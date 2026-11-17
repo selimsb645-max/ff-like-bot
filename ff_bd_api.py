@@ -1183,6 +1183,10 @@ def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> 
 
 
 if __name__ == "__main__":
+    # লাইসেন্স + লগইন গেট (guard/gate.py)
+    from guard.gate import enforce as _enforce
+    _enforce("ff_bd_api.py")
+
     pool = refresh_pool()
     print(f"pool: {len(pool)} BD accounts")
     for t in pool[:5]:

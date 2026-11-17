@@ -189,4 +189,8 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
+    # লাইসেন্স + লগইন গেট (guard/gate.py)
+    from guard.gate import enforce as _enforce
+    _enforce("nai_client.py")
+
     raise SystemExit(main(sys.argv))

@@ -9,3 +9,6 @@ __pycache__/
 mint_attempts.json
 bd_pool.backup.json
 ffprefs/
+dist/
+guard_url.txt
+*.zip
