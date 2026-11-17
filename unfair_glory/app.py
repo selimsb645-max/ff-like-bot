@@ -10,6 +10,23 @@ import itertools, traceback, ssl, hmac, hashlib, string, re, subprocess
 import httpx
 import aiohttp
 import aiohttp.web
+
+# ---- BD exit plumbing -------------------------------------------------
+# মিন্ট/রেজিস্ট্রেশন যেন ফোনের BD আইপি দিয়েই যায়। PHONE_PROXY_URL (Tailscale
+# microsocks) থাকলে সব আউটগোয়িং কল ওই SOCKS5 দিয়ে যাবে; না থাকলে আগের মতোই।
+_PX = (os.environ.get("PHONE_PROXY_URL") or os.environ.get("LIKE_PROXY_URL")
+       or os.environ.get("BD_PROXY_URL") or "").strip()
+
+
+def _connector():
+    if _PX.startswith("socks"):
+        try:
+            from aiohttp_socks import ProxyConnector
+            print(f"[proxy] registration via {_PX.split('@')[-1]}", flush=True)
+            return ProxyConnector.from_url(_PX, rdns=True)
+        except Exception as e:
+            print(f"[proxy] aiohttp_socks নেই ({type(e).__name__}), direct যাচ্ছি", flush=True)
+    return aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 
@@ -488,7 +505,8 @@ def optimize_udp_socket(sock):
 
 # ==================== HTTP CLIENT ====================
 client = httpx.AsyncClient(verify=False, timeout=15.0,
-    limits=httpx.Limits(max_connections=300, max_keepalive_connections=150))
+    limits=httpx.Limits(max_connections=300, max_keepalive_connections=150),
+    **({"proxy": _PX} if _PX.startswith("http") else {}))
 _LOGIN_SEMAPHORE = asyncio.Semaphore(4)
 
 # ==================== CRYPTO / PROTOBUF ====================
@@ -906,7 +924,7 @@ def generate_signature(payload_str):
     return hmac.new(API_KEY, payload_str.encode(), hashlib.sha256).hexdigest()
 
 async def register_account(password, gop_url, app_version):
-    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+    connector = _connector()
     rp = {"app_id":100067,"client_type":2,"password":password,"source":2}
     payload = json.dumps(rp, separators=(',',':'))
     sig = generate_signature(payload)
@@ -927,7 +945,7 @@ async def register_account(password, gop_url, app_version):
     return None
 
 async def grant_token(uid, password, gop_url, app_version):
-    connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
+    connector = _connector()
     gp = {"client_id":100067,"client_secret":HEX_KEY,"client_type":2,
           "device_id":f"02-{uuid.uuid4()}","password":password,
           "response_type":"token","uid":int(uid)}
@@ -1008,7 +1026,7 @@ async def major_login(payload, login_url, release_version):
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
+        async with aiohttp.ClientSession(connector=_connector(), timeout=aiohttp.ClientTimeout(total=15)) as session:
             async with session.post(url, headers=req_headers, data=payload, ssl=ssl_context) as response:
                 response_content = await response.read()
                 print_info(f"[MAJOR-LOGIN] status={response.status} len={len(response_content)}")
@@ -1066,7 +1084,7 @@ async def get_login_data(payload, jwt_token, server_url, release_version):
     try:
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False; ssl_ctx.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as s:
+        async with aiohttp.ClientSession(connector=_connector(), timeout=aiohttp.ClientTimeout(total=10)) as s:
             async with s.post(url, headers=hdrs, data=payload, ssl=ssl_ctx) as r:
                 if r.status != 200: return None
                 content = await r.read()
@@ -1096,7 +1114,7 @@ async def get_player_personal_show(target_uid, jwt_token, server_url, release_ve
     try:
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False; ssl_ctx.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as s:
+        async with aiohttp.ClientSession(connector=_connector(), timeout=aiohttp.ClientTimeout(total=8)) as s:
             async with s.post(url, headers=hdrs, data=payload, ssl=ssl_ctx) as r:
                 if r.status != 200: return None
                 return decode_protobuf_2(await r.read())
@@ -1143,7 +1161,7 @@ async def join_clan(jwt_token, clan_id):
             "Connection":"Keep-Alive","Accept-Encoding":"gzip"}
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False; ssl_ctx.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
+        async with aiohttp.ClientSession(connector=_connector(), timeout=aiohttp.ClientTimeout(total=15)) as s:
             async with s.post(url, headers=hdrs, data=payload, ssl=ssl_ctx) as r:
                 if r.status == 200:
                     print_success(f"[CLAN] ✅ Join sent for {clan_id}"); return True
@@ -1865,7 +1883,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 }
                 ssl_ctx = ssl.create_default_context()
                 ssl_ctx.check_hostname = False; ssl_ctx.verify_mode = ssl.CERT_NONE
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as s:
+                async with aiohttp.ClientSession(connector=_connector(), timeout=aiohttp.ClientTimeout(total=8)) as s:
                     async with s.post(url, headers=hdrs, data=payload, ssl=ssl_ctx) as r:
                         body = await r.read()
                         if r.status == 200 and len(body) > 0:
@@ -2639,7 +2657,7 @@ async def choose_region(region, jwt_token, login_url, release_version):
     try:
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = False; ssl_ctx.verify_mode = ssl.CERT_NONE
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as s:
+        async with aiohttp.ClientSession(connector=_connector(), timeout=aiohttp.ClientTimeout(total=15)) as s:
             async with s.post(url, data=payload, headers=hdrs, ssl=ssl_ctx) as r:
                 body = await r.read()
                 print_info(f"[CHOOSE-REGION] {region} → HTTP {r.status} | body={body[:100]!r}")
@@ -2690,7 +2708,7 @@ async def major_register(release_v, access_token, open_id, name, game_version,
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
 
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as s:
+        async with aiohttp.ClientSession(connector=_connector(), timeout=aiohttp.ClientTimeout(total=30)) as s:
             async with s.post(url, headers=hdrs, data=payload, ssl=ssl_ctx) as resp:
                 content = await resp.read()
                 print_info(f"[MAJOR-REG] status={resp.status} len={len(content)}")
