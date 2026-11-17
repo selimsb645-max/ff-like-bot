@@ -40,6 +40,8 @@ except Exception as e:
     print("PHONE PROXY UNREACHABLE:", str(e)[:160])
     sys.exit(1)
 PY
-if [ $? -eq 0 ]; then
-  echo "PHONE_PROXY_URL=$URL" >> "$GITHUB_ENV"
+if [ $? -ne 0 ]; then
+  echo "::error::ফোনের BD প্রক্সি কাজ করছে না — মিন্ট বন্ধ রাখা হলো (US আইপি থেকে মিন্ট করলে অ্যাকাউন্ট নষ্ট হয়)"
+  exit 1
 fi
+echo "PHONE_PROXY_URL=$URL" >> "$GITHUB_ENV"

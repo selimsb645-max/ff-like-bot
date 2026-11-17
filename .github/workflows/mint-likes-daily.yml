@@ -56,7 +56,11 @@ jobs:
           GAP: ${{ github.event.inputs.gap || '6' }}
           PHONE_PROXY_URL: ${{ env.PHONE_PROXY_URL }}
         run: |
-          echo "proxy for mint: ${PHONE_PROXY_URL:-none}"
+          if [ -z "${PHONE_PROXY_URL:-}" ]; then
+            echo "::error::কোনো BD প্রক্সি নেই — মিন্ট করছি না, কারণ US আইপি থেকে তৈরি অ্যাকাউন্ট BD প্লেয়ারকে লাইক দিতে পারে না"
+            exit 1
+          fi
+          echo "proxy for mint: $PHONE_PROXY_URL"
           cd unfair_glory
           python mint_likes_pool.py --count "$COUNT" --gap "$GAP"
 
