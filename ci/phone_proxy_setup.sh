@@ -57,7 +57,13 @@ print('\n'.join(seen[:8]))
 PY
 echo "=== candidates ==="; cat /tmp/cands.txt
 
+# ফোনের microsocks মাঝে মাঝে মরে যায় (Doze)। তাই কয়েকবার চেষ্টা করি,
+# প্রথম চেষ্টায় না পেলে ২০ সেকেন্ড পরে আবার।
 WORKING=""
+ATTEMPT=0
+while [ -z "$WORKING" ] && [ "$ATTEMPT" -lt 3 ]; do
+ATTEMPT=$((ATTEMPT + 1))
+echo "=== attempt $ATTEMPT ==="
 while read -r IP; do
   [ -z "$IP" ] && continue
   if python3 - "$IP" <<'PY'
@@ -92,6 +98,11 @@ PY
     echo "socks5 dead at $IP:1080"
   fi
 done < /tmp/cands.txt
+if [ -z "$WORKING" ] && [ "$ATTEMPT" -lt 3 ]; then
+  echo "no proxy on attempt $ATTEMPT — 20s পরে আবার চেষ্টা"
+  sleep 20
+fi
+done
 
 if [ -z "$WORKING" ]; then
   echo "::error::কোনো ফোন প্রক্সি পাওয়া যায়নি — Termux-এ microsocks চলছে কি না, আর ফোনের Tailscale অন আছে কি না দেখুন"
