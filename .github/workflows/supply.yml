@@ -37,35 +37,12 @@ jobs:
           python-version: '3.11'
       - run: pip install -r requirements.txt 'httpx[socks]' python-socks
 
-      - name: Tailscale (phone-as-BD-exit)
+      - name: Phone BD proxy (Tailscale)
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
-        run: |
-          if [ -z "$TS_AUTHKEY" ]; then echo "no TAILSCALE_AUTHKEY — cannot reach the phone"; exit 0; fi
-          curl -fsSL https://tailscale.com/install.sh | sh
-          sudo tailscaled > /tmp/tailscaled.log 2>&1 &
-          sleep 4
-          sudo tailscale up --authkey="$TS_AUTHKEY" --hostname="ff-supply-runner" --accept-routes --reset
-          # Always prefer live discovery: a saved PHONE_PROXY_IP goes stale the moment
-          # the phone gets a new tailnet address, and a stale IP fails the BD check.
-          DISCOVERED=$(sudo tailscale status --json | python3 -c "
-          import json,sys
-          d=json.load(sys.stdin)
-          cands=[]
-          for p in (d.get('Peer') or {}).values():
-              ips=[a for a in (p.get('TailscaleIPs') or []) if a.count('.')==3]
-              if p.get('HostName','').lower().startswith('ff-'): continue
-              if ips and p.get('Online'): cands.append(ips[0])
-          print(cands[0] if cands else '')
-          ") || true
-          if [ -n "$DISCOVERED" ]; then PHONE_PROXY_IP="$DISCOVERED"; fi
-          echo "phone: ${PHONE_PROXY_IP:-<none>}"
-          if [ -n "$PHONE_PROXY_IP" ]; then
-            echo "PHONE_PROXY_URL=socks5://$PHONE_PROXY_IP:1080" >> "$GITHUB_ENV"
-            echo "BD_PROXY_URL=socks5://$PHONE_PROXY_IP:1080" >> "$GITHUB_ENV"
-          fi
-
+          TS_HOSTNAME: ff-gh-bot
+        run: bash ci/phone_proxy_setup.sh
       - name: Check the exit really is BD
         run: |
           if [ -z "$BD_PROXY_URL" ]; then echo "no phone proxy — aborting"; exit 1; fi
