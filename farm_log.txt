@@ -1,136 +1,55 @@
 [access] headless runner - skipping the interactive code check. Set BOT_ACCESS_KEY to require it there too.
-bd proxy hunt: 17 alive candidates
-bd proxy socks5://118.179.155.202:9090: BD exit but can't reach garenanow — skip
-auto_mint: no usable BD proxy (round 1/6) — retrying in 75s
-bd proxy hunt: 16 alive candidates
-bd proxy socks5://202.44.106.141:1080: BD exit but can't reach garenanow — skip
-bd proxy OK: http://182.160.127.29:12331 exit=182.160.127.29
-bd proxy http://202.5.47.60:1080: BD exit but can't reach garenanow — skip
-auto_mint: 1 usable BD proxies: ['http://182.160.127.29:12331']
-mint[t1]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t2]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t3]: FRESH BD ACCOUNT 8465100161 (Kexin8500)
-mint[t4]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t5]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t6]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t7]: major_register 8465102244: HTTPSConnectionPool(host='loginbp.ppmain
-mint[t8]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-auto_mint: 1 fresh BD accounts minted
-pool: 1 fresh account(s) saved to registered_pool.json
-account pool: 704 usable, 37 burned-skip
-candidates: 10 accounts, want=3, cycles=40, first=[8465100161, '8465100161', '8464531049', '8464530762', '8463622760', '8407297669', '8405606806', '8405520715']
-BULK MODE: 10 candidates, 2 parallel workers, cycles=40
-[8465100161] authenticating...
+bd proxy hunt: 27 alive candidates
+bd proxy OK: http://103.239.253.66:8080 exit=103.239.253.66
+bd proxy http://175.29.125.242:8080: BD exit but can't reach garenanow — skip
+bd proxy OK: http://45.115.114.41:2379 exit=45.115.114.41
+bd proxy OK: http://27.147.155.206:12051 exit=202.74.243.181
+bd proxy OK: http://27.147.157.125:12051 exit=27.147.157.125
+bd proxy OK: http://27.147.142.156:12051 exit=27.147.142.156
+bd proxy OK: http://114.130.153.122:58080 exit=114.130.153.122
+auto_mint: 6 usable BD proxies: ['http://103.239.253.66:8080', 'http://45.115.114.41:2379', 'http://27.147.155.206:12051', 'http://27.147.157.125:12051', 'http://27.147.142.156:12051', 'http://114.130.153.122:58080']
+mint[t1]: FRESH BD ACCOUNT 8465871237 (Kexin7747)
+mint[t2]: FRESH BD ACCOUNT 8465873198 (Kexin9692)
+auto_mint: 2 fresh BD accounts minted
+pool: 2 fresh account(s) saved to registered_pool.json
+account pool: 704 usable, 39 burned-skip
+candidates: 11 accounts, want=3, cycles=40, first=[8465871237, 8465873198, '8465873198', '8465871237', '8464530762', '8463622760', '8407297669', '8405606806']
+BULK MODE: 11 candidates, 2 parallel workers, cycles=40
+[8465871237] authenticating...
 [proxy] health socks5://100.83.141.93:1080 attempt 1 failed: timed out
 [proxy] health socks5://100.83.141.93:1080 attempt 2 failed: timed out
 [proxy] health socks5://100.83.141.93:1080 attempt 3 failed: timed out
 [proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8465100161]: EXC HTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443): Max 
+    gr_login[8465871237]: status=200 len=1172 has_jwt=True
+    raw_login[8465871237]: mint-style login OK (jwt 736 chars)
 [proxy] unhealthy - falling back to DIRECT connection
-    raw_login[8465100161]: modern MajorLogin OK (jwt 814 chars)
+    GetLoginData httpx failed (status=401) — requests fallback
+    GetLoginData requests fallback EXC: HTTPSConnectionPool(host='clientbp.ppmainecoonghj.com', port=443): Max retries e
+[8465871237] GetLoginData FAILED (cached JWT dropped)
+[8465873198] authenticating...
 [proxy] unhealthy - falling back to DIRECT connection
-[8465100161] authenticating...
-[8465100161] reusing cached JWT (no re-login -> no Protection Bypass)
+    gr_login[8465873198]: EXC ('Connection aborted.', ConnectionResetError(104, 'Connection reset by
+[proxy] unhealthy - falling back to DIRECT connection
+    raw_login[8465873198]: modern MajorLogin OK (jwt 814 chars)
+[proxy] unhealthy - falling back to DIRECT connection
+[8465871237] -> logindata_failed | done=0
+[8465873198] authenticating...
+[8465873198] reusing cached JWT (no re-login -> no Protection Bypass)
 [proxy] unhealthy - falling back to DIRECT connection
     GetLoginData httpx failed (status=500) — requests fallback
     GetLoginData requests fallback: status=500 len=1
-[8465100161] GetLoginData FAILED (cached JWT dropped)
-progress push failed: timed out
-[8465100161] -> logindata_failed | done=0
-[8464531049] authenticating...
+[8465873198] GetLoginData FAILED (cached JWT dropped)
+progress push failed: [Errno 104] Connection reset by peer
+[8465871237] authenticating...
 [proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8464531049]: status=200 len=1172 has_jwt=True
-    raw_login[8464531049]: mint-style login OK (jwt 736 chars)
+    gr_login[8465871237]: status=200 len=1172 has_jwt=True
+    raw_login[8465871237]: mint-style login OK (jwt 736 chars)
 [proxy] unhealthy - falling back to DIRECT connection
     GetLoginData httpx failed (status=401) — requests fallback
     GetLoginData requests fallback: status=401 len=21
-[8464531049] GetLoginData FAILED (cached JWT dropped)
-progress push failed: timed out
-[8464530762] authenticating...
-[proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8464530762]: EXC HTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443): Max 
-[proxy] unhealthy - falling back to DIRECT connection
-    raw_login[8464530762]: modern MajorLogin OK (jwt 814 chars)
-[proxy] unhealthy - falling back to DIRECT connection
-[8464531049] -> logindata_failed | done=0
-unhandled exception during asyncio.run() shutdown
-task: <Task finished name='Task-5' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:1074> exception=ConnectTimeout('timed out')>
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
-    yield
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 250, in handle_request
-    resp = self._pool.handle_request(req)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
-    raise exc from None
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
-    response = connection.handle_request(
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_sync/http_proxy.py", line 288, in handle_request
-    connect_response = self._connection.handle_request(
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 101, in handle_request
-    raise exc
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 78, in handle_request
-    stream = self._connect(request)
-             ^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_sync/connection.py", line 124, in _connect
-    stream = self._network_backend.connect_tcp(**kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
-    with map_exceptions(exc_map):
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/contextlib.py", line 158, in __exit__
-    self.gen.throw(typ, value, traceback)
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
-    raise to_exc(exc) from exc
-httpcore.ConnectTimeout: timed out
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1085, in _worker
-    res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=420)
-          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/asyncio/tasks.py", line 479, in wait_for
-    return fut.result()
-           ^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 711, in run_account
-    servers = get_login_data(login)
-              ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 582, in get_login_data
-    r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 42, in <lambda>
-    httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
-                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_api.py", line 304, in post
-    return request(
-           ^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_api.py", line 109, in request
-    return client.request(
-           ^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_client.py", line 825, in request
-    return self.send(request, auth=auth, follow_redirects=follow_redirects)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_client.py", line 914, in send
-    response = self._send_handling_auth(
-               ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_client.py", line 942, in _send_handling_auth
-    response = self._send_handling_redirects(
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
-    response = self._send_single_request(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_client.py", line 1014, in _send_single_request
-    response = transport.handle_request(request)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 249, in handle_request
-    with map_httpcore_exceptions():
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/contextlib.py", line 158, in __exit__
-    self.gen.throw(typ, value, traceback)
-  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
-    raise mapped_exc(message) from exc
-httpx.ConnectTimeout: timed out
+[8465871237] GetLoginData FAILED (cached JWT dropped)
+[8465873198] -> logindata_failed | done=0
+[8465871237] -> logindata_failed | done=0
 Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
     yield
