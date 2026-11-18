@@ -28,18 +28,32 @@ if secret:
     cands.append(secret)
 try:
     d = json.load(open('/tmp/ts.json'))
+    phone_like, others = [], []
     for p in (d.get('Peer') or {}).values():
+        host = (p.get('HostName') or '').lower()
+        os_name = (p.get('OS') or '').lower()
         for ip in (p.get('TailscaleIPs') or []):
-            if ip.count('.') == 3:
-                cands.append(ip)
-                print(f"# peer {p.get('HostName')} os={p.get('OS')} online={p.get('Online')} ip={ip}", file=__import__('sys').stderr)
+            if ip.count('.') != 3:
+                continue
+            line = f"# peer {p.get('HostName')} os={p.get('OS')} online={p.get('Online')} ip={ip}"
+            print(line, file=__import__('sys').stderr)
+            if os_name == 'android' or 'realme' in host or 'c55' in host or 'phone' in host:
+                phone_like.append(ip)
+            else:
+                others.append(ip)
+    cands.extend(phone_like + others)
 except Exception as e:
     print(f"# json err {e}", file=__import__('sys').stderr)
 seen = []
 for c in cands:
     if c not in seen:
         seen.append(c)
-print('\n'.join(seen))
+# tailnet-এ ৯০+ পিয়ার থাকতে পারে; ফোনের মতো পিয়ার আগে, তারপর বাকিরা, সর্বোচ্চ ৮টা
+import re as _re
+def rank(ip):
+    return 0 if ip == secret else 1
+seen.sort(key=rank)
+print('\n'.join(seen[:8]))
 PY
 echo "=== candidates ==="; cat /tmp/cands.txt
 
@@ -64,7 +78,7 @@ PY
 import sys, httpx
 u = f"socks5://{sys.argv[1]}:1080"
 try:
-    j = httpx.get("https://ipinfo.io/json", proxy=u, timeout=25).json()
+    j = httpx.get("https://ipinfo.io/json", proxy=u, timeout=12).json()
     print(j.get("country") or "?", j.get("ip"), j.get("org") or "")
 except Exception as e:
     print("ERR", str(e)[:60], "")
