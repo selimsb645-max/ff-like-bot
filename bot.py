@@ -1121,19 +1121,24 @@ def cmd_card(m):
             jwt = pool[0]["token"]
         s = ff_bd_api.get_stats(int(target), jwt) or {}
         if s.get("error"):
-            bot.edit_message_text(f"❌ Player not found: {str(s.get('error'))[:60]}", m.chat.id, msg.message_id)
+            why = pool_problem_text()
+            extra = ("\n\n" + why) if why else ""
+            bot.edit_message_text(f"❌ Player not found: {str(s.get('error'))[:60]}{extra}",
+                                  m.chat.id, msg.message_id)
             return
         full = ff_bd_api.get_full_profile(int(target), jwt) or {}
         if full.get("level") is not None or full.get("exp") is not None:
             s["level"] = full.get("level")
             s["exp"] = full.get("exp")
+        missing = [k for k in ("level", "likes") if s.get(k) is None]
         path = make_stat_card(str(target), s)
         if path and os.path.exists(path):
             with open(path, "rb") as ph:
                 bot.send_photo(m.chat.id, ph,
                                caption=f"🎴 <b>{s.get('name') or '—'}</b>  ·  UID <code>{target}</code>\n"
                                        f"⭐ Lv {s.get('level') or '—'}  ❤️ {s.get('likes') or '—'} likes\n"
-                                       f"📤 Share your card! @FFLikeDB_Bot")
+                                       + ("⚠️ Level/likes blank: no working BD token right now\n" if missing else "")
+                                       + "📤 Share your card! @FFLikeDB_Bot")
             try:
                 os.remove(path)
             except Exception:
@@ -1733,8 +1738,17 @@ def cb_like(c):
         bot.send_message(c.message.chat.id,
             f"✅ {delta} likes added!\n❤️ Total Likes now: <b>{likes_after}</b>")
     elif delta == 0:
-        bot.send_message(c.message.chat.id,
-            "⚠️ This UID was already liked today — try again tomorrow.")
+        # আগে এখানে "already liked today" লেখা হতো, যা প্রায়ই ভুল ছিল।
+        # এখন সংখ্যা দিয়ে বলে: কত অ্যাকাউন্ট চেষ্টা করেছে আর আসল কারণ কী।
+        why = pool_problem_text()
+        lines = [f"⚠️ Likes sent, but the counter did not move (accounts tried: {sent})."]
+        if why:
+            lines.append(why)
+        else:
+            lines.append("Garena accepted the requests and credited none: the sending accounts are "
+                         "likely flagged, or this UID has hit its 100-likes-per-day cap. "
+                         "Another UID works meanwhile.")
+        bot.send_message(c.message.chat.id, "\n".join(lines))
     else:
         bot.send_message(c.message.chat.id,
             f"✅ {sent} requests sent. Check /stats {target} to check.")
