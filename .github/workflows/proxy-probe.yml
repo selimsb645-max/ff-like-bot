@@ -1,0 +1,23 @@
+name: Phone proxy probe
+
+# দ্রুত পরীক্ষা: ফোনের microsocks কোন ঠিকানায় সাড়া দিচ্ছে আর কোন দেশ থেকে বেরোচ্ছে।
+# মিন্ট করে না, কোনো অ্যাকাউন্ট খরচ করে না।
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install "httpx[socks]"
+      - name: Probe
+        env:
+          TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+          PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
+          TS_HOSTNAME: ff-gh-probe
+        run: bash ci/phone_proxy_setup.sh
