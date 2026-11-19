@@ -3,6 +3,14 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '3 * * * *'
+# OWNER 2026-11-19: the Redispatch step posts with secrets.GITHUB_TOKEN. Without
+# actions: write that POST is refused silently (curl without -f), so a single
+# failed proxy step stopped the 24/7 chain for hours. This grants exactly what
+# the dispatch needs and nothing more.
+permissions:
+  actions: write
+  contents: write
+
 concurrency:
   group: ff-bot
   cancel-in-progress: false
