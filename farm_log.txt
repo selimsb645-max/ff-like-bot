@@ -1,63 +1,68 @@
 [access] headless runner - skipping the interactive code check. Set BOT_ACCESS_KEY to require it there too.
-bd proxy hunt: 17 alive candidates
-auto_mint: no usable BD proxy (round 1/6) — retrying in 75s
-bd proxy hunt: 17 alive candidates
-bd proxy socks5://103.136.107.70:1080: BD exit but can't reach garenanow — skip
-bd proxy OK: socks5://118.179.93.24:9090 exit=118.179.93.24
-auto_mint: 1 usable BD proxies: ['socks5://118.179.93.24:9090']
+bd proxy hunt: 23 alive candidates
+bd proxy OK: socks5://202.44.106.141:1080 exit=202.44.106.31
+bd proxy OK: socks5://61.247.178.146:1080 exit=61.247.178.146
+auto_mint: 2 usable BD proxies: ['socks5://202.44.106.141:1080', 'socks5://61.247.178.146:1080']
 mint[t1]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
-mint[t2]: FRESH BD ACCOUNT 8472321468 (Kexin7060)
-mint[t3]: EXC cannot unpack non-iterable NoneType object
-mint[t4]: FRESH BD ACCOUNT 8472322300 (Kexin7828)
-auto_mint: 2 fresh BD accounts minted
-pool: 2 fresh account(s) saved to registered_pool.json
-account pool: 710 usable, 43 burned-skip
-candidates: 11 accounts, want=3, cycles=40, first=[8472321468, 8472322300, '8472322300', '8472321468', '8468812242', '8468743298', '8468740307', '8468739254']
-BULK MODE: 11 candidates, 2 parallel workers, cycles=40
-[8472321468] authenticating...
+mint[t2]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t3]: major_register 8473925913: SOCKSHTTPSConnectionPool(host='loginbp.p
+mint[t4]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t5]: major_register 8473928844: SOCKSHTTPSConnectionPool(host='loginbp.p
+mint[t6]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t7]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+mint[t8]: EXC SOCKSHTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Ma
+auto_mint: 0 fresh BD accounts minted
+account pool: 708 usable, 45 burned-skip
+candidates: 9 accounts, want=3, cycles=40, first=['8468812242', '8468743298', '8468740307', '8468739254', '8468737044', '8468735725', '8464530762', '8463622760']
+BULK MODE: 9 candidates, 2 parallel workers, cycles=40
+[8468812242] authenticating...
 [proxy] health socks5://100.83.141.93:1080 attempt 1 failed: timed out
 [proxy] health socks5://100.83.141.93:1080 attempt 2 failed: timed out
 [proxy] health socks5://100.83.141.93:1080 attempt 3 failed: timed out
 [proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8472321468]: status=200 len=1180 has_jwt=True
-    raw_login[8472321468]: mint-style login OK (jwt 736 chars)
-[proxy] unhealthy - falling back to DIRECT connection
-    GetLoginData httpx failed (status=401) — requests fallback
-    GetLoginData requests fallback EXC: SOCKSHTTPSConnectionPool(host='clientbp.ppmainecoonghj.com', port=443): Max retr
-[8472321468] GetLoginData FAILED (cached JWT dropped)
-[8472322300] authenticating...
-[proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8472322300]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443):
-[proxy] unhealthy - falling back to DIRECT connection
-    raw_login[8472322300]: modern MajorLogin OK (jwt 814 chars)
-[proxy] unhealthy - falling back to DIRECT connection
-    GetLoginData httpx failed (status=500) — requests fallback
-    GetLoginData requests fallback: status=500 len=1
-[8472322300] GetLoginData FAILED (cached JWT dropped)
-[8472321468] -> logindata_failed | done=0
-[8472322300] -> logindata_failed | done=0
-[8472322300] authenticating...
-[proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8472322300]: status=200 len=1180 has_jwt=True
-    raw_login[8472322300]: mint-style login OK (jwt 736 chars)
-[proxy] unhealthy - falling back to DIRECT connection
-[8472321468] authenticating...
-[proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8472321468]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443):
-[proxy] unhealthy - falling back to DIRECT connection
-   login failed: ConnectTimeout: timed out
-    raw_login[8472321468]: modern MajorLogin OK (jwt 735 chars)
-[proxy] unhealthy - falling back to DIRECT connection
-[8472321468] online=148.222.66.152:39699 whisper=202.81.106.44:39801
-[8468812242] authenticating...
-[proxy] unhealthy - falling back to DIRECT connection
     gr_login[8468812242]: status=200 len=97 has_jwt=False
 [proxy] unhealthy - falling back to DIRECT connection
-   login failed: ConnectTimeout: timed out
+   login failed: no jwt in 97B
     raw_login[8468812242]: modern MajorLogin failed -> legacy wire fallbacks
-socks connect failed (Connection closed unexpectedly) — falling back to direct
+    raw_login[8468812242]: httpx paths failed (status=200 len=97 prot=True) — trying game_register requests path
+    raw_login[8468812242]: gr path EXC SOCKSHTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443): Max retri
+[proxy] unhealthy - falling back to DIRECT connection
+[8468812242] LOGIN FAILED (err:cannot unpack non-iterable NoneType obje)
+progress push failed: timed out
+[8468743298] authenticating...
+[proxy] unhealthy - falling back to DIRECT connection
+    gr_login[8468743298]: status=200 len=979 has_jwt=True
+    raw_login[8468743298]: mint-style login OK (jwt 742 chars)
+[proxy] unhealthy - falling back to DIRECT connection
+    GetLoginData httpx failed (status=401) — requests fallback
+    GetLoginData requests fallback: status=401 len=21
+[8468743298] GetLoginData FAILED (cached JWT dropped)
+progress push failed: timed out
+[8468812242] -> login_failed | done=0
+[8468743298] -> logindata_failed | done=0
+[8468740307] authenticating...
+[proxy] unhealthy - falling back to DIRECT connection
+    gr_login[8468740307]: status=200 len=979 has_jwt=True
+    raw_login[8468740307]: mint-style login OK (jwt 742 chars)
+[proxy] unhealthy - falling back to DIRECT connection
+[8468739254] authenticating...
+[proxy] unhealthy - falling back to DIRECT connection
+    gr_login[8468739254]: status=200 len=979 has_jwt=True
+    raw_login[8468739254]: mint-style login OK (jwt 742 chars)
+[proxy] unhealthy - falling back to DIRECT connection
+[8468737044] authenticating...
+[proxy] unhealthy - falling back to DIRECT connection
+    gr_login[8468737044]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443):
+[proxy] unhealthy - falling back to DIRECT connection
+    raw_login[8468737044]: modern MajorLogin OK (jwt 819 chars)
+[proxy] unhealthy - falling back to DIRECT connection
+[8468735725] authenticating...
+[proxy] unhealthy - falling back to DIRECT connection
+    gr_login[8468735725]: EXC SOCKSHTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443):
+[proxy] unhealthy - falling back to DIRECT connection
+    raw_login[8468735725]: modern MajorLogin OK (jwt 819 chars)
 unhandled exception during asyncio.run() shutdown
-task: <Task finished name='Task-6' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:1074> exception=ConnectTimeout('timed out')>
+task: <Task finished name='Task-7' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:1117> exception=ConnectTimeout('timed out')>
 Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
     yield
@@ -85,18 +90,90 @@ httpcore.ConnectTimeout: timed out
 The above exception was the direct cause of the following exception:
 
 Traceback (most recent call last):
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1085, in _worker
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1128, in _worker
     res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=420)
           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/asyncio/tasks.py", line 479, in wait_for
     return fut.result()
            ^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 697, in run_account
-    login = raw_login(uid, pw)
-            ^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 516, in raw_login
-    r = httpx.post(ML_URL, headers=h2, data=api._enc(wire), timeout=25, verify=False)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 711, in run_account
+    servers = get_login_data(login)
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 582, in get_login_data
+    r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 42, in <lambda>
+    httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_api.py", line 304, in post
+    return request(
+           ^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_api.py", line 109, in request
+    return client.request(
+           ^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_client.py", line 825, in request
+    return self.send(request, auth=auth, follow_redirects=follow_redirects)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_client.py", line 914, in send
+    response = self._send_handling_auth(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_client.py", line 942, in _send_handling_auth
+    response = self._send_handling_redirects(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_client.py", line 979, in _send_handling_redirects
+    response = self._send_single_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_client.py", line 1014, in _send_single_request
+    response = transport.handle_request(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 249, in handle_request
+    with map_httpcore_exceptions():
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectTimeout: timed out
+unhandled exception during asyncio.run() shutdown
+task: <Task finished name='Task-6' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:1117> exception=ConnectTimeout('timed out')>
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 250, in handle_request
+    resp = self._pool.handle_request(req)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 256, in handle_request
+    raise exc from None
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_sync/connection_pool.py", line 236, in handle_request
+    response = connection.handle_request(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 295, in handle_request
+    raise exc
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_sync/socks_proxy.py", line 231, in handle_request
+    stream = self._network_backend.connect_tcp(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_backends/sync.py", line 207, in connect_tcp
+    with map_exceptions(exc_map):
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/contextlib.py", line 158, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectTimeout: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1128, in _worker
+    res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=420)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/asyncio/tasks.py", line 479, in wait_for
+    return fut.result()
+           ^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 711, in run_account
+    servers = get_login_data(login)
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 582, in get_login_data
+    r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 42, in <lambda>
     httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -157,7 +234,7 @@ The above exception was the direct cause of the following exception:
 Traceback (most recent call last):
   File "<frozen runpy>", line 198, in _run_module_as_main
   File "<frozen runpy>", line 88, in _run_code
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1143, in <module>
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1186, in <module>
     asyncio.run(main())
   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/asyncio/runners.py", line 190, in run
     return runner.run(main)
@@ -168,9 +245,9 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/asyncio/base_events.py", line 654, in run_until_complete
     return future.result()
            ^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1094, in main
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1137, in main
     await asyncio.gather(*[_worker(u, p) for u, p in accounts])
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1085, in _worker
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 1128, in _worker
     res = await asyncio.wait_for(run_account(uid, pw, cycles, save_progress), timeout=420)
           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
@@ -213,3 +290,7 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
     raise mapped_exc(message) from exc
 httpx.ConnectTimeout: timed out
+[proxy] health socks5://100.83.141.93:1080 attempt 1 failed: timed out
+[proxy] health socks5://100.83.141.93:1080 attempt 2 failed: timed out
+[proxy] health socks5://100.83.141.93:1080 attempt 3 failed: timed out
+[proxy] unhealthy - falling back to DIRECT connection
