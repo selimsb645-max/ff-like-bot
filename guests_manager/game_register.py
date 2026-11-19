@@ -121,10 +121,22 @@ def msdk_register(session, timeout=15):
     return (r.json()["data"]["uid"], pw), None
 
 
-def token_grant(session, uid, pw):
+def grant_device_id(uid) -> str:
+    """One stable grant device per account, derived from the uid.
+
+    This used to be a fresh random uuid on EVERY grant, so the same account
+    presented a brand-new device each time it re-granted - while
+    full_login.device_for() documents that the anti-cheat compares the device
+    an account claims across its life. Deterministic per uid: no state file to
+    lose, and the same account always grants as the same device.
+    """
     import uuid as _uuid
+    return "02-" + str(_uuid.uuid5(_uuid.NAMESPACE_URL, f"ff-like-bot:grant:{uid}"))
+
+
+def token_grant(session, uid, pw):
     r = session.post(MSDK_GRANT, json={"client_id": 100067, "client_secret": HEX_KEY,
-        "client_type": 2, "device_id": "02-" + str(_uuid.uuid4()), "password": pw,
+        "client_type": 2, "device_id": grant_device_id(uid), "password": pw,
         "response_type": "token", "uid": int(uid)}, timeout=15,
         headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"})
     if r.status_code != 200:
