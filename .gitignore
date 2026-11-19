@@ -12,3 +12,9 @@ ffprefs/
 dist/
 guard_url.txt
 *.zip
+
+# backups, temp files and token caches (audit fix 2026-11-19)
+*.bak
+*.tmp
+external_tokens_cache.json
+token_cache.json
