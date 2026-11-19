@@ -8,3 +8,11 @@ urllib3
 python-socks
 PySocks
 Pillow
+# imported by main.py / app.py / levelbot and previously installed ad-hoc
+# by individual workflows only (audit fix 2026-11-19)
+aiohttp
+aiohttp-socks
+google-play-scraper
+protobuf-decoder
+PyJWT
+pytz
