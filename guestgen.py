@@ -204,11 +204,13 @@ def make_nick() -> str:
 def mint_one(sess, vdata: dict) -> dict | None:
     """One account, using the modules that already work."""
     import full_login
+    import stagelog
     from guests_manager import game_register as gr
 
     cred, why = gr.msdk_register(sess)
     if not cred:
         log(f"    register failed: {why}")
+        stagelog.stage("guestgen", "register", None, False, why)
         return None
     uid, pw = cred
     log(f"    registered uid {uid}")
@@ -216,6 +218,7 @@ def mint_one(sess, vdata: dict) -> dict | None:
     at, oid = gr.token_grant(sess, uid, pw)
     if not at:
         log("    grant failed")
+        stagelog.stage("guestgen", "grant", uid, False, "no access token")
         return None
 
     # nickname: SB + invisible filler + random, as the owner asked. Registration
@@ -230,6 +233,7 @@ def mint_one(sess, vdata: dict) -> dict | None:
         ok, msg = gr.major_register(sess, at, oid, nick)
     if not ok:
         log(f"    major_register: {msg}")
+        stagelog.stage("guestgen", "major_register", uid, False, msg)
         return None
 
     # MajorLogin -> ChooseRegion(BD) -> MajorLogin #2. The middle step is what
@@ -245,6 +249,7 @@ def mint_one(sess, vdata: dict) -> dict | None:
         info = full_login.full_major_login(uid, oid, at, release=vdata["release"], region="ID")
         if not info:
             log("    major login failed")
+            stagelog.stage("guestgen", "login", uid, False, "legacy path")
             return None
         for _ in range(2):
             again = full_login.full_major_login(uid, oid, at, release=vdata["release"], region="ID")
@@ -261,6 +266,7 @@ def mint_one(sess, vdata: dict) -> dict | None:
         info = full_login.login_locked(uid, oid, at, region=reg, release=vdata["release"])
         if not info:
             log("    major login failed")
+            stagelog.stage("guestgen", "login", uid, False, "login_locked")
             return None
         for _ in range(2):
             again = full_login.login_locked(uid, oid, at, region=reg, release=vdata["release"])
@@ -289,6 +295,9 @@ def mint_one(sess, vdata: dict) -> dict | None:
     if "clientbp" not in srv:
         log(f"    note: game host is {srv} (no clientbp in the name)")
     log(f"    logged in: jwt {len(rec['token'])} chars on {srv}")
+    stagelog.stage("guestgen", "region_lock", uid, bool(locked),
+                   "" if locked else "no server_url")
+    stagelog.stage("guestgen", "mint", uid, True)
     return rec
 
 
