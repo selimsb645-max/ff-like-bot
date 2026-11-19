@@ -15,6 +15,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import ff_bd_api as api
+import stagelog
+
+
+def _post_any(url, headers=None, data=None, timeout=25):
+    """POST through the same BD proxy path ff_bd_api uses for every Garena call.
+
+    This helper used to be called as api._post_any(...), a function that never
+    existed anywhere in the repo, so every activation attempt died with
+    AttributeError (swallowed by the retry loop) and no account was ever
+    activated by this tool. Fixed 2026-11-19.
+    """
+    import httpx
+    return httpx.post(url, headers=headers, data=data, timeout=timeout,
+                      verify=False, **api._pxkw())
 
 
 def get_login_data(token: dict):
@@ -33,7 +47,7 @@ def get_login_data(token: dict):
          "Authorization": f"Bearer {token['token']}"}
     for attempt in range(3):
         try:
-            r = api._post_any(token["server_url"].rstrip("/") + "/GetLoginData",
+            r = _post_any(token["server_url"].rstrip("/") + "/GetLoginData",
                               headers=h, data=api._enc(wire), timeout=25)
             return (r.status_code, len(r.content)), ""
         except Exception as ex:
@@ -64,10 +78,14 @@ def main():
     for t in pool[:limit]:
         res, err = get_login_data(t)
         ok = bool(res and res[0] == 200)
+        stagelog.stage("activate_accounts", "entry", t.get("uid"), ok,
+                       "" if ok else (err or f"http {res[0] if res else 'none'}"))
         print(f"{t['uid']}  entry: " + (f"HTTP {res[0]}, {res[1]} bytes" if res else err), flush=True)
         time.sleep(2)
         stats = api.get_stats(int(t["uid"]), t["token"])
         good = bool(stats and not stats.get("error"))
+        stagelog.stage("activate_accounts", "profile", t.get("uid"), good,
+                       "" if good else str(stats)[:120])
         print(f"        profile: " + (f"OK name={stats.get('name')} likes={stats.get('likes')}"
                                      if good else str(stats)), flush=True)
         if ok and good:
