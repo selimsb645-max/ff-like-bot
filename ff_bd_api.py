@@ -888,20 +888,37 @@ import threading as _th
 from concurrent.futures import ThreadPoolExecutor as _TPE
 
 _CLIENT = None
+_CLIENT_PROXY = None
 _CLIENT_LOCK = _th.Lock()
 
 
 def _client():
-    """One keep-alive HTTP client for all Garena calls (TLS setup reused)."""
-    global _CLIENT
-    if _CLIENT is None:
+    """One keep-alive HTTP client for all Garena calls (TLS setup reused).
+
+    Rebuilt when the BD proxy choice changes: the old version froze the proxy
+    decision at the first call, so likes kept using a dead phone proxy (or kept
+    going direct after the proxy came back) until the process restarted, while
+    stats/mint calls re-evaluated the proxy every time and could exit from a
+    different country than the like calls.
+    """
+    global _CLIENT, _CLIENT_PROXY
+    kw = _pxkw()
+    proxy = kw.get("proxy")
+    if _CLIENT is None or proxy != _CLIENT_PROXY:
         with _CLIENT_LOCK:
-            if _CLIENT is None:
+            if _CLIENT is None or proxy != _CLIENT_PROXY:
+                old = _CLIENT
                 _CLIENT = httpx.Client(
-                    verify=False, timeout=12, **_pxkw(),
+                    verify=False, timeout=12, **kw,
                     limits=httpx.Limits(max_connections=60, max_keepalive_connections=30),
                     headers={"Connection": "keep-alive"},
                 )
+                _CLIENT_PROXY = proxy
+                if old is not None:
+                    try:
+                        old.close()
+                    except Exception:
+                        pass
     return _CLIENT
 
 
@@ -1153,6 +1170,9 @@ def send_like(account_id: int, count: int = 1, used: set = None, workers=24) -> 
                 return
         try:
             time.sleep(_rnd.uniform(0, 0.3))  # jitter: avoid burst signature
+            with lock:
+                if done["sent"] >= count:
+                    return  # quota reached while sleeping; do not burn this account's daily like
             base = _api_base(t)
             r = cli.post(base + "/LikeProfile", headers=_headers(t["token"], "OB55"),
                          data=payload)
