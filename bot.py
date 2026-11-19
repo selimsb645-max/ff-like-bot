@@ -261,7 +261,10 @@ def load_usage() -> dict:
 
 
 def save_usage(u: dict):
-    USAGE_FILE.write_text(json.dumps(u, indent=1))
+    # atomic: a crash mid-write must not corrupt the only copy of the pairs ledger
+    tmp = USAGE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(u, indent=1))
+    tmp.replace(USAGE_FILE)
 
 
 HISTORY_FILE = Path(__file__).parent / "history.json"
@@ -278,7 +281,9 @@ def _load_json(p: Path) -> dict:
 
 
 def _save_json(p: Path, d: dict):
-    p.write_text(json.dumps(d, indent=1))
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, indent=1))
+    tmp.replace(p)
 
 
 def record_history(user_id, username, target, requested, landed):
@@ -397,7 +402,7 @@ def run_like_flow(chat_id, target, user, skip_slot=False):
         save_usage(usage)
     try:
         record_history(user.id, user.first_name or "", target,
-                       pool_size, delta if isinstance(delta, int) and delta > 0 else sent)
+                       pool_size, delta if isinstance(delta, int) and delta > 0 else 0)
         if delta is None or delta > 0:
             set_reminder(user.id, user.first_name or "", target, 24 * 3600)
     except Exception:
@@ -1474,7 +1479,7 @@ def cmd_like(m):
     # history + auto reminder
     try:
         record_history(m.from_user.id, m.from_user.first_name or "",
-                       target, count, delta if isinstance(delta, int) and delta > 0 else sent)
+                       target, count, delta if isinstance(delta, int) and delta > 0 else 0)
         if delta is None or delta > 0:
             set_reminder(m.from_user.id, m.from_user.first_name or "", target, 24 * 3600)
     except Exception as e:
@@ -1708,7 +1713,8 @@ def cb_like(c):
         pool_size = MAX_LIKES_PER_REQUEST
     usage = load_usage()
     with USAGE_LOCK:
-        used = set(tuple(k) for k in usage.get("used_pairs", []))
+        prev_pairs = usage.get("used_pairs") or {}
+        used = _pairs_from_usage(usage)
     try:
         s0 = ff_bd_api.get_stats(int(target))
         likes_before = s0.get("likes") if s0 else None
@@ -1717,19 +1723,14 @@ def cb_like(c):
         bot.send_message(c.message.chat.id, f"❌ Error: {e}")
         return
     with USAGE_LOCK:
-        usage["used_pairs"] = [list(k) for k in used]
+        usage["used_pairs"] = _pairs_to_usage(used, prev_pairs)
         save_usage(usage)
     threading.Thread(target=persist_usage_github, daemon=True).start()
-    time.sleep(3)
-    try:
-        s1 = ff_bd_api.get_stats(int(target))
-        likes_after = s1.get("likes") if s1 else None
-    except Exception:
-        likes_after = None
+    likes_after = _likes_after_settle(int(target), None, likes_before)
     delta = (likes_after - likes_before) if isinstance(likes_before, int) and isinstance(likes_after, int) else None
     try:
         record_history(c.from_user.id, c.from_user.first_name or "", int(target),
-                       pool_size, delta if isinstance(delta, int) and delta > 0 else sent)
+                       pool_size, delta if isinstance(delta, int) and delta > 0 else 0)
         if delta is None or delta > 0:
             set_reminder(c.from_user.id, c.from_user.first_name or "", int(target), 24 * 3600)
     except Exception:
@@ -1915,7 +1916,9 @@ def run_guildlike_flow(chat_id, clan_id, user, count=20):
         f"⏳ starting...")
     msg_id, chat = prog.message_id, prog.chat.id
     sent_total, ok_members = 0, 0
-    used = set(tuple(k) for k in load_usage().get("used_pairs", []))
+    _guild_usage = load_usage()
+    _guild_prev_pairs = _guild_usage.get("used_pairs") or {}
+    used = _pairs_from_usage(_guild_usage)
     for i, uid in enumerate(uids, 1):
         try:
             sent = ff_bd_api.send_like(uid, count=count, used=used)
@@ -1941,7 +1944,7 @@ def run_guildlike_flow(chat_id, clan_id, user, count=20):
     try:
         usage = load_usage()
         with USAGE_LOCK:
-            usage["used_pairs"] = [list(k) for k in used]
+            usage["used_pairs"] = _pairs_to_usage(used, _guild_prev_pairs)
             save_usage(usage)
         threading.Thread(target=persist_usage_github, daemon=True).start()
     except Exception:
