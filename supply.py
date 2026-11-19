@@ -32,6 +32,7 @@ ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
 import ff_bd_api as api
+import stagelog
 from guests_manager import game_register as gr
 from full_login import full_major_login
 
@@ -110,8 +111,10 @@ async def enter_game(rec: dict) -> bool:
     data = get_login_data(login)
     if not data:
         print("    GetLoginData returned nothing - the profile was never created", flush=True)
+        stagelog.stage("supply", "getlogindata", rec.get("uid"), False, "empty response")
         return False
     print(f"    GetLoginData ok: online {data[2]}:{data[3]}", flush=True)
+    stagelog.stage("supply", "getlogindata", rec.get("uid"), True)
     login.update({"whisper_ip": data[0], "whisper_port": data[1],
                   "online_ip": data[2], "online_port": data[3]})
     conn = GameConnection()
@@ -130,6 +133,7 @@ async def enter_game(rec: dict) -> bool:
             prof = _api.get_profile(int(rec.get("account_id") or rec["uid"]),
                                     rec.get("token")) or {}
             if prof.get("level") is not None or prof.get("name"):
+                stagelog.stage("supply", "verify", rec.get("uid"), True)
                 rec["verified"] = True
                 rec["live_name"] = prof.get("name")
                 rec["live_level"] = prof.get("level")
@@ -137,6 +141,7 @@ async def enter_game(rec: dict) -> bool:
                 print(f"    PROFILE LIVE: name={prof.get('name')} level={prof.get('level')} "
                       f"region={prof.get('region')} likes={prof.get('likes')}", flush=True)
             else:
+                stagelog.stage("supply", "verify", rec.get("uid"), False, "profile still empty")
                 rec["verified"] = False
                 print("    profile still empty - GetLoginData did not create it", flush=True)
         except Exception as exc:
@@ -157,18 +162,22 @@ def create_one(sess, tries=3):
         cred, why = gr.msdk_register(sess)
         if not cred:
             print("  register:", why, flush=True)
+            stagelog.stage("supply", "register", None, False, why)
             continue
         uid, pw = cred
         at, oid = gr.token_grant(sess, uid, pw)
         if not at:
+            stagelog.stage("supply", "grant", uid, False, "no access token")
             continue
         nick = "ANON\u2022" + "".join(random.choices(string.ascii_uppercase + string.digits, k=5))
         ok, msg = gr.major_register(sess, at, oid, nick)
         if not ok:
             print(f"  {uid} major_register: {msg}", flush=True)
+            stagelog.stage("supply", "major_register", uid, False, msg)
             continue
         info = full_major_login(uid, oid, at)
         if not info:
+            stagelog.stage("supply", "login", uid, False, "no login info")
             continue
         # The first login returns the short stage-1 JWT; the game only accepts the
         # longer one that the second pass yields, and GetLoginData needs it.
@@ -178,8 +187,31 @@ def create_one(sess, tries=3):
                 info = again
             if len(info.get("jwt", "")) >= 815:
                 break
+        stagelog.stage("supply", "create", uid, True)
         return record(uid, pw, info, nick=nick, profiled=False)
     return None
+
+
+def _presence_pass(pool: list, limit: int) -> int:
+    """Enter the game for pooled accounts that still lack a profile.
+
+    Returns how many presence attempts were used. This is what the documented
+    --presence flag always promised but main() never implemented (the flag was
+    parsed and silently ignored), and --ensure now runs it on the backlog
+    BEFORE creating new accounts, so accounts left unprofiled by the
+    PRESENCE_MAX cap in earlier runs get finished instead of being forgotten
+    under a fresh layer of new accounts.
+    """
+    todo = [r for r in pool if alive(r) and not r.get("profiled")][:limit]
+    for r in todo:
+        ok = asyncio.run(enter_game(r))
+        r["profiled"] = bool(ok) or None
+        save(pool)
+        print(f"  presence {r['uid']}: {'ok' if ok else 'no'}", flush=True)
+        time.sleep(2)
+    if todo:
+        print(f"presence pass: {sum(1 for r in todo if r.get('profiled'))}/{len(todo)} profiled", flush=True)
+    return len(todo)
 
 
 def main():
@@ -216,6 +248,9 @@ def main():
         save(keep)
         print(f"pruned {dropped}, kept {len(keep)}")
 
+    if a.presence:
+        _presence_pass(pool, a.presence)
+
     if a.ensure:
         sess = gr.new_session()
         renewed = failed = 0
@@ -228,6 +263,9 @@ def main():
         save(pool)
         print(f"renewed {renewed}, refused {failed}", flush=True)
 
+        # finish the unprofiled backlog first; it spends the same presence budget
+        presence_used = _presence_pass(pool, PRESENCE_MAX)
+
         live = [r for r in pool if alive(r)]
         need = min(max(0, a.ensure - len(live)), a.create_max)
         print(f"live={len(live)} need={a.ensure} creating={need}", flush=True)
@@ -237,7 +275,11 @@ def main():
             if not rec:
                 print("create failed — stopping (proxy or throttle)", flush=True)
                 break
-            ok = asyncio.run(enter_game(rec)) if made < PRESENCE_MAX else False
+            if presence_used < PRESENCE_MAX:
+                ok = asyncio.run(enter_game(rec))
+                presence_used += 1
+            else:
+                ok = False
             rec["profiled"] = bool(ok) or None
             pool.append(rec)
             save(pool)
