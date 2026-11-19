@@ -18,3 +18,4 @@ guard_url.txt
 *.tmp
 external_tokens_cache.json
 token_cache.json
+stage_log.jsonl
