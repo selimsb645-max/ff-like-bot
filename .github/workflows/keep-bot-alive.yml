@@ -24,12 +24,22 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -r requirements.txt
+      # OWNER 2026-11-19: "আগে বট চালু করো". The phone being offline must not take the
+      # whole bot down - it only removes the BD exit, so likes/mints pause while /start,
+      # profile, guild and history keep working. Without continue-on-error this step
+      # failed the job and 'Run bot' was skipped, which is why the bot was dead all day.
       - name: Phone BD proxy (Tailscale)
+        continue-on-error: true
         env:
           TS_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
           PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
           TS_HOSTNAME: ff-gh-bot
-        run: bash ci/phone_proxy_setup.sh
+        run: |
+          if bash ci/phone_proxy_setup.sh; then
+            echo "phone proxy ready: $PHONE_PROXY_URL" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::phone proxy unavailable - starting the bot WITHOUT a BD exit (likes/mints will wait)"
+          fi
       - name: Run bot
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
