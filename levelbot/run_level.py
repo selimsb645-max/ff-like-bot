@@ -743,6 +743,28 @@ async def run_account(uid, pw, cycles, on_done):
         tc = (json.loads((ROOT / "level_config.json").read_text()).get("team_code") or "0")
     except Exception:
         tc = "0"
+    # per-cycle XP trace: the engine already calls on_progress after every
+    # cycle, but nobody was listening - level/exp used to be read only once at
+    # the very end, so a stalled account looked identical to a progressing one.
+    xp_trace = []
+    _xp_last = {"exp": None}
+
+    def _xp_probe(stats):
+        try:
+            cur = profile_level_exp(login["jwt"], login["uid"], login.get("url"))
+        except Exception:
+            return
+        exp = cur.get("exp")
+        if exp is None:
+            return
+        delta = None if _xp_last["exp"] is None else exp - _xp_last["exp"]
+        _xp_last["exp"] = exp
+        xp_trace.append({"cycle": stats.cycles_completed, "level": cur.get("level"),
+                         "exp": exp, "delta": delta, "ts": int(time.time())})
+        print(f"{tag} XP cycle {stats.cycles_completed}: level={cur.get('level')} "
+              f"exp={exp} delta={delta}", flush=True)
+
+    engine.on_progress(_xp_probe)
     stats = await engine.start(tc, max_cycles=cycles)  # "0" = solo, else squad team-code
     try:
         await conn.close()
@@ -761,7 +783,8 @@ async def run_account(uid, pw, cycles, on_done):
     finally:
         _sig.alarm(0)
     res = {"status": "done", "cycles": stats.cycles_completed,
-           "level": lvl.get("level"), "exp": lvl.get("exp"), "ts": int(time.time())}
+           "level": lvl.get("level"), "exp": lvl.get("exp"), "ts": int(time.time()),
+           "xp_trace": xp_trace}
     print(f"{tag} DONE cycles={stats.cycles_completed} level={res['level']} exp={res['exp']}", flush=True)
     # auto-join guild once level >= 6 (guild min requirement)
     try:
@@ -909,6 +932,25 @@ async def run_external(entry, cycles, on_done):
             continue
         engine = MatchEngine(conn, pb, spam_duration=17, spam_delay=0.2,
                              wait_after_match=20, uid=account_id)
+        xp_trace = []
+        _xp_last = {"exp": None}
+
+        def _xp_probe(stats, _jwt=jwt, _uid=uid):
+            try:
+                cur = profile_level_exp(_jwt, _uid)
+            except Exception:
+                return
+            exp = cur.get("exp")
+            if exp is None:
+                return
+            delta = None if _xp_last["exp"] is None else exp - _xp_last["exp"]
+            _xp_last["exp"] = exp
+            xp_trace.append({"cycle": stats.cycles_completed, "level": cur.get("level"),
+                             "exp": exp, "delta": delta, "ts": int(time.time())})
+            print(f"{tag} XP cycle {stats.cycles_completed}: level={cur.get('level')} "
+                  f"exp={exp} delta={delta}", flush=True)
+
+        engine.on_progress(_xp_probe)
         stats = await engine.start("0", max_cycles=cycles)
         try:
             await conn.close()
@@ -919,7 +961,8 @@ async def run_external(entry, cycles, on_done):
         res = {"status": "done" if not dead and stats.cycles_completed > 0 else "tcp_dead",
                "mode": "external", "key": tagk,
                "cycles": stats.cycles_completed, "level": prof.get("level"),
-               "exp": prof.get("exp"), "ts": int(time.time())}
+               "exp": prof.get("exp"), "ts": int(time.time()),
+               "xp_trace": xp_trace}
         print(f"{tag} DONE cycles={res['cycles']} level={res['level']} exp={res['exp']} key={tagk}", flush=True)
         if prof.get("level") and prof["level"] >= 6:
             try:
