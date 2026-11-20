@@ -108,12 +108,12 @@ def pf(field: int, val):
     return evb((field << 3) | 2) + evb(len(v)) + v
 
 
-def msdk_register(session, timeout=15):
+def msdk_register(session, timeout=15, user_agent=None):
     pw = "".join(secrets.choice("0123456789abcdef") for _ in range(32))
     body = json.dumps({"app_id": 100067, "client_type": 2, "password": pw, "source": 2})
     sig = hmac.new(HEX_KEY.encode(), body.encode(), hashlib.sha256).hexdigest()
     r = session.post(MSDK_REGISTER, data=body, timeout=timeout,
-        headers={"User-Agent": "GarenaMSDK/4.0.39(SM-A325M ;Android 13;en;HK;)",
+        headers={"User-Agent": user_agent or "GarenaMSDK/4.0.39(SM-A325M ;Android 13;en;HK;)",
                  "Authorization": "Signature " + sig,
                  "Content-Type": "application/json; charset=utf-8"})
     if r.status_code != 200:
@@ -134,23 +134,23 @@ def grant_device_id(uid) -> str:
     return "02-" + str(_uuid.uuid5(_uuid.NAMESPACE_URL, f"ff-like-bot:grant:{uid}"))
 
 
-def token_grant(session, uid, pw):
+def token_grant(session, uid, pw, user_agent=None):
     r = session.post(MSDK_GRANT, json={"client_id": 100067, "client_secret": HEX_KEY,
         "client_type": 2, "device_id": grant_device_id(uid), "password": pw,
         "response_type": "token", "uid": int(uid)}, timeout=15,
-        headers={"User-Agent": "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"})
+        headers={"User-Agent": user_agent or "GarenaMSDK/4.0.19P10(I2404 ;Android 15;en;US;)"})
     if r.status_code != 200:
         return None, None
     d = r.json()["data"]
     return d.get("access_token"), d.get("open_id")
 
 
-def major_register(session, at, oid, nickname):
+def major_register(session, at, oid, nickname, user_agent=None):
     enc_oid = "".join(chr(ord(c) ^ XOR_KEYSTREAM[i % 32]) for i, c in enumerate(oid))
     proto = (pf(1, nickname) + pf(2, at) + pf(3, oid) + pf(5, 102000007) + pf(6, 4)
              + pf(7, 1) + pf(13, 1) + pf(14, enc_oid.encode("latin1")) + pf(15, "bn")
              + pf(16, 1) + pf(17, 1) + pf(22, FIELD_22))
-    h = {"User-Agent": "Dalvik/2.1.0 (Linux; U; Android 13; CPH2095 Build/RKQ1.211119.001)",
+    h = {"User-Agent": user_agent or "Dalvik/2.1.0 (Linux; U; Android 13; CPH2095 Build/RKQ1.211119.001)",
          "Accept-Encoding": "deflate, gzip", "X-GA-SV": str(int(time.time())), "Authorization": "Bearer",
          "X-GA": "v1 1", "ReleaseVersion": "OB55",
          "Content-Type": "application/x-www-form-urlencoded",
