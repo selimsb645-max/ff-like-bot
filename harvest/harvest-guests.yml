@@ -1,0 +1,82 @@
+name: App-Born Guest Harvest
+
+# Births guest accounts INSIDE the real Free Fire app on an Android
+# emulator (macOS runner, hardware accelerated), because API-born
+# accounts are banned as "Cheat" within minutes (missing protection
+# telemetry at birth). The app registers each guest itself; a Frida
+# script only observes the stored credentials. All app traffic exits
+# through the owner's phone (BD), like the rest of the bot.
+#
+# Manual dispatch only until the survival test passes:
+# run with count=1, wait 24h, owner verifies the account in-game.
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "Guests to harvest this run (test with 1 first)"
+        default: "1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ff-harvest
+  cancel-in-progress: false
+
+jobs:
+  harvest:
+    runs-on: macos-14
+    timeout-minutes: 170
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Frida tools
+        run: pip install frida-tools
+
+      - name: Join the tailnet (phone BD exit)
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          hostname: ff-harvest
+
+      - name: Start BD proxy chain and verify exit
+        env:
+          PHONE_PROXY_IP: ${{ secrets.PHONE_PROXY_IP }}
+        run: bash harvest/setup_bd_proxy.sh
+
+      - name: Emulator - install FF and harvest guests
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          FF_APK_URL: ${{ vars.FF_APK_URL }}
+        with:
+          api-level: 34
+          target: google_apis
+          arch: arm64-v8a
+          profile: pixel_6
+          ram-size: 4096M
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -no-audio
+          script: |
+            bash harvest/fetch_frida_server.sh
+            bash harvest/install_ff.sh
+            python3 harvest/harvest.py --count "${{ github.event.inputs.count || '1' }}"
+
+      - name: Save harvested guests
+        if: always()
+        run: |
+          if [ -f harvest/guests_harvested.json ]; then
+            git config user.name "ff-harvest"
+            git config user.email "harvest@users.noreply.github.com"
+            git add harvest/guests_harvested.json
+            git commit -m "harvest: app-born guests ($(python3 -c "import json;print(len(json.load(open('harvest/guests_harvested.json'))))") total)" || echo "nothing to commit"
+            git push || echo "push skipped"
+          else
+            echo "no guests harvested this run"
+          fi
