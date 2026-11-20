@@ -73,6 +73,44 @@ def public_ip() -> str:
     return PUBLIC_IP
 
 
+BD_CARRIERS = ["Grameenphone", "Banglalink", "Robi", "Teletalk"]
+
+
+def device_uuid(uid) -> str:
+    """The account's lifelong device uuid.
+
+    MUST match game_register.grant_device_id(), which presents the same uuid
+    (prefixed "02-") to the MSDK grant. Before 2026-11-20 the login side used
+    a random uuid4 while the grant side used this uuid5, so one account
+    presented two different devices within its first minutes - and the
+    accounts came back banned as "Cheat" the same day.
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"ff-like-bot:grant:{uid}"))
+
+
+def new_device(uid, profile=None) -> dict:
+    """Build the one device identity an account will present everywhere."""
+    brand, model, gpu, sw, w, h, dpi = profile or random.choice(FALLBACK_DEVS)
+    android = sw.split("OS ")[-1].split(" /")[0] if "OS " in sw else "12"
+    carrier = BD_CARRIERS[int(device_uuid(uid).replace("-", "")[:4], 16) % len(BD_CARRIERS)]
+    return {"unique_device_id": f"{brand}|{device_uuid(uid)}",
+            "brand": brand, "model": model,
+            "gpu_renderer": gpu, "system_software": sw, "screen_width": w,
+            "screen_height": h, "screen_dpi": dpi,
+            "processor_details": "ARM64 FP ASIMD AES | 2000 | 8", "memory": 5653,
+            "client_ip": public_ip(), "carrier": carrier, "android": android}
+
+
+def seed_device(uid, dev: dict) -> dict:
+    """Persist a pre-built device for uid so device_for() returns exactly it."""
+    uid = str(uid)
+    table = _load_devices()
+    table[uid] = dev
+    _DEV_CACHE[uid] = dev
+    _save_devices(table)
+    return dev
+
+
 def device_for(uid: str) -> dict:
     """One device per account, reused for every request in its whole life.
 
@@ -87,12 +125,7 @@ def device_for(uid: str) -> dict:
     if uid in table:
         _DEV_CACHE[uid] = table[uid]
         return table[uid]
-    brand, model, gpu, sw, w, h, dpi = random.choice(FALLBACK_DEVS)
-    dev = {"unique_device_id": f"Google|{uuid.uuid4()}", "brand": brand, "model": model,
-           "gpu_renderer": gpu, "system_software": sw, "screen_width": w,
-           "screen_height": h, "screen_dpi": dpi,
-           "processor_details": "ARM64 FP ASIMD AES | 2000 | 8", "memory": 5653,
-           "client_ip": public_ip()}
+    dev = new_device(uid, random.choice(FALLBACK_DEVS))
     table[uid] = dev
     _DEV_CACHE[uid] = dev
     _save_devices(table)
@@ -105,7 +138,7 @@ def build_full_payload(open_id: str, access_token: str, dev: dict,
     p = {
         3: str(datetime.now())[:-7], 4: "free fire", 5: "1",
         7: str(client_version), 8: str(dev.get("system_software", "Android OS 14 / API-34")),
-        9: "Handheld", 10: "Telkomsel", 11: "CarrierDataNetwork",
+        9: "Handheld", 10: str(dev.get("carrier") or ("Grameenphone" if region.upper() == "BD" else "Telkomsel")), 11: "CarrierDataNetwork",
         12: str(dev.get("screen_width", 1639)), 13: str(dev.get("screen_height", 720)),
         14: str(dev.get("screen_dpi", 320)),
         15: str(dev.get("processor_details", "ARM64 FP ASIMD AES | 2000 | 8")),
@@ -116,7 +149,7 @@ def build_full_payload(open_id: str, access_token: str, dev: dict,
         20: str(dev.get("client_ip") or public_ip()),
         21: "en", 22: str(open_id), 23: str(platform), 24: "Handheld",
         25: str(dev.get("model", "Xiaomi")), 26: region.upper(), 29: str(access_token),
-        30: "1", 41: "Telkomsel", 42: "4G", 57: "7428b253defc164018c604a1ebbfebdf",
+        30: "1", 41: str(dev.get("carrier") or ("Grameenphone" if region.upper() == "BD" else "Telkomsel")), 42: "4G", 57: "7428b253defc164018c604a1ebbfebdf",
         60: "109278", 61: "55402", 62: "868", 64: "55927", 65: "109278", 66: "55927",
         67: "109278", 73: 2,
         74: "/data/app/~~6Cw028g_ld-8Z0z2qhrOLA==/com.dts.freefireth-i3wiaEmpx8CbiRVhUMx_ag==/lib/arm64",
