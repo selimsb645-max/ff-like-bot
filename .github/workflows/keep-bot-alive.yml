@@ -16,6 +16,10 @@ concurrency:
   cancel-in-progress: false
 jobs:
   run-bot:
+    env:
+      # Owner 2026-11-20: @NAI_AccessBot unreachable (Base44 quota 402) - gate off for
+      # our own runs. Delete this line to re-arm the licence/device gate.
+      FF_SKIP_ACCESS: "1"
     runs-on: ubuntu-latest
     timeout-minutes: 355
     steps:

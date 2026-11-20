@@ -14,6 +14,10 @@ on:
 
 jobs:
   canary:
+    env:
+      # Owner 2026-11-20: @NAI_AccessBot is unreachable (Base44 quota 402), so the
+      # licence/device gate is off for our own runs. Remove this line to re-arm it.
+      FF_SKIP_ACCESS: "1"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

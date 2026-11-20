@@ -177,6 +177,11 @@ def require_auth(purpose: str = "this program") -> None:
     key at start-up instead of a stack of logins. The users map in auth.json is
     still readable for older installs and is not consulted here.
     """
+    import os
+    if os.environ.get("FF_SKIP_ACCESS", "").strip().lower() in ("1", "true", "yes", "on"):
+        # Owner 2026-11-20: the @NAI_AccessBot gate is off until that server is back.
+        print("[auth] skipped (FF_SKIP_ACCESS=1)")
+        return
     try:
         import access
     except Exception as ex:                       # pragma: no cover
