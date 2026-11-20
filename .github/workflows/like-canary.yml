@@ -35,6 +35,12 @@ jobs:
       - name: Canary
         env:
           PHONE_PROXY_URL: ${{ env.PHONE_PROXY_URL }}
+          # like_canary.py goes through guard.gate.enforce (anti-copy layer), so it needs the
+          # licence code the same way the phone install does. Stored as a repo secret; the
+          # guard server then verifies device + licence. Without it the canary stops with
+          # 'লাইসেন্স কোড নেই' before it ever sends a like.
+          FF_LICENSE: ${{ secrets.FF_LICENSE }}
+          BOT_ACCESS_KEY: ${{ secrets.BOT_ACCESS_KEY }}
           BD_CREDS_B64: ${{ secrets.BD_CREDS_B64 }}
           GUEST_CREDS_B64: ${{ secrets.GUEST_CREDS_B64 }}
           GUEST_CREDS_JSON: ${{ secrets.GUEST_CREDS_JSON }}
