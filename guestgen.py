@@ -207,15 +207,30 @@ def mint_one(sess, vdata: dict) -> dict | None:
     import stagelog
     from guests_manager import game_register as gr
 
-    cred, why = gr.msdk_register(sess)
+    # ONE device identity for the account's whole life, chosen before anything
+    # is sent. Until 2026-11-20 each stage presented a different phone - HK
+    # Samsung at register, US vivo at grant, OPPO at MajorRegister, and a
+    # Google-prefixed random-uuid device with an Indonesian carrier at login -
+    # and the accounts came back banned as "Cheat" within the hour. Every UA
+    # below is built from this single profile, and the login device is seeded
+    # from it so its uuid matches the grant's (see full_login.device_uuid).
+    profile = random.choice(full_login.FALLBACK_DEVS)
+    _brand, _model, _gpu, _sw, _w, _h, _dpi = profile
+    _android = _sw.split("OS ")[-1].split(" /")[0] if "OS " in _sw else "12"
+    reg_ua = f"GarenaMSDK/4.0.39({_model} ;Android {_android};en;BD;)"
+    grant_ua = f"GarenaMSDK/4.0.19P10({_model} ;Android {_android};en;BD;)"
+    major_ua = f"Dalvik/2.1.0 (Linux; U; Android {_android}; {_model} Build/RKQ1.211119.001)"
+
+    cred, why = gr.msdk_register(sess, user_agent=reg_ua)
     if not cred:
         log(f"    register failed: {why}")
         stagelog.stage("guestgen", "register", None, False, why)
         return None
     uid, pw = cred
     log(f"    registered uid {uid}")
+    full_login.seed_device(uid, full_login.new_device(uid, profile))
 
-    at, oid = gr.token_grant(sess, uid, pw)
+    at, oid = gr.token_grant(sess, uid, pw, user_agent=grant_ua)
     if not at:
         log("    grant failed")
         stagelog.stage("guestgen", "grant", uid, False, "no access token")
@@ -226,11 +241,11 @@ def mint_one(sess, vdata: dict) -> dict | None:
     # that follows 404s), so if the server refuses it we retry once with the
     # proven ANON bullet form rather than throwing the guest away.
     nick = make_nick()
-    ok, msg = gr.major_register(sess, at, oid, nick)
+    ok, msg = gr.major_register(sess, at, oid, nick, user_agent=major_ua)
     if not ok:
         log(f"    nickname {nick!r} refused ({msg}), retrying as ANON bullet")
         nick = "ANON\u2022" + rand_tail()
-        ok, msg = gr.major_register(sess, at, oid, nick)
+        ok, msg = gr.major_register(sess, at, oid, nick, user_agent=major_ua)
     if not ok:
         log(f"    major_register: {msg}")
         stagelog.stage("guestgen", "major_register", uid, False, msg)
