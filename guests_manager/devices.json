@@ -54,5 +54,20 @@
   "client_ip": "42.0.5.245",
   "carrier": "Grameenphone",
   "android": "12"
+ },
+ "8477131735": {
+  "unique_device_id": "realme|4dcde140-86d5-5102-9e98-f593ed347d70",
+  "brand": "realme",
+  "model": "RMX3241",
+  "gpu_renderer": "Mali-G57 MC2",
+  "system_software": "Android OS 12 / API-31",
+  "screen_width": 1080,
+  "screen_height": 2400,
+  "screen_dpi": 405,
+  "processor_details": "ARM64 FP ASIMD AES | 2000 | 8",
+  "memory": 5653,
+  "client_ip": "103.189.159.141",
+  "carrier": "Banglalink",
+  "android": "12"
  }
 }
