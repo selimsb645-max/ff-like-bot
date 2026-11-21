@@ -1,53 +1,71 @@
 [auth] skipped (FF_SKIP_ACCESS=1)
-bd proxy hunt: 19 alive candidates
+bd proxy hunt: 27 alive candidates
+bd proxy http://182.252.89.130:8080: BD exit but can't reach garenanow — skip
+bd proxy http://182.160.109.155:12331: BD exit but can't reach garenanow — skip
+bd proxy socks5://203.76.123.6:1080: BD exit but can't reach garenanow — skip
 auto_mint: no usable BD proxy (round 1/6) — retrying in 75s
-bd proxy hunt: 17 alive candidates
-bd proxy OK: http://103.239.253.66:8080 exit=103.112.53.69
-bd proxy http://45.115.114.41:2379: BD exit but can't reach garenanow — skip
-auto_mint: 1 usable BD proxies: ['http://103.239.253.66:8080']
-mint[t1]: major_register 8478266004: HTTPSConnectionPool(host='loginbp.ppmain
+bd proxy hunt: 27 alive candidates
+bd proxy socks5://203.76.123.6:1080: BD exit but can't reach garenanow — skip
+auto_mint: no usable BD proxy (round 2/6) — retrying in 75s
+bd proxy hunt: 24 alive candidates
+bd proxy socks5://123.0.24.154:9090: BD exit but can't reach garenanow — skip
+bd proxy OK: http://103.204.82.34:3212 exit=103.204.82.34
+bd proxy http://103.124.226.80:3128: BD exit but can't reach garenanow — skip
+bd proxy socks5://118.179.93.24:9090: BD exit but can't reach garenanow — skip
+auto_mint: 1 usable BD proxies: ['http://103.204.82.34:3212']
+mint[t1]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
 mint[t2]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t3]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
+mint[t3]: major_register 8479011364: ('Connection aborted.', RemoteDisconnect
 mint[t4]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
 mint[t5]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
 mint[t6]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-mint[t7]: major_register 8478274039: HTTPSConnectionPool(host='loginbp.ppmain
-mint[t8]: EXC HTTPSConnectionPool(host='ffmconnect.live.gop.garenanow.com', port=443): Max ret
-auto_mint: 0 fresh BD accounts minted
-account pool: 707 usable, 58 burned-skip
-candidates: 9 accounts, want=3, cycles=40, first=['8475739087', '8475734431', '8475733708', '8468812242', '8468737044', '8464530762', '8463622760', '8407297669']
-BULK MODE: 9 candidates, 2 parallel workers, cycles=40
-[8475739087] authenticating...
+mint[t7]: major_register 8479012918: HTTPSConnectionPool(host='loginbp.ppmain
+mint[t8]: FRESH BD ACCOUNT 8479013456 (Kexin3778)
+auto_mint: 1 fresh BD accounts minted
+pool: 1 fresh account(s) saved to registered_pool.json
+account pool: 707 usable, 59 burned-skip
+candidates: 10 accounts, want=3, cycles=40, first=[8479013456, '8479013456', '8475739087', '8475734431', '8468812242', '8468737044', '8464530762', '8463622760']
+BULK MODE: 10 candidates, 2 parallel workers, cycles=40
+[8479013456] authenticating...
 [proxy] health socks5://100.83.141.93:1080 attempt 1 failed: timed out
 [proxy] health socks5://100.83.141.93:1080 attempt 2 failed: timed out
 [proxy] health socks5://100.83.141.93:1080 attempt 3 failed: timed out
 [proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8475739087]: status=200 len=979 has_jwt=True
-    raw_login[8475739087]: mint-style login OK (jwt 742 chars)
+    gr_login[8479013456]: EXC HTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443): Read
+[proxy] unhealthy - falling back to DIRECT connection
+    raw_login[8479013456]: modern MajorLogin OK (jwt 67 chars)
+[proxy] unhealthy - falling back to DIRECT connection
+    GetLoginData httpx failed (status=400) — requests fallback
+    GetLoginData requests fallback: status=400 len=15
+[8479013456] GetLoginData FAILED (cached JWT dropped)
+progress push failed: timed out
+[8479013456] authenticating...
+[proxy] unhealthy - falling back to DIRECT connection
+    gr_login[8479013456]: EXC HTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443): Max 
+[proxy] unhealthy - falling back to DIRECT connection
+   login failed: ConnectTimeout: _ssl.c:1001: The handshake operation timed out
+    raw_login[8479013456]: modern MajorLogin failed -> legacy wire fallbacks
+[8479013456] -> logindata_failed | done=0
+[8475739087] authenticating...
+[proxy] unhealthy - falling back to DIRECT connection
+    gr_login[8475739087]: EXC HTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443): Max 
+[proxy] unhealthy - falling back to DIRECT connection
+    raw_login[8475739087]: modern MajorLogin OK (jwt 819 chars)
 [proxy] unhealthy - falling back to DIRECT connection
 [8475734431] authenticating...
 [proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8475734431]: EXC HTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443): Max 
-[proxy] unhealthy - falling back to DIRECT connection
-    raw_login[8475734431]: modern MajorLogin OK (jwt 807 chars)
-[proxy] unhealthy - falling back to DIRECT connection
-[8475733708] authenticating...
-[proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8475733708]: status=200 len=1178 has_jwt=True
-    raw_login[8475733708]: mint-style login OK (jwt 742 chars)
+    gr_login[8475734431]: status=200 len=1166 has_jwt=True
+    raw_login[8475734431]: mint-style login OK (jwt 742 chars)
+[proxy] health socks5://100.83.141.93:1080 attempt 1 failed: timed out
+[proxy] health socks5://100.83.141.93:1080 attempt 2 failed: timed out
+[proxy] health socks5://100.83.141.93:1080 attempt 3 failed: timed out
 [proxy] unhealthy - falling back to DIRECT connection
     GetLoginData httpx failed (status=401) — requests fallback
-    GetLoginData requests fallback EXC: HTTPSConnectionPool(host='clientbp.ppmainecoonghj.com', port=443): Max retries e
-[8475733708] GetLoginData FAILED (cached JWT dropped)
-[8468812242] authenticating...
-[proxy] unhealthy - falling back to DIRECT connection
-    gr_login[8468812242]: EXC HTTPSConnectionPool(host='loginbp.ppmainecoonghj.com', port=443): Max 
-[proxy] unhealthy - falling back to DIRECT connection
-   login failed: ConnectTimeout: timed out
-    raw_login[8468812242]: modern MajorLogin failed -> legacy wire fallbacks
-[8475733708] -> logindata_failed | done=0
+    GetLoginData requests fallback: status=401 len=21
+[8475734431] GetLoginData FAILED (cached JWT dropped)
+[8475734431] -> logindata_failed | done=0
 unhandled exception during asyncio.run() shutdown
-task: <Task finished name='Task-5' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:1117> exception=ConnectTimeout('timed out')>
+task: <Task finished name='Task-4' coro=<main.<locals>._worker() done, defined at /home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py:1117> exception=ConnectTimeout('timed out')>
 Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
     yield
@@ -87,12 +105,12 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/asyncio/tasks.py", line 479, in wait_for
     return fut.result()
            ^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 697, in run_account
-    login = raw_login(uid, pw)
-            ^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 507, in raw_login
-    r = httpx.post(FULL_ML_URL, headers=h, data=body, timeout=25, verify=False)
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 711, in run_account
+    servers = get_login_data(login)
+              ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 582, in get_login_data
+    r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 42, in <lambda>
     httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -178,12 +196,12 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.18/x64/lib/python3.11/asyncio/tasks.py", line 489, in wait_for
     return fut.result()
            ^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 711, in run_account
-    servers = get_login_data(login)
-              ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 582, in get_login_data
-    r = httpx.post(login["url"].rstrip("/") + "/GetLoginData", headers=h,
-        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 697, in run_account
+    login = raw_login(uid, pw)
+            ^^^^^^^^^^^^^^^^^^
+  File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 507, in raw_login
+    r = httpx.post(FULL_ML_URL, headers=h, data=body, timeout=25, verify=False)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/runner/work/ff-like-bot/ff-like-bot/levelbot/run_level.py", line 42, in <lambda>
     httpx.post = lambda *a, **kw: _ox_post(*a, **_with_px(kw))
                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
