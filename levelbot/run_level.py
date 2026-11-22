@@ -738,7 +738,8 @@ async def run_account(uid, pw, cycles, on_done):
                          spam_duration=_cfg.get("spam_duration", 17),
                          spam_delay=_cfg.get("spam_delay", 0.35),
                          wait_after_match=_cfg.get("wait_after_match", 35),
-                         uid=login["account_id"])
+                         uid=login["account_id"],
+                         jitter=_cfg.get("jitter", True))
     try:
         tc = (json.loads((ROOT / "level_config.json").read_text()).get("team_code") or "0")
     except Exception:
@@ -748,6 +749,13 @@ async def run_account(uid, pw, cycles, on_done):
     # the very end, so a stalled account looked identical to a progressing one.
     xp_trace = []
     _xp_last = {"exp": None}
+    # EXP-REFRESH guards (level-up research, 2026-11-21): working farm bots
+    # verify XP after every cycle and stop when it stops moving, instead of
+    # burning all configured cycles on a stalled account; they also respect
+    # per-run gain caps rather than farming one account without limits.
+    _xp_state = {"stall": 0, "gained": 0, "stop_reason": ""}
+    _stall_limit = int(_cfg.get("xp_stall_abort", 5))
+    _run_cap = int(_cfg.get("run_exp_cap", 12000))
 
     def _xp_probe(stats):
         try:
@@ -763,6 +771,21 @@ async def run_account(uid, pw, cycles, on_done):
                          "exp": exp, "delta": delta, "ts": int(time.time())})
         print(f"{tag} XP cycle {stats.cycles_completed}: level={cur.get('level')} "
               f"exp={exp} delta={delta}", flush=True)
+        if delta is not None:
+            if delta > 0:
+                _xp_state["gained"] += delta
+                _xp_state["stall"] = 0
+            elif delta == 0:
+                _xp_state["stall"] += 1
+            if _stall_limit and _xp_state["stall"] >= _stall_limit:
+                _xp_state["stop_reason"] = "no_xp"
+                print(f"{tag} XP stalled {_xp_state['stall']} cycles in a row — "
+                      f"stopping (no_xp)", flush=True)
+                engine.stop()
+            elif _run_cap and _xp_state["gained"] >= _run_cap:
+                _xp_state["stop_reason"] = "cap_reached"
+                print(f"{tag} run XP cap reached ({_xp_state['gained']}) — stopping", flush=True)
+                engine.stop()
 
     engine.on_progress(_xp_probe)
     stats = await engine.start(tc, max_cycles=cycles)  # "0" = solo, else squad team-code
@@ -785,6 +808,9 @@ async def run_account(uid, pw, cycles, on_done):
     res = {"status": "done", "cycles": stats.cycles_completed,
            "level": lvl.get("level"), "exp": lvl.get("exp"), "ts": int(time.time()),
            "xp_trace": xp_trace}
+    if _xp_state.get("stop_reason") == "no_xp":
+        res["status"] = "no_xp"
+    res["xp_gained"] = _xp_state.get("gained", 0)
     print(f"{tag} DONE cycles={stats.cycles_completed} level={res['level']} exp={res['exp']}", flush=True)
     # auto-join guild once level >= 6 (guild min requirement)
     try:
