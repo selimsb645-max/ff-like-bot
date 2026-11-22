@@ -9,5 +9,8 @@
  "auto_phone": false,
  "workers": 2,
  "auto_mint": 2,
- "farm": true
+ "farm": true,
+ "jitter": true,
+ "xp_stall_abort": 5,
+ "run_exp_cap": 12000
 }
