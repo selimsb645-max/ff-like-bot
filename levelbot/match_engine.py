@@ -15,6 +15,7 @@ Flow (1:1 with OB54-TCP-BOT):
 """
 
 import asyncio
+import random
 import time
 import logging
 from dataclasses import dataclass
@@ -52,6 +53,7 @@ class MatchEngine:
         leave_delay: float = 2.0,
         cycle_delay: float = 2.0,
         uid: int = 0,
+        jitter: bool = True,
     ):
         self.conn = connection
         self.pb = packet_builder
@@ -62,6 +64,7 @@ class MatchEngine:
         self.leave_delay = leave_delay
         self.cycle_delay = cycle_delay
         self.uid = uid
+        self.jitter = jitter
 
         self.stats = MatchStats()
         self._running = False
@@ -138,7 +141,10 @@ class MatchEngine:
                 logger.warning("Send failed — connection dead")
                 self.conn.connected = False
                 break
-            await asyncio.sleep(self.spam_delay)
+            delay = self.spam_delay
+            if self.jitter:
+                delay = delay * random.uniform(0.8, 1.3)
+            await asyncio.sleep(delay)
 
         logger.info(f"Spam done: {spam_count} packets")
         print(f"  📮 Sent {spam_count} start packets")
@@ -148,10 +154,13 @@ class MatchEngine:
 
         # ── Step 3: Wait for match to complete ──
         self.stats.current_state = "waiting"
-        print(f"  ⏳ Waiting {self.wait_after_match}s for match...")
+        wait_secs = self.wait_after_match
+        if self.jitter:
+            wait_secs = int(wait_secs * random.uniform(0.9, 1.25))
+        print(f"  ⏳ Waiting {wait_secs}s for match...")
 
         waited = 0
-        while waited < self.wait_after_match and not self._stop_requested:
+        while waited < wait_secs and not self._stop_requested:
             await asyncio.sleep(1)
             waited += 1
 
@@ -173,4 +182,7 @@ class MatchEngine:
             self._on_progress(self.stats)
 
         if not self._stop_requested:
-            await asyncio.sleep(self.cycle_delay)
+            delay = self.cycle_delay
+            if self.jitter:
+                delay = random.uniform(delay, delay * 3)
+            await asyncio.sleep(delay)
